@@ -2,9 +2,16 @@
   "name": "@usersfirst/controller-core",
   "version": "0.0.0",
   "type": "module",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.js",
     "./manager": "./src/manager.js",
+    "./sensor-fusion": "./src/sensor-fusion.js",
     "./drivers/*": "./src/drivers/*.js"
-  }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ]
 }

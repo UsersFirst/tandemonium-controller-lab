@@ -1,8 +1,32 @@
 {
   "name": "@usersfirst/overlay",
+  "version": "0.0.0",
   "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "prestart": "node scripts/copy-three.js && node scripts/copy-workspace.js",
+    "prestart:multi": "node scripts/copy-three.js && node scripts/copy-workspace.js",
+    "prepackage": "node scripts/copy-three.js && node scripts/copy-workspace.js",
+    "premake": "node scripts/copy-three.js && node scripts/copy-workspace.js",
+    "start": "electron .",
+    "start:multi": "electron . --multi",
+    "make": "electron-forge make",
+    "make:dmg": "npm run package && bash scripts/make-dmg.sh",
+    "package": "electron-forge package"
+  },
   "dependencies": {
-    "@usersfirst/controller-core": "workspace:*",
-    "@usersfirst/controller-visualizer": "workspace:*"
-  }
+    "@usersfirst/controller-core": "*",
+    "@usersfirst/controller-visualizer": "*",
+    "electron-squirrel-startup": "^1.0.1",
+    "three": "0.161.0"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.6.0",
+    "@electron-forge/maker-dmg": "^7.6.0",
+    "@electron-forge/maker-squirrel": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.6.0",
+    "electron": "^33.2.1"
+  },
+  "author": "Pete Gordon",
+  "license": "MIT"
 }
