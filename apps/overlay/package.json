@@ -1,0 +1,8 @@
+{
+  "name": "@usersfirst/overlay",
+  "private": true,
+  "dependencies": {
+    "@usersfirst/controller-core": "workspace:*",
+    "@usersfirst/controller-visualizer": "workspace:*"
+  }
+}

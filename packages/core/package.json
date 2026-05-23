@@ -1,0 +1,10 @@
+{
+  "name": "@usersfirst/controller-core",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./manager": "./src/manager.js",
+    "./drivers/*": "./src/drivers/*.js"
+  }
+}

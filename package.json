@@ -1,0 +1,8 @@
+{
+  "name": "tandemonium-controller-lab",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
+}
