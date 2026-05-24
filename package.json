@@ -4,5 +4,15 @@
   "workspaces": [
     "packages/*",
     "apps/*"
-  ]
+  ],
+  "scripts": {
+    "face-painter": "npx -y serve tools/face-painter",
+    "split-glb": "node tools/split-glb.js"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "^4.1.0",
+    "@gltf-transform/extensions": "^4.1.0",
+    "@gltf-transform/functions": "^4.1.0",
+    "meshoptimizer": "^0.20.0"
+  }
 }

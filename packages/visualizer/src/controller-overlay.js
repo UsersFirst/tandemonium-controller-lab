@@ -185,25 +185,55 @@ export class ControllerOverlay {
     this.bodyGroup.add(scene);
     this.model = scene;
 
-    // Collect mesh names that need special pivot handling
-    const triggerMeshNames = new Set(Object.values(profile.triggerMap));
+    // Collect mesh names that need special pivot handling. Index both
+    // the profile-form name (may contain spaces) AND the GLTFLoader-
+    // sanitized form (spaces → underscores) so the pass-3 lookup
+    // `triggerMeshNames.has(child.name)` matches whichever form the
+    // loaded Object3D ended up with.
+    const triggerMeshNames = new Set();
+    for (const n of Object.values(profile.triggerMap)) {
+      triggerMeshNames.add(n);
+      triggerMeshNames.add(n.replace(/ /g, '_'));
+    }
 
     // Collect all stick mesh names into a set for identification
+    // stickMeshNames is used downstream to skip stick parts in the
+    // pass-3 generic-mesh loop. Profile names may be space-form (face-
+    // painter export) but the loaded Object3D names are underscore-
+    // form (GLTFLoader sanitization). Index BOTH spellings so the
+    // skip-check works against whichever form the mesh's name ended up.
     const stickMeshNames = new Set();
     const stickAssemblies = {}; // 'left' | 'right' → { meshes[], pivotKey }
     for (const [key, stick] of Object.entries(profile.stickMap)) {
       const names = stick.meshes || [stick.mesh];
-      for (const n of names) stickMeshNames.add(n);
+      for (const n of names) {
+        stickMeshNames.add(n);
+        stickMeshNames.add(n.replace(/ /g, '_'));
+      }
       stickAssemblies[key] = { names, stick };
     }
 
-    // Pass 1: index all meshes by name and clone shared materials
+    // Pass 1: index all meshes by name and clone shared materials.
     // GLB loader shares material instances for identical materials, so
     // pressing one button would glow all buttons with the same color.
+    //
+    // Three.js's GLTFLoader replaces spaces in glTF node names with
+    // underscores ("Bumper L2" → "Bumper_L2"). Profiles authored from
+    // face-painter regions use the original space-form names. Alias
+    // each underscored name to its space form right here so the
+    // subsequent setup passes (stick pivots, trigger pivots) can find
+    // the meshes by either spelling. Without this alias, stick part
+    // lookups via `meshByName[stick.meshes[i]]` return undefined and
+    // the stick pivot never gets created — tilt animation has nothing
+    // to rotate.
     const meshByName = {};
     scene.traverse((child) => {
       if (child.isMesh) {
         meshByName[child.name] = child;
+        if (child.name.includes('_')) {
+          const alias = child.name.replace(/_/g, ' ');
+          if (meshByName[alias] === undefined) meshByName[alias] = child;
+        }
         // Clone material so each mesh can animate independently
         if (child.material) {
           child.material = child.material.clone();
@@ -212,75 +242,108 @@ export class ControllerOverlay {
     });
 
     // Pass 2: create stick pivot groups — group all parts of each stick
-    // assembly into a single pivot at the base of the stick shaft
+    // assembly into a single pivot at the base of the stick shaft.
+    //
+    // World-space bounding boxes are required here: `gltf-transform
+    // optimize` quantizes per-mesh geometry to int16 and stores the
+    // actual position in the node's translate. So `geometry.boundingBox`
+    // gives local-space bounds centered near the origin, and any pivot
+    // math based on those bounds would place every pivot at world (0,0,0).
+    // `Box3.setFromObject` walks the world transform and returns true
+    // world bounds, which works for both quantized and non-quantized GLBs.
+    //
+    // Reparenting uses Object3D.attach() (preserves world transform)
+    // instead of remove/add (which would drop the node's translate and
+    // collapse the part onto the pivot's origin).
+    this.bodyGroup.updateMatrixWorld(true);
     this.stickPivots = {};
+    const _wb = new THREE.Box3();
+    const _wv = new THREE.Vector3();
     for (const [key, asm] of Object.entries(stickAssemblies)) {
       const parts = asm.names.map(n => meshByName[n]).filter(Boolean);
       if (parts.length === 0) continue;
 
-      // Find the lowest Y across all parts — that's the tilt base
-      let pivotY = Infinity, pivotX = 0, pivotZ = 0;
+      // Find the lowest Y across all parts (world space) — tilt base
+      let pivotWorldY = Infinity, pivotWorldX = 0, pivotWorldZ = 0;
       let partCount = 0;
       for (const part of parts) {
-        part.geometry.computeBoundingBox();
-        const bb = part.geometry.boundingBox;
-        pivotY = Math.min(pivotY, bb.min.y);
-        pivotX += (bb.min.x + bb.max.x) / 2;
-        pivotZ += (bb.min.z + bb.max.z) / 2;
+        _wb.setFromObject(part);
+        pivotWorldY = Math.min(pivotWorldY, _wb.min.y);
+        pivotWorldX += (_wb.min.x + _wb.max.x) / 2;
+        pivotWorldZ += (_wb.min.z + _wb.max.z) / 2;
         partCount++;
       }
-      pivotX /= partCount;
-      pivotZ /= partCount;
+      pivotWorldX /= partCount;
+      pivotWorldZ /= partCount;
 
-      // Create pivot group at the base of the stick
+      // Place pivot in the first part's parent space, at the equivalent
+      // of that world point. worldToLocal mutates the vector, so pass
+      // a fresh one.
+      const sceneParent = parts[0].parent;
+      const pivotLocal = sceneParent.worldToLocal(
+        _wv.set(pivotWorldX, pivotWorldY, pivotWorldZ).clone()
+      );
+
       const pivot = new THREE.Group();
       pivot.name = key + '_stick_pivot';
-      pivot.position.set(pivotX, pivotY, pivotZ);
-
-      // Reparent all parts into the pivot, offsetting geometry
-      const sceneParent = parts[0].parent;
-      for (const part of parts) {
-        part.geometry.translate(-pivotX, -pivotY, -pivotZ);
-        const parent = part.parent;
-        parent.remove(part);
-        part.position.set(0, 0, 0);
-        part.rotation.set(0, 0, 0);
-        pivot.add(part);
-      }
+      pivot.position.copy(pivotLocal);
       sceneParent.add(pivot);
 
+      // attach() keeps each part's visible world position while moving
+      // it into the pivot, so rotating the pivot rotates the parts
+      // around the pivot's world position.
+      for (const part of parts) {
+        pivot.attach(part);
+      }
+
       this.stickPivots[key] = pivot;
-      // Also register individual meshes for lookup
+      // Also register individual meshes for lookup. Each part gets an
+      // `originals` entry too so that profile.buttonMap entries pointing
+      // at stick parts (typically L3/R3 click highlights on the stick
+      // cap) can animate via the standard button-press path. Without
+      // the originals, the button loop's `if (!mesh || !orig) continue`
+      // silently skips them.
       for (const part of parts) {
         this.meshes[part.name] = part;
+        this.originals[part.name] = {
+          posX: part.position.x,
+          posY: part.position.y,
+          posZ: part.position.z,
+          rotX: part.rotation.x,
+          rotZ: part.rotation.z,
+        };
       }
     }
 
-    // Pass 3: set up trigger pivots
-    const allMeshes = Object.values(meshByName).filter(
+    // Pass 3: set up trigger pivots + register everything else.
+    // meshByName may contain two keys per mesh (loaded "Foo_Bar" name
+    // + space-form alias "Foo Bar") pointing at the SAME Object3D —
+    // dedupe by reference via Set so each mesh is processed once.
+    const allMeshes = [...new Set(Object.values(meshByName))].filter(
       m => !stickMeshNames.has(m.name)  // sticks already handled
     );
     for (const child of allMeshes) {
       if (triggerMeshNames.has(child.name) && child.geometry) {
-        child.geometry.computeBoundingBox();
-        const bb = child.geometry.boundingBox;
-        // Trigger pivot at the top-back (hinge point)
-        const pivotX = (bb.min.x + bb.max.x) / 2;
-        const pivotY = bb.max.y;
-        const pivotZ = bb.min.z;
+        // World-space bbox — see comment in pass 2 about why
+        // geometry.boundingBox isn't usable for quantized GLBs.
+        _wb.setFromObject(child);
+        // Trigger pivot at the top-back (hinge point) in world space
+        const pivotWorldX = (_wb.min.x + _wb.max.x) / 2;
+        const pivotWorldY = _wb.max.y;
+        const pivotWorldZ = _wb.min.z;
 
-        child.geometry.translate(-pivotX, -pivotY, -pivotZ);
+        const parent = child.parent;
+        const pivotLocal = parent.worldToLocal(
+          _wv.set(pivotWorldX, pivotWorldY, pivotWorldZ).clone()
+        );
 
         const pivot = new THREE.Group();
         pivot.name = child.name + '_pivot';
-        pivot.position.set(pivotX, pivotY, pivotZ);
-
-        const parent = child.parent;
-        parent.remove(child);
-        child.position.set(0, 0, 0);
-        child.rotation.set(0, 0, 0);
-        pivot.add(child);
+        pivot.position.copy(pivotLocal);
         parent.add(pivot);
+        // attach() preserves the trigger's world position; rotations on
+        // the pivot now rotate the mesh around the hinge point.
+        pivot.attach(child);
 
         this.meshes[child.name] = pivot;
         this.originals[child.name] = {
@@ -372,20 +435,56 @@ export class ControllerOverlay {
       this._setupTouchIndicators();
     }
 
-    // Log found meshes for debugging
-    const profileMeshes = [
-      ...Object.values(profile.buttonMap),
-      ...Object.values(profile.triggerMap),
-      ...Object.values(profile.stickMap).flatMap((s) => s.meshes || [s.mesh]),
-      ...(profile.bodyMeshes || []),
-      profile.touchpadMesh,
-    ].filter(Boolean);
+    // Name aliasing: Three.js's GLTFLoader replaces spaces in glTF
+    // node names with underscores ("Bumper L2" → "Bumper_L2"), so a
+    // profile mesh name written with spaces (as the face-painter
+    // exports them) wouldn't match the loaded Object3D's name. Mirror
+    // every underscore-bearing key in `this.meshes` and `this.originals`
+    // to its space-form variant so profile lookups by either form work.
+    for (const key of Object.keys(this.meshes)) {
+      if (key.includes('_')) {
+        const alias = key.replace(/_/g, ' ');
+        if (this.meshes[alias] === undefined) this.meshes[alias] = this.meshes[key];
+        if (this.originals[key] && this.originals[alias] === undefined) {
+          this.originals[alias] = this.originals[key];
+        }
+      }
+    }
 
-    const found = profileMeshes.filter((m) => this.meshes[m]);
-    const missing = profileMeshes.filter((m) => !this.meshes[m]);
+    // Diagnostic: per-mapping check at load time so we can tell whether
+    // each gamepad-index → mesh path will animate at runtime. The press
+    // / tilt / trigger loops all early-return on missing mesh OR missing
+    // originals, so we explicitly check BOTH here.
+    const summarize = (kind, mapping) => {
+      const rows = [];
+      let ok = 0, total = 0;
+      for (const [k, name] of Object.entries(mapping)) {
+        total++;
+        const m = this.meshes[name];
+        const o = this.originals[name];
+        if (m && o) { ok++; rows.push(`  ✓ ${kind}[${k}] = "${name}"`); }
+        else { rows.push(`  ✗ ${kind}[${k}] = "${name}"  ${!m ? '(mesh missing)' : '(originals missing)'}`); }
+      }
+      return { rows, ok, total };
+    };
+    const btn = summarize('button', profile.buttonMap);
+    const trg = summarize('trigger', profile.triggerMap);
+    const stickRows = [];
+    let stickOk = 0, stickTotal = 0;
+    for (const [side, s] of Object.entries(profile.stickMap)) {
+      const names = s.meshes || [s.mesh];
+      stickTotal += names.length;
+      for (const n of names) {
+        if (this.meshes[n] && this.originals[n]) { stickOk++; stickRows.push(`  ✓ stick.${side} part "${n}"`); }
+        else { stickRows.push(`  ✗ stick.${side} part "${n}"  ${!this.meshes[n] ? '(mesh missing)' : '(originals missing)'}`); }
+      }
+    }
     console.log(
-      `Controller model loaded: ${found.length}/${profileMeshes.length} meshes mapped`,
-      missing.length ? `\nMissing: ${missing.join(', ')}` : ''
+      `Controller "${profile.name || this.controllerType}" loaded:\n` +
+      `  buttons:  ${btn.ok}/${btn.total}\n` +
+      `  triggers: ${trg.ok}/${trg.total}\n` +
+      `  sticks:   ${stickOk}/${stickTotal}\n` +
+      [...btn.rows, ...trg.rows, ...stickRows].join('\n')
     );
   }
 
@@ -510,6 +609,13 @@ export class ControllerOverlay {
       }
 
       // ── Triggers (analog) ──
+      // Rotation pivots the trigger mesh around its top edge. Emissive
+      // glow scales with pull depth so a half-pull shows ~half brightness,
+      // matching DualSense's behavior. Color transitions from yellow
+      // (mid-pull) to red (fully pressed) so the user gets a distinct
+      // signal at the bottoming-out point separate from analog level.
+      // Material is forced DoubleSide so the glow is visible regardless
+      // of which side of the rotating mesh is facing the camera.
       for (const [indexStr, meshName] of Object.entries(profile.triggerMap)) {
         const index = parseInt(indexStr);
         const btn = gamepad.buttons[index];
@@ -522,13 +628,30 @@ export class ControllerOverlay {
         const targetAngle = orig.rotX - btn.value * profile.triggerMaxAngle;
         mesh.rotation.x = THREE.MathUtils.lerp(mesh.rotation.x, targetAngle, LERP_SPEED);
 
-        // Yellow emissive glow scaling with trigger pull depth
-        const trigMat = mesh.children?.[0]?.isMesh ? mesh.children[0].material : null;
+        // Find the trigger's Mesh material — search descendants in case
+        // the pivot wraps a Group (instead of a single Mesh) or the
+        // GLTFLoader produced extra intermediate nodes.
+        let innerMesh = mesh.isMesh ? mesh : null;
+        if (!innerMesh) {
+          mesh.traverse((c) => { if (!innerMesh && c.isMesh) innerMesh = c; });
+        }
+        const trigMat = innerMesh?.material;
         if (trigMat && 'emissive' in trigMat) {
+          // One-time material setup: enable double-sided rendering so
+          // the glow shows when the trigger rotates inward, and start
+          // emissive at yellow.
           if (!trigMat._trigEmissiveSet) {
             trigMat._trigEmissiveSet = true;
+            trigMat.side = THREE.DoubleSide;
+            trigMat.needsUpdate = true;
             trigMat.emissive.set(0xffcc00);
           }
+          // Two-tone behavior: yellow up to 95% pull, snap to red when
+          // fully pressed (bottomed out). The intensity scales with
+          // analog value in both phases.
+          const fullyPressed = btn.value >= 0.95;
+          const targetColor = fullyPressed ? 0xff3322 : 0xffcc00;
+          trigMat.emissive.set(targetColor);
           const targetGlow = btn.value > 0.05 ? btn.value * 3.0 : 0;
           trigMat.emissiveIntensity = THREE.MathUtils.lerp(
             trigMat.emissiveIntensity, targetGlow, LERP_SPEED

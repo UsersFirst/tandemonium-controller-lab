@@ -253,30 +253,83 @@ export const PROFILES = {
   // NOTE on licensing: this single asset is CC BY-NC-SA 4.0 — see the
   // attribution file. The rest of the visualizer is MIT.
   'steam-controller': {
-    model: 'assets/controllers/steam-controller.glb',
+    // Split GLB derived from Valve's monolithic STL via tools/face-painter
+    // + tools/split-glb.js. Each named mesh below corresponds to a
+    // region the user painted on the source surface. The remaining
+    // unpainted faces form a "body" mesh used for the gyro rotation.
+    model: 'assets/controllers/steam-controller-split.glb',
     name: 'Steam Controller (2026)',
-    buttonMap: {},          // empty — single solid body, no separated buttons
-    triggerMap: {},
-    stickMap: {},
+    // Standard Gamepad-API button index → mesh name in the split GLB.
+    // Mesh names match the region names the user typed in the painter
+    // (verbatim — spaces and all). Labels like "Trigger L1" / "Bumper
+    // L2" are the user's chosen labels; semantic gamepad index is what
+    // controls animation, not the name.
+    buttonMap: {
+      0:  'A',
+      1:  'B',
+      2:  'X',
+      3:  'Y',
+      4:  'Bumper L2',                // LB / left shoulder
+      5:  'Bumper R2',                // RB / right shoulder
+      8:  'view',
+      9:  'menu',
+      10: 'joystick Left top button', // L3 / left stick click
+      11: 'joystick Right Top Button',// R3 / right stick click
+      // Dpad: original single `dpad` region was split into four
+      // cardinal wedges by tools/split-dpad.js (PCA on the dpad face
+      // centroids → in-plane axes → angle-bucket each face into the
+      // nearest cardinal). Each direction is now its own mesh and
+      // animates independently.
+      12: 'dpad_up',
+      13: 'dpad_down',
+      14: 'dpad_left',
+      15: 'dpad_right',
+      16: 'steam',
+      // QAM "..." button position is painted but the driver doesn't
+      // parse a button bit for it yet. Leave commented until the bit
+      // is identified.
+      // 17: 'qucick access',
+    },
+    triggerMap: {
+      6: 'Trigger L1',                // LT / left analog trigger
+      7: 'Trigger R1',                // RT / right analog trigger
+    },
+    // Stick assemblies — each tilts as a group when the analog stick
+    // moves. The "top button" mesh is also referenced by buttonMap[10]
+    // / [11] so it gets BOTH a tilt (from stick analog) and a press-
+    // down (from stick click). Visualizer handles the dual role.
+    stickMap: {
+      left:  {
+        meshes: ['joystick Left', 'joystick Left cap', 'joystick Left top button'],
+        axisX: 0, axisY: 1,
+      },
+      right: {
+        meshes: ['joystick Right', 'joystick Right cap', 'joystick Right Top Button'],
+        axisX: 2, axisY: 3,
+      },
+    },
     pressDepth: 0.002,
-    triggerMaxAngle: 0.52,
+    // Triggers rotate inward (toward the user) when pulled. 30° looks
+    // fine on DualSense where the trigger paddle has a closed back
+    // panel, but on the Steam Controller's split GLB the back of the
+    // trigger is open — large rotations reveal the body cavity behind.
+    // ~12° gives a clear motion signal without a distracting gap. Add
+    // a back panel mesh later if photorealistic motion matters.
+    triggerMaxAngle: 0.21,
     stickMaxTilt: 0.26,
     hasGyro: true,
     // Axis remap is applied inside the driver itself (Y↔Z swap on both
     // gyro and accel — see steam-controller-driver.js parseReport).
-    // gyroTransform here is informational; the field isn't actively
-    // consumed anywhere in the pipeline, but the identity transform
-    // documents that no further visualizer-side rotation is needed.
     gyroTransform: (gx, gy, gz) => [gx, gy, gz],
-    hasTouchpad: false,     // touchpads exist on hardware but not as sub-meshes
-    bodyMeshes: ['node_0'],
+    hasTouchpad: false,     // two separate trackpads — no single touchpad mesh
+    // bodyMeshes is what the gyro rotation target group includes. Use
+    // 'body' (the residual mesh after all regions are extracted) so
+    // pressing a button doesn't drag the whole controller along.
+    bodyMeshes: ['body'],
     bodyColorMeshes: [],
     accentColorMeshes: [],
     defaultBodyColor: '#ffffff',
     defaultAccentColor: '#ffffff',
-    // Xbox-style face labels (printed on the pad). Steam button at 16,
-    // View/Menu at 8/9. No 17 (no equivalent of mute/capture on this
-    // pad — back paddles surface via parsed.paddles instead).
     hudLabels: {
       0: 'A',  1: 'B',  2: 'X',  3: 'Y',
       4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT',

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>GLB Face Painter</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #15161a;
+      color: #e8ecf2;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+    }
+    #app {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      grid-template-rows: 40px 1fr 24px;
+      grid-template-areas:
+        'topbar topbar'
+        'canvas panel'
+        'status status';
+    }
+    #topbar {
+      grid-area: topbar;
+      background: #1c1e24;
+      border-bottom: 1px solid #2a2c33;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      font-size: 13px;
+    }
+    #topbar button, #topbar input[type=file] {
+      background: #2a2c33;
+      color: #e8ecf2;
+      border: 1px solid #3a3c43;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #topbar button:hover { background: #3a3c43; }
+    #topbar .spacer { flex: 1; }
+    #topbar #file-name { color: #909098; }
+    #canvas-host {
+      grid-area: canvas;
+      position: relative;
+      background: #0e1014;
+    }
+    #canvas-host canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #panel {
+      grid-area: panel;
+      background: #1c1e24;
+      border-left: 1px solid #2a2c33;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #panel h3 {
+      margin: 0;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #909098;
+      border-bottom: 1px solid #2a2c33;
+    }
+    #regions {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px;
+    }
+    .region {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 2px;
+    }
+    .region:hover { background: #24262c; }
+    .region.active {
+      background: #2d3543;
+      box-shadow: inset 0 0 0 1px #4a90e2;
+    }
+    .region .swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .region .name {
+      flex: 1;
+      font-size: 13px;
+    }
+    .region .count {
+      font-size: 11px;
+      color: #707078;
+      font-variant-numeric: tabular-nums;
+    }
+    .region .actions {
+      display: flex;
+      gap: 4px;
+    }
+    .region button {
+      background: transparent;
+      color: #707078;
+      border: none;
+      padding: 2px 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .region button:hover { color: #e8ecf2; }
+    #add-region {
+      width: calc(100% - 12px);
+      margin: 6px;
+      background: #2a2c33;
+      color: #e8ecf2;
+      border: 1px solid #3a3c43;
+      padding: 6px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #add-region:hover { background: #3a3c43; }
+    #status {
+      grid-area: status;
+      background: #1c1e24;
+      border-top: 1px solid #2a2c33;
+      font-size: 11px;
+      color: #909098;
+      padding: 4px 12px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .hint { color: #707078; }
+    .ok { color: #66cc88; }
+    .err { color: #ee5566; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="topbar">
+      <label>
+        <input type="file" id="glb-input" accept=".glb,.gltf" hidden />
+        <button type="button" onclick="document.getElementById('glb-input').click()">Open GLB…</button>
+      </label>
+      <span id="file-name">(no file)</span>
+      <span class="spacer"></span>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#aab">
+        Brush
+        <input type="range" id="brush-radius" min="1" max="30" value="1" style="width:80px" />
+        <span id="brush-radius-val" style="min-width:34px;text-align:right;color:#e8ecf2">1 px</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#aab">
+        Smart-fill stop angle
+        <input type="range" id="smart-fill-angle" min="5" max="80" value="30" style="width:90px" />
+        <span id="smart-fill-angle-val" style="min-width:30px;text-align:right;color:#e8ecf2">30°</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#aab">
+        <input type="checkbox" id="respect-regions" checked />
+        Respect existing regions
+      </label>
+      <button id="save-json" type="button">Save region map…</button>
+      <label>
+        <input type="file" id="load-input" accept=".json" hidden />
+        <button type="button" onclick="document.getElementById('load-input').click()">Load region map…</button>
+      </label>
+      <button id="clear-all" type="button">Clear all</button>
+    </div>
+    <div id="canvas-host">
+      <canvas id="canvas"></canvas>
+    </div>
+    <div id="panel">
+      <h3>Regions</h3>
+      <div id="regions"></div>
+      <button id="add-region" type="button">+ Add region</button>
+    </div>
+    <div id="status">
+      <span id="status-mesh">no mesh</span>
+      <span id="status-active" class="hint"></span>
+      <span class="spacer" style="flex:1"></span>
+      <span class="hint">left-drag = paint (brush radius set above) · shift+left = unpaint · alt+click = smart fill · right-drag = orbit · middle-drag = pan · wheel = zoom · Ctrl+Z = undo</span>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="./painter.js"></script>
+</body>
+</html>
