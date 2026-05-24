@@ -71,21 +71,141 @@ export class SteamControllerDriver extends ControllerDriver {
     super(device, connectionType, entry);
     this._lizardTimer = null;
     this._loggedReportIds = new Set();
-    this._featureReportId = FEATURE_REPORT_ID_PRIMARY;
+    // All candidate Puck HID handles we'll send lizard-mode CLEAR to
+    // each heartbeat tick — NOT just the one that accepted on init.
+    // Empirically, the first interface to "accept" feature reports may
+    // not be the one that actually controls keyboard/mouse emulation
+    // (other interfaces may stall with NotAllowedError on init but
+    // start accepting once the right channel gets the right command).
+    // Heartbeat fires on all 5; errors are swallowed silently.
+    this._lizardCandidates = [];
   }
 
   async init() {
     if (this.device.productId !== PUCK_PID) return;
 
-    // Puck only: kick the firmware out of keyboard/mouse fallback by
-    // sending CLEAR_DIGITAL_MAPPINGS + SET_SETTINGS, then re-send
-    // CLEAR every 800ms (without the heartbeat the firmware reverts).
-    const sent = await this._sendLizardModeDisable();
-    if (sent) {
-      this._lizardTimer = setInterval(() => {
-        this._sendFeatureReport(new Uint8Array([CMD_CLEAR_DIGITAL_MAPPINGS])).catch(() => {});
-      }, LIZARD_HEARTBEAT_MS);
+    // Puck path: best-effort lizard-mode disable. Sends
+    // CLEAR_DIGITAL_MAPPINGS + SET_SETTINGS to every Puck HID handle,
+    // then heartbeats CLEAR every 800ms to all of them. Per-tick errors
+    // swallowed silently.
+    //
+    // KNOWN LIMITATION (2026-05): On the current 2026 Puck firmware,
+    // these feature reports are accepted by one slot interface but
+    // produce no behavior change — the paired controller continues to
+    // emit OS-level mouse/keyboard/scroll events. Confirmed via direct
+    // hardware test: identical mouse/kbd interference whether heartbeat
+    // runs or not. Root cause is suspected to be WebHID routing feature
+    // reports to the wrong HID collection (mouse / kbd / vendor share
+    // reportId 0x01 on the slot interface, and WebHID's sendFeatureReport
+    // doesn't let callers target a specific collection).
+    //
+    // Heartbeat is kept in place as a no-cost best-effort: if a future
+    // Puck firmware revision starts honoring the commands, the existing
+    // code will silently start working without changes. The accompanying
+    // console.warn below tells users to prefer USB-C for clean input.
+    //
+    // See issue #8 for the full diagnostic trail.
+    const candidates = await this._candidatePuckDevices();
+    console.log(`Steam Controller (Puck): probing ${candidates.length} candidate HID interface(s) for feature reports`);
+    for (const dev of candidates) {
+      try {
+        if (!dev.opened) await dev.open();
+      } catch (err) {
+        console.log(`  [${dev.productName}] open failed: ${err.message}`);
+        continue;
+      }
+      const declared = this._declaredFeatureReports(dev);
+      const usages = this._collectionUsages(dev);
+      console.log(`  [${dev.productName}] usagePages=[${usages.join(', ')}] featureReports=[${declared.length > 0 ? declared.map((r) => '0x' + r.id.toString(16) + (r.size ? '@' + r.size + 'B' : '')).join(', ') : 'none'}]`);
+      const reportId = declared[0]?.id ?? FEATURE_REPORT_ID_PRIMARY;
+      const size = declared[0]?.size ?? 64;
+      this._lizardCandidates.push({ device: dev, reportId, size });
+      const probeResult = await this._trySendLizardModeDisable(dev, declared);
+      if (probeResult != null) {
+        console.log(`  [${dev.productName}] lizard-mode disable ACCEPTED on feature report id 0x${probeResult.reportId.toString(16)}`);
+      }
     }
+
+    console.warn(
+      'Steam Controller (Puck): the Puck firmware does not honor lizard-mode disable via WebHID on this version. ' +
+      'The paired controller will continue to emit mouse + keyboard + scroll events to Windows ' +
+      '(cursor drift, settings panel toggling, scancode noise in other apps). ' +
+      'For clean input, plug the controller in directly via USB-C — that path uses pid 0x1302 and has no leak. ' +
+      'See https://github.com/UsersFirst/tandemonium-controller-lab/issues/8 for details.'
+    );
+
+    if (this._lizardCandidates.length === 0) return;
+    this._lizardTimer = setInterval(() => {
+      for (const { device, reportId, size } of this._lizardCandidates) {
+        const payload = SteamControllerDriver._buildLizardClearPayload(size);
+        device.sendFeatureReport(reportId, payload).catch(() => {});
+      }
+    }, LIZARD_HEARTBEAT_MS);
+  }
+
+  /**
+   * Inspect a device's collections and return a short usagePage/usage
+   * string per collection, e.g. ['FF00/0001', '0001/0005']. Helps
+   * identify which interface is the gamepad-control channel (typically
+   * usagePage 0x0001 / usage 0x0005 for standard gamepads, but the
+   * Puck is all vendor-defined so the relevant signal is the specific
+   * vendor usage page assigned to each interface).
+   */
+  _collectionUsages(device) {
+    const out = [];
+    if (!device.collections) return out;
+    for (const col of device.collections) {
+      const up = (col.usagePage ?? 0).toString(16).padStart(4, '0');
+      const u = (col.usage ?? 0).toString(16).padStart(4, '0');
+      out.push(`${up}/${u}`);
+    }
+    return out;
+  }
+
+  /**
+   * Inspect a device's collections and return the feature reports it
+   * declares: [{ id, size }] where size is the byte count summed across
+   * the report's items. WebHID's sendFeatureReport often requires the
+   * payload to match the declared size; sending a shorter buffer can
+   * silently fail or throw, so we want the size when available.
+   */
+  _declaredFeatureReports(device) {
+    const out = [];
+    if (!device.collections) return out;
+    for (const col of device.collections) {
+      const reports = col.featureReports || [];
+      for (const r of reports) {
+        let bits = 0;
+        for (const item of r.items || []) {
+          bits += (item.reportSize || 0) * (item.reportCount || 0);
+        }
+        out.push({ id: r.reportId, size: bits > 0 ? Math.ceil(bits / 8) : 0 });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Build the CLEAR_DIGITAL_MAPPINGS feature-report payload, padded out
+   * to the declared report size (when known). Padding past the command
+   * byte stays zero — Valve's protocol ignores trailing zeros.
+   */
+  static _buildLizardClearPayload(size) {
+    const len = size && size > 0 ? size : 64;
+    const buf = new Uint8Array(len);
+    buf[0] = CMD_CLEAR_DIGITAL_MAPPINGS;
+    return buf;
+  }
+
+  static _buildLizardSetSettingsPayload(size) {
+    const len = size && size > 0 ? size : 64;
+    const buf = new Uint8Array(len);
+    buf[0] = CMD_SET_SETTINGS;
+    buf[1] = 6;                                        // payload length byte
+    // Key/value pair order matches SteamlessController exactly: LEFT, RIGHT.
+    buf[2] = SETTING_LEFT_TRACKPAD_MODE;  buf[3] = TRACKPAD_MODE_NONE; buf[4] = 0x00;
+    buf[5] = SETTING_RIGHT_TRACKPAD_MODE; buf[6] = TRACKPAD_MODE_NONE; buf[7] = 0x00;
+    return buf;
   }
 
   destroy() {
@@ -93,40 +213,56 @@ export class SteamControllerDriver extends ControllerDriver {
       clearInterval(this._lizardTimer);
       this._lizardTimer = null;
     }
+    this._lizardCandidates = [];
   }
 
   /**
-   * Try the two known feature-report IDs (0x01 then 0x02) for the two
-   * lizard-mode commands. Returns true if both commands made it through
-   * on either id — the heartbeat then keeps using whichever id worked.
-   * The Puck's 5 HID interfaces mean only one will accept feature
-   * reports; errors on the other four are swallowed silently.
+   * Enumerate already-approved HID handles for this Puck (primary +
+   * siblings sharing vid:pid). Returns at least [this.device] even if
+   * getDevices() is unavailable. Siblings sort to a stable order so
+   * the heartbeat hits them in the same sequence each tick.
    */
-  async _sendLizardModeDisable() {
-    const clear = new Uint8Array([CMD_CLEAR_DIGITAL_MAPPINGS]);
-    const setSettings = new Uint8Array([
-      CMD_SET_SETTINGS,
-      6,                                       // payload length
-      SETTING_RIGHT_TRACKPAD_MODE, TRACKPAD_MODE_NONE, 0x00,
-      SETTING_LEFT_TRACKPAD_MODE,  TRACKPAD_MODE_NONE, 0x00,
-    ]);
-
-    for (const id of [FEATURE_REPORT_ID_PRIMARY, FEATURE_REPORT_ID_FALLBACK]) {
-      try {
-        await this.device.sendFeatureReport(id, clear);
-        await this.device.sendFeatureReport(id, setSettings);
-        this._featureReportId = id;
-        console.log(`Steam Controller (Puck): lizard-mode disable sent on feature report id 0x${id.toString(16)}`);
-        return true;
-      } catch {
-        // wrong interface for feature reports — try the next id, then bail
-      }
+  async _candidatePuckDevices() {
+    const result = [this.device];
+    if (!navigator.hid) return result;
+    try {
+      const all = await navigator.hid.getDevices();
+      const siblings = all.filter((d) =>
+        d !== this.device &&
+        d.vendorId === this.device.vendorId &&
+        d.productId === this.device.productId
+      );
+      result.push(...siblings);
+    } catch {
+      // getDevices errored; we still have the primary handle.
     }
-    return false;
+    return result;
   }
 
-  async _sendFeatureReport(payload) {
-    return this.device.sendFeatureReport(this._featureReportId, payload);
+  /**
+   * Try lizard-mode-disable against a single HID handle. Walks the
+   * device's declared feature reports first (best signal — only those
+   * ids will accept SET_REPORT), then falls back to the documented
+   * 0x01 / 0x02 if the descriptor didn't declare any. Returns
+   * { reportId, size } on success or null if every attempt threw.
+   */
+  async _trySendLizardModeDisable(device, declared) {
+    const candidates = declared.length > 0
+      ? declared
+      : [{ id: FEATURE_REPORT_ID_PRIMARY, size: 64 }, { id: FEATURE_REPORT_ID_FALLBACK, size: 64 }];
+
+    for (const { id, size } of candidates) {
+      const clear = SteamControllerDriver._buildLizardClearPayload(size);
+      const setSettings = SteamControllerDriver._buildLizardSetSettingsPayload(size);
+      try {
+        await device.sendFeatureReport(id, clear);
+        await device.sendFeatureReport(id, setSettings);
+        return { reportId: id, size };
+      } catch (err) {
+        console.log(`    id 0x${id.toString(16)} (${clear.length}B): ${err.name || 'Error'}: ${err.message}`);
+      }
+    }
+    return null;
   }
 
   parseReport(reportId, data) {

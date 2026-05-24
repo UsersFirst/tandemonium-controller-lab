@@ -393,6 +393,41 @@
   #gyro-toggle:hover { opacity: 0.8; }
   #gyro-toggle.visible { display: flex; }
 
+  /* ── Steam Controller Puck warning banner ── */
+  /* Top-of-window strip explaining the OS-level mouse/keyboard leak
+     that the Puck firmware emits and that no WebHID command can silence
+     on the 2026 firmware. Sits below the 40px drag bar so it doesn't
+     interfere with window-drag. Dismissible per session. */
+  #puck-warning-banner {
+    position: fixed;
+    top: 40px;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: rgba(214, 156, 18, 0.92);
+    color: #1a1a1e;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    line-height: 1.3;
+    -webkit-app-region: no-drag;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  #puck-warning-banner[hidden] { display: none; }
+  #puck-warning-banner .banner-text { flex: 1; }
+  #puck-warning-banner a { color: #1a1a1e; text-decoration: underline; }
+  #puck-warning-banner #puck-warning-dismiss {
+    background: transparent;
+    border: none;
+    color: #1a1a1e;
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.4rem;
+  }
+
   /* ── No-controller splash ── */
   /* Sits no-drag so right-click reaches the page's contextmenu handler
      (which opens the settings panel). Without this, the splash covers
@@ -405,6 +440,7 @@
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     z-index: 50;
@@ -412,6 +448,18 @@
     transition: opacity 0.4s ease;
   }
   #no-controller.hidden { display: none; }
+  /* Conditional hint under the splash — revealed by app.js when a Puck
+     is connected but no paired controller is sending STATE reports. */
+  #no-controller .splash-hint {
+    margin-top: 2rem;
+    max-width: 32rem;
+    padding: 0 2rem;
+    text-align: center;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    color: #d0d0d8;
+    opacity: 0.9;
+  }
   #no-controller .splash-icon {
     position: relative;
     display: flex;
@@ -737,8 +785,8 @@
   <div class="setting-row">
     <label>HUD Position</label>
     <select id="hud-position">
-      <option value="above" selected>Above</option>
-      <option value="below">Below</option>
+      <option value="above">Above</option>
+      <option value="below" selected>Below</option>
     </select>
   </div>
 
@@ -929,6 +977,18 @@
   </div>
 </div>
 
+<!-- Steam Controller Puck warning banner. Shown only when a Puck is
+     actively connected — the paired controller emits OS-level mouse +
+     keyboard events that no WebHID command can silence on the 2026
+     firmware. Click the × to dismiss for this session. -->
+<div id="puck-warning-banner" hidden>
+  <span class="banner-text">
+    Steam Controller <strong>Puck</strong> connected — paired controller is sending mouse + keyboard events to Windows.
+    Plug in via <strong>USB-C</strong> for clean input. <a href="https://github.com/UsersFirst/tandemonium-controller-lab/issues/8" target="_blank">Why?</a>
+  </span>
+  <button id="puck-warning-dismiss" type="button" aria-label="Dismiss">&times;</button>
+</div>
+
 <!-- No-controller splash (shown until a gamepad connects) -->
 <div id="no-controller">
   <div class="splash-icon">
@@ -937,6 +997,13 @@
       <circle cx="50" cy="50" r="45"/>
       <line x1="18" y1="18" x2="82" y2="82"/>
     </svg>
+  </div>
+  <!-- Shown when a Steam Controller Puck is connected but no paired
+       controller body is sending STATE reports. Hidden by default; app.js
+       reveals it 2s after a Puck connect if no STATE report has arrived. -->
+  <div id="puck-hint" class="splash-hint" hidden>
+    Steam Controller Puck detected, but no paired controller is responding.
+    Power on a paired controller, or plug a Steam Controller in directly via USB-C.
   </div>
 </div>
 
