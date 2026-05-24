@@ -197,7 +197,7 @@ export class ControllerOverlay {
       stickAssemblies[key] = { names, stick };
     }
 
-    // Pass 1: index all meshes by name and clone shared materials
+    // Pass 1: index all meshes by name and clone shared materials.
     // GLB loader shares material instances for identical materials, so
     // pressing one button would glow all buttons with the same color.
     const meshByName = {};
@@ -250,9 +250,21 @@ export class ControllerOverlay {
       sceneParent.add(pivot);
 
       this.stickPivots[key] = pivot;
-      // Also register individual meshes for lookup
+      // Also register individual meshes for lookup. Each part gets an
+      // `originals` entry too so that profile.buttonMap entries pointing
+      // at stick parts (typically L3/R3 click highlights on the stick
+      // cap) can animate via the standard button-press path. Without
+      // the originals, the button loop's `if (!mesh || !orig) continue`
+      // silently skips them.
       for (const part of parts) {
         this.meshes[part.name] = part;
+        this.originals[part.name] = {
+          posX: part.position.x,
+          posY: part.position.y,
+          posZ: part.position.z,
+          rotX: part.rotation.x,
+          rotZ: part.rotation.z,
+        };
       }
     }
 
@@ -372,20 +384,56 @@ export class ControllerOverlay {
       this._setupTouchIndicators();
     }
 
-    // Log found meshes for debugging
-    const profileMeshes = [
-      ...Object.values(profile.buttonMap),
-      ...Object.values(profile.triggerMap),
-      ...Object.values(profile.stickMap).flatMap((s) => s.meshes || [s.mesh]),
-      ...(profile.bodyMeshes || []),
-      profile.touchpadMesh,
-    ].filter(Boolean);
+    // Name aliasing: Three.js's GLTFLoader replaces spaces in glTF
+    // node names with underscores ("Bumper L2" → "Bumper_L2"), so a
+    // profile mesh name written with spaces (as the face-painter
+    // exports them) wouldn't match the loaded Object3D's name. Mirror
+    // every underscore-bearing key in `this.meshes` and `this.originals`
+    // to its space-form variant so profile lookups by either form work.
+    for (const key of Object.keys(this.meshes)) {
+      if (key.includes('_')) {
+        const alias = key.replace(/_/g, ' ');
+        if (this.meshes[alias] === undefined) this.meshes[alias] = this.meshes[key];
+        if (this.originals[key] && this.originals[alias] === undefined) {
+          this.originals[alias] = this.originals[key];
+        }
+      }
+    }
 
-    const found = profileMeshes.filter((m) => this.meshes[m]);
-    const missing = profileMeshes.filter((m) => !this.meshes[m]);
+    // Diagnostic: per-mapping check at load time so we can tell whether
+    // each gamepad-index → mesh path will animate at runtime. The press
+    // / tilt / trigger loops all early-return on missing mesh OR missing
+    // originals, so we explicitly check BOTH here.
+    const summarize = (kind, mapping) => {
+      const rows = [];
+      let ok = 0, total = 0;
+      for (const [k, name] of Object.entries(mapping)) {
+        total++;
+        const m = this.meshes[name];
+        const o = this.originals[name];
+        if (m && o) { ok++; rows.push(`  ✓ ${kind}[${k}] = "${name}"`); }
+        else { rows.push(`  ✗ ${kind}[${k}] = "${name}"  ${!m ? '(mesh missing)' : '(originals missing)'}`); }
+      }
+      return { rows, ok, total };
+    };
+    const btn = summarize('button', profile.buttonMap);
+    const trg = summarize('trigger', profile.triggerMap);
+    const stickRows = [];
+    let stickOk = 0, stickTotal = 0;
+    for (const [side, s] of Object.entries(profile.stickMap)) {
+      const names = s.meshes || [s.mesh];
+      stickTotal += names.length;
+      for (const n of names) {
+        if (this.meshes[n] && this.originals[n]) { stickOk++; stickRows.push(`  ✓ stick.${side} part "${n}"`); }
+        else { stickRows.push(`  ✗ stick.${side} part "${n}"  ${!this.meshes[n] ? '(mesh missing)' : '(originals missing)'}`); }
+      }
+    }
     console.log(
-      `Controller model loaded: ${found.length}/${profileMeshes.length} meshes mapped`,
-      missing.length ? `\nMissing: ${missing.join(', ')}` : ''
+      `Controller "${profile.name || this.controllerType}" loaded:\n` +
+      `  buttons:  ${btn.ok}/${btn.total}\n` +
+      `  triggers: ${trg.ok}/${trg.total}\n` +
+      `  sticks:   ${stickOk}/${stickTotal}\n` +
+      [...btn.rows, ...trg.rows, ...stickRows].join('\n')
     );
   }
 
@@ -510,6 +558,13 @@ export class ControllerOverlay {
       }
 
       // ── Triggers (analog) ──
+      // Rotation pivots the trigger mesh around its top edge. Emissive
+      // glow scales with pull depth so a half-pull shows ~half brightness,
+      // matching DualSense's behavior. Color transitions from yellow
+      // (mid-pull) to red (fully pressed) so the user gets a distinct
+      // signal at the bottoming-out point separate from analog level.
+      // Material is forced DoubleSide so the glow is visible regardless
+      // of which side of the rotating mesh is facing the camera.
       for (const [indexStr, meshName] of Object.entries(profile.triggerMap)) {
         const index = parseInt(indexStr);
         const btn = gamepad.buttons[index];
@@ -522,13 +577,30 @@ export class ControllerOverlay {
         const targetAngle = orig.rotX - btn.value * profile.triggerMaxAngle;
         mesh.rotation.x = THREE.MathUtils.lerp(mesh.rotation.x, targetAngle, LERP_SPEED);
 
-        // Yellow emissive glow scaling with trigger pull depth
-        const trigMat = mesh.children?.[0]?.isMesh ? mesh.children[0].material : null;
+        // Find the trigger's Mesh material — search descendants in case
+        // the pivot wraps a Group (instead of a single Mesh) or the
+        // GLTFLoader produced extra intermediate nodes.
+        let innerMesh = mesh.isMesh ? mesh : null;
+        if (!innerMesh) {
+          mesh.traverse((c) => { if (!innerMesh && c.isMesh) innerMesh = c; });
+        }
+        const trigMat = innerMesh?.material;
         if (trigMat && 'emissive' in trigMat) {
+          // One-time material setup: enable double-sided rendering so
+          // the glow shows when the trigger rotates inward, and start
+          // emissive at yellow.
           if (!trigMat._trigEmissiveSet) {
             trigMat._trigEmissiveSet = true;
+            trigMat.side = THREE.DoubleSide;
+            trigMat.needsUpdate = true;
             trigMat.emissive.set(0xffcc00);
           }
+          // Two-tone behavior: yellow up to 95% pull, snap to red when
+          // fully pressed (bottomed out). The intensity scales with
+          // analog value in both phases.
+          const fullyPressed = btn.value >= 0.95;
+          const targetColor = fullyPressed ? 0xff3322 : 0xffcc00;
+          trigMat.emissive.set(targetColor);
           const targetGlow = btn.value > 0.05 ? btn.value * 3.0 : 0;
           trigMat.emissiveIntensity = THREE.MathUtils.lerp(
             trigMat.emissiveIntensity, targetGlow, LERP_SPEED
