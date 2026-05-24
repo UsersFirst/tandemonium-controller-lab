@@ -64,6 +64,11 @@ const addons = [
   'controls/OrbitControls.js',
   'exporters/GLTFExporter.js',
   'libs/fflate.module.js',
+  // Required for GLBs using EXT_meshopt_compression (the default in
+  // gltf-transform optimize). Without this decoder registered on the
+  // GLTFLoader, meshopt-compressed geometry is silently undecoded and
+  // the model renders as an empty bounding box.
+  'libs/meshopt_decoder.module.js',
   'utils/BufferGeometryUtils.js',
   'curves/NURBSCurve.js',
   'curves/NURBSUtils.js',
