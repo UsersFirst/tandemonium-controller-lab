@@ -139,6 +139,10 @@ export const DEVICES = [
     features: GAMESIR_DS4_FEATURES,
     gamepadIdPattern: PLAYSTATION_ID,
     spoofs: { of: 'Sony DualShock 4 v2', vendorId: 0x054c, productId: 0x09cc },
+    // Photogrammetry-sourced GLB; monolithic mesh so gyro rotation works
+    // but per-button animation doesn't. See packages/visualizer/src/
+    // controller-profiles.js → 'gamesir-super-nova' for the limitations.
+    controllerProfile: 'gamesir-super-nova',
     notes: 'GameSir clone reporting Sony 054c:09cc. IMU layout matches Sony DS4 (offsets 12/18); has independent back paddles.',
   },
   {
