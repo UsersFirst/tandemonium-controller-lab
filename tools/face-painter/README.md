@@ -39,11 +39,35 @@ The output GLB has one `Mesh` per region, named exactly what you typed in the pa
 2. Populate `buttonMap`, `triggerMap`, `stickMap` with the region names you authored.
 3. Optionally remove the `highlightMarkers` block — once real per-button meshes animate, procedural markers become redundant.
 
+## Mouse + keyboard
+
+| Action | Binding |
+| --- | --- |
+| Paint hovered triangle into active region | Left-click + drag |
+| Unpaint hovered triangle | Shift + left-click + drag |
+| Orbit camera | Right-click + drag |
+| Pan camera | Middle-click + drag |
+| Zoom | Mouse wheel |
+| Undo last stroke | Ctrl+Z (Cmd+Z on Mac) |
+
+The right-click-to-orbit convention matches Blender / Maya / Sketchfab. Left-click is reserved entirely for paint, so the camera and painter never conflict.
+
+## Per-region actions
+
+Each region in the side panel has four icon buttons:
+
+| Icon | Action |
+| --- | --- |
+| ✎ | Rename the region |
+| ● | Recolor the region |
+| ⌫ | Unpaint all faces in this region (region itself stays) |
+| ✕ | Delete the region (and unpaint its faces) |
+
 ## Tips
 
 - **Iterate small**: paint a few faces, save, reload to verify the JSON shape and your naming. Catching mistakes early is much cheaper than after assigning hundreds of faces.
-- **Orbit + zoom**: drag rotates the camera, mouse wheel zooms. Paint only fires on left-click+drag, so the camera and painter don't conflict.
-- **Unassigned faces are gray**: anything you don't paint into a region falls through to the `body` mesh in the export.
+- **Undo is per-stroke**: each mousedown→mouseup window counts as one stroke, so a drag that paints 50 faces undoes as a single action.
+- **Unassigned faces are light gray**: anything you don't paint into a region falls through to the `body` mesh in the export.
 
 ## JSON schema
 

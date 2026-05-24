@@ -44,6 +44,13 @@ scene.background = new THREE.Color(0x0e1014);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Same tone mapping + exposure as the overlay so the rendered surface
+// has contrast — without these, the flat-shaded mesh looks washed out
+// and surface details (button reliefs, trackpad indentations) are hard
+// to make out for region planning.
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
 function resize() {
   const w = canvas.parentElement.clientWidth;
   const h = canvas.parentElement.clientHeight;
@@ -55,17 +62,33 @@ const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
 camera.position.set(0, 0.05, 0.35);
 window.addEventListener('resize', resize);
 
+// Mouse mapping: right-button orbits, middle-button pans, left-button
+// is unmapped here so painter clicks don't fight OrbitControls. Same
+// convention Blender / Maya / Sketchfab use — separates camera from
+// content manipulation cleanly without a mode toggle.
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.target.set(0, 0, 0);
+controls.mouseButtons = {
+  LEFT: null,
+  MIDDLE: THREE.MOUSE.PAN,
+  RIGHT: THREE.MOUSE.ROTATE,
+};
+controls.enablePan = true;
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-const key = new THREE.DirectionalLight(0xffffff, 0.9); key.position.set(2, 3, 2); scene.add(key);
-const fill = new THREE.DirectionalLight(0xb0c4de, 0.4); fill.position.set(-2, 1, -1); scene.add(fill);
+// Studio-style lighting matching the controller overlay so the GLB
+// renders with the same surface contrast you see in the main app.
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(2, 3, 2); scene.add(key);
+const front = new THREE.DirectionalLight(0xffffff, 0.8); front.position.set(0, 1, 3); scene.add(front);
+const fill = new THREE.DirectionalLight(0xb0c4de, 0.5); fill.position.set(-2, 1, -1); scene.add(fill);
 const rim = new THREE.DirectionalLight(0xffffff, 0.3); rim.position.set(0, -1, -2); scene.add(rim);
 
 // ── State ──
-const DEFAULT_COLOR = 0x4a4d55; // dark gray for unassigned faces
+// Brighter default so the standard lighting actually shows surface
+// shading. Dark grays absorb almost all light and produce a featureless
+// silhouette, hiding the button reliefs we need to see to paint accurately.
+const DEFAULT_COLOR = 0xd0d3da;
 const DEFAULT_PALETTE = [
   '#33dd55', '#dd3333', '#3366dd', '#eebb22',
   '#ff8800', '#9966cc', '#22cccc', '#cc66aa',
@@ -243,6 +266,24 @@ function recolorRegion(idx) {
   }
 }
 
+function clearRegionFaces(idx) {
+  const r = regions[idx];
+  if (r.faces.size === 0) return;
+  if (!confirm(`Unpaint all ${r.faces.size} face(s) from "${r.name}"? (keeps the region)`)) return;
+  // Record as one undo stroke so Ctrl+Z restores it.
+  currentStroke = new Map();
+  for (const f of [...r.faces]) {
+    assignFaceToRegion(f, -1);
+  }
+  if (currentStroke.size > 0) {
+    undoStack.push({ changes: currentStroke });
+    while (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  }
+  currentStroke = null;
+  colorAttrDirty();
+  renderRegions();
+}
+
 function renderRegions() {
   regionsEl.innerHTML = '';
   regions.forEach((r, i) => {
@@ -255,7 +296,8 @@ function renderRegions() {
       <span class="actions">
         <button data-act="rename" title="Rename">✎</button>
         <button data-act="color" title="Color">●</button>
-        <button data-act="delete" title="Delete">✕</button>
+        <button data-act="clear" title="Unpaint faces (keep region)">⌫</button>
+        <button data-act="delete" title="Delete region">✕</button>
       </span>
     `;
     el.querySelector('.name').textContent = r.name;
@@ -265,6 +307,7 @@ function renderRegions() {
     });
     el.querySelector('[data-act=rename]').addEventListener('click', () => renameRegion(i));
     el.querySelector('[data-act=color]').addEventListener('click', () => recolorRegion(i));
+    el.querySelector('[data-act=clear]').addEventListener('click', () => clearRegionFaces(i));
     el.querySelector('[data-act=delete]').addEventListener('click', () => {
       if (confirm(`Delete region "${r.name}" and unpaint its ${r.faces.size} face(s)?`)) deleteRegion(i);
     });
@@ -275,12 +318,21 @@ function renderRegions() {
     : '(no active region — add one to start painting)';
 }
 
-// ── Click painting ──
+// ── Painting + undo ──
+//
+// Left-click owns paint exclusively (OrbitControls is remapped to right-
+// button orbit). Each stroke = one mousedown→mouseup window; all face
+// changes within that window go into one undo entry. Ctrl+Z reverts the
+// last stroke; we keep a bounded stack (no redo for now — typical paint
+// app pattern is "undo until happy then keep going").
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 let painting = false;
-let paintMode = 'add'; // 'add' | 'remove' (shift held)
+let paintMode = 'add';        // 'add' | 'remove' (shift held)
+const UNDO_LIMIT = 50;
+const undoStack = [];          // [{ changes: Map<faceIdx, prevRegionIdx> }, ...]
+let currentStroke = null;      // active stroke's change map, or null
 
 function pickFaceFromEvent(ev) {
   if (!targetMesh) return -1;
@@ -292,33 +344,45 @@ function pickFaceFromEvent(ev) {
   return hits.length > 0 ? hits[0].faceIndex : -1;
 }
 
+function assignFaceToRegion(f, targetIdx) {
+  // targetIdx === -1 means unpaint.
+  const prev = faceRegion[f];
+  if (prev === targetIdx) return false;
+  // Record original region BEFORE we mutate, but only on the FIRST
+  // change to this face in the current stroke — subsequent re-paints
+  // of the same face within one stroke shouldn't overwrite the
+  // original-state record.
+  if (currentStroke && !currentStroke.has(f)) currentStroke.set(f, prev);
+  if (prev >= 0) regions[prev].faces.delete(f);
+  if (targetIdx >= 0) regions[targetIdx].faces.add(f);
+  faceRegion[f] = targetIdx;
+  writeFaceColor(f);
+  return true;
+}
+
 function paintFace(f) {
   if (f < 0) return;
   if (paintMode === 'add') {
     if (activeRegionIdx < 0) return;
-    // Remove from any prior region
-    const prev = faceRegion[f];
-    if (prev >= 0 && prev !== activeRegionIdx) regions[prev].faces.delete(f);
-    if (prev === activeRegionIdx) return; // already in active, no-op
-    faceRegion[f] = activeRegionIdx;
-    regions[activeRegionIdx].faces.add(f);
+    assignFaceToRegion(f, activeRegionIdx);
   } else {
-    const prev = faceRegion[f];
-    if (prev < 0) return;
-    regions[prev].faces.delete(f);
-    faceRegion[f] = -1;
+    assignFaceToRegion(f, -1);
   }
-  writeFaceColor(f);
 }
 
 canvas.addEventListener('mousedown', (ev) => {
+  // Left-button only. Right-button is OrbitControls' rotate (see
+  // controls.mouseButtons above), middle is pan, scroll is zoom.
   if (ev.button !== 0) return;
+  // Open a new undo stroke. Even if no faces end up changing, the
+  // stroke just stays empty and we drop it on mouseup.
   painting = true;
   paintMode = ev.shiftKey ? 'remove' : 'add';
+  currentStroke = new Map();
   const f = pickFaceFromEvent(ev);
   paintFace(f);
   colorAttrDirty();
-  renderRegions(); // update counts
+  renderRegions();
 });
 canvas.addEventListener('mousemove', (ev) => {
   if (!painting) return;
@@ -326,21 +390,41 @@ canvas.addEventListener('mousemove', (ev) => {
   paintFace(f);
   colorAttrDirty();
 });
-canvas.addEventListener('mouseup', () => {
-  if (painting) {
-    painting = false;
-    renderRegions();
+function finishStroke() {
+  if (!painting) return;
+  painting = false;
+  if (currentStroke && currentStroke.size > 0) {
+    undoStack.push({ changes: currentStroke });
+    while (undoStack.length > UNDO_LIMIT) undoStack.shift();
   }
-});
-canvas.addEventListener('mouseleave', () => {
-  if (painting) {
-    painting = false;
-    renderRegions();
-  }
-});
+  currentStroke = null;
+  renderRegions();
+}
+canvas.addEventListener('mouseup', finishStroke);
+canvas.addEventListener('mouseleave', finishStroke);
 
-// Disable OrbitControls during paint (otherwise drag spins camera while painting)
-controls.addEventListener('start', () => { if (painting) { painting = false; renderRegions(); } });
+// Ctrl+Z (or Cmd+Z) undoes the most recent stroke by replaying its
+// per-face previous-region records in reverse.
+window.addEventListener('keydown', (ev) => {
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z' && !ev.shiftKey) {
+    ev.preventDefault();
+    undoLastStroke();
+  }
+});
+function undoLastStroke() {
+  const stroke = undoStack.pop();
+  if (!stroke) return;
+  // Restore each face to its prior region (without re-recording into
+  // currentStroke — we're rewinding, not tracking a new stroke).
+  const saved = currentStroke;
+  currentStroke = null;
+  for (const [f, prev] of stroke.changes) {
+    assignFaceToRegion(f, prev);
+  }
+  currentStroke = saved;
+  colorAttrDirty();
+  renderRegions();
+}
 
 // ── Save / Load ──
 
