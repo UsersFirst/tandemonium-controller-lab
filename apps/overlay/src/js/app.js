@@ -447,11 +447,37 @@ async function init() {
 /**
  * Detect what controller is already connected at startup.
  */
-// Resolve the visualizer profile key for a given gamepad. Prefer the
-// dictionary's `controllerProfile` field (so a registered clone with
-// its own GLB wins over the protocol default); fall back to the
-// visualizer's own gamepad.id pattern sniff when no dictionary match.
+// Cache of (vid:pid → profile key) populated by the IMU probe when it
+// successfully identifies a wire-level family that disambiguates a
+// spoofer from the entry that `identifyFromGamepadId` would pick by
+// default. Without this cache, switchController re-fires (gamepad
+// hot-plug, jitter, USB sleep/wake, etc.) would compute the gamepad-
+// id-based default again and overwrite the IMU-determined choice —
+// producing the GLB-flapping bug where the model bounces between
+// 'dualsense' and 'gamesir-super-nova' indefinitely.
+//
+// Keyed by `"vendorIdHex:productIdHex"`. Cleared on disconnect so a
+// fresh plug-in re-probes (lets the user swap to a real Sony DS4 on
+// the same machine after testing a clone, etc.).
+const imuLockedProfileByVidPid = new Map();
+
+function vidPidKey(vendorId, productId) {
+  return `${vendorId.toString(16).padStart(4, '0')}:${productId.toString(16).padStart(4, '0')}`;
+}
+
+// Resolve the visualizer profile key for a given gamepad. Order:
+//   1. IMU-locked profile for this gamepad's vid:pid (set by
+//      maybeSwapProfileAfterImuProbe after a successful wire-level
+//      identification)
+//   2. dictionary's `controllerProfile` field (first-match-wins via
+//      identifyFromGamepadId)
+//   3. visualizer's own gamepad.id pattern sniff
 function pickControllerProfile(gamepadId) {
+  const vp = ControllerRegistry.parseGamepadVendorProduct(gamepadId);
+  if (vp) {
+    const locked = imuLockedProfileByVidPid.get(vidPidKey(vp.vendorId, vp.productId));
+    if (locked) return locked;
+  }
   const info = ControllerRegistry.identifyFromGamepadId(gamepadId);
   return info?.controllerProfile || detectControllerType(gamepadId);
 }
@@ -587,6 +613,12 @@ function onGamepadDisconnected(index) {
   gamepadIndex = null;
   gamepadStatusEl.textContent = 'No gamepad';
   gamepadStatusEl.classList.remove('connected');
+  // Clear the IMU-lock cache for whatever was attached so the next pad
+  // re-probes from scratch (lets a real Sony DS4 replace a GameSir test
+  // on the same vid:pid without inheriting the clone's profile).
+  if (hidDevice) {
+    imuLockedProfileByVidPid.delete(vidPidKey(hidDevice.vendorId, hidDevice.productId));
+  }
   cancelGyroConnect();
   disconnectGyro();
   hideGyroToggle();
@@ -778,11 +810,20 @@ function maybeSwapProfileAfterImuProbe() {
   // here without a manual trip into settings.
   const picked = candidates[0];
   const desiredProfile = picked.controllerProfile || picked.protocol;
+  // Lock this vid:pid → profile so any future switchController re-fire
+  // for the same physical device uses the IMU-determined choice instead
+  // of falling back to the gamepad.id first-match.
+  imuLockedProfileByVidPid.set(
+    vidPidKey(hidDevice.vendorId, hidDevice.productId),
+    desiredProfile
+  );
   if (desiredProfile !== currentControllerType && overlay) {
-    console.log(`IMU probe wants profile '${desiredProfile}' (entry: ${picked.name}); currently '${currentControllerType}' — swapping.`);
+    console.log(`IMU probe wants profile '${desiredProfile}' (entry: ${picked.name}); currently '${currentControllerType}' — swapping + locking ${vidPidKey(hidDevice.vendorId, hidDevice.productId)}.`);
     currentControllerType = desiredProfile;
     applyHudLabels(desiredProfile);
     overlay.setControllerType(desiredProfile);
+  } else {
+    console.log(`IMU probe profile '${desiredProfile}' already active; locking ${vidPidKey(hidDevice.vendorId, hidDevice.productId)} for future switchController re-fires.`);
   }
 }
 

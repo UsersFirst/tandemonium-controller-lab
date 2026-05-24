@@ -17,7 +17,11 @@
 //     profile changes (dropdown / IMU probe), so labels track
 //   - onButtonHudState — fires every frame with {buttons, axes} snapshot
 
-import { PROFILES } from '@usersfirst/controller-visualizer';
+// Direct relative-path import — does NOT pull in @usersfirst/controller-visualizer's
+// index.js barrel, which would transitively load ControllerOverlay + GyroGimbal
+// and require `three` in the importmap. The popout has no 3D scene; it only
+// needs PROFILES for the hudLabels block.
+import { PROFILES } from '../lib/controller-visualizer/controller-profiles.js';
 
 // ── DOM refs ─────────────────────────────────────────────────────────
 const profileNameEl = document.getElementById('profile-name');

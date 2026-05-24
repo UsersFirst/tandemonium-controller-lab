@@ -183,19 +183,11 @@
   </div>
 </div>
 
-<script>
-// Importmap — popout reads the workspace packages from the same vendored
-// ./lib/ tree that index.html does. No three.js needed here.
-(function() {
-  const map = {
-    "@usersfirst/controller-visualizer": "./lib/controller-visualizer/index.js",
-  };
-  const el = document.createElement('script');
-  el.type = 'importmap';
-  el.textContent = JSON.stringify({ imports: map });
-  document.currentScript.after(el);
-})();
-</script>
+<!-- No importmap: button-hud-window.js imports PROFILES via a direct
+     relative path (../lib/controller-visualizer/controller-profiles.js)
+     rather than the @usersfirst/controller-visualizer barrel, which
+     would transitively need `three` in the importmap. The popout has
+     no 3D scene; the bare specifier just isn't needed here. -->
 <script type="module" src="js/button-hud-window.js"></script>
 </body>
 </html>
