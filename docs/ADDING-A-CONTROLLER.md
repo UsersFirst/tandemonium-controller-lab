@@ -117,7 +117,7 @@ By default, every entry whose `protocol` is `'dualsense'` gets the Sony DualSens
 To give a controller its own visual model:
 
 1. **Get a GLB**. Sources, easiest first:
-   - **Photogrammetry** from 3–4 photos via [Polycam](https://poly.cam), [Trellis](https://trellis3d.github.io), or [Meshroom](https://alicevision.org/#meshroom). 10–15 minutes; mesh names will be random and need a rename pass.
+   - **Photogrammetry** from 3–4 photos via [Polycam](https://poly.cam), [Trellis](https://trellis3d.github.io), or [Meshroom](https://alicevision.org/#meshroom). 10–15 minutes capture; the raw output will be 50–200 MB with one monolithic mesh — see [OPTIMIZING-GLB.md](./OPTIMIZING-GLB.md) for the decimate / texture-resize pipeline to get it under 2 MB before committing.
    - **Stock asset / modify existing**. Some controller GLBs are available on Sketchfab, Itch, or CGTrader; recoloring an existing model in Blender is often the fastest path to a "close enough" result.
    - **Hand-model in Blender**. Maximum control, lots of time. Overkill for the lab.
 2. **Rename meshes** to match the visualizer's button-map convention — `face_cross`, `face_circle`, `face_square`, `face_triangle` (or `face_a`/`face_b`/`face_x`/`face_y` for Xbox-style), `bumper_l1`/`bumper_r1`, `trigger_l2`/`trigger_r2`, `stick_left`/`stick_right`, `dpad_up`/`dpad_down`/`dpad_left`/`dpad_right`, `button_create`/`button_options`/`button_ps`, `body_top`/`body_bottom`. Existing models in [`packages/visualizer/assets/controllers/`](../packages/visualizer/assets/controllers/) and their corresponding `PROFILES` entries are the reference.
