@@ -50,7 +50,7 @@ export class ControllerRegistry {
 
   /**
    * Find the driver class for a vid:pid. Returns the protocol implementation
-   * (DualSenseDriver, SwitchProDriver, etc.) or null.
+   * (PlayStationDriver, SwitchProDriver, etc.) or null.
    * @returns {typeof ControllerDriver|null}
    */
   static getDriver(vendorId, productId) {

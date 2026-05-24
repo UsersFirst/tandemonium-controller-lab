@@ -51,14 +51,19 @@
 // }
 // ============================================================
 
-import { DualSenseDriver } from './drivers/dualsense-driver.js';
+import { PlayStationDriver } from './drivers/playstation-driver.js';
 import { SwitchProDriver } from './drivers/switch-pro-driver.js';
 import { XboxDriver } from './drivers/xbox-driver.js';
 import { SteamControllerDriver } from './drivers/steam-controller-driver.js';
 
-/** Protocol id → driver class. Add a new protocol here when a new driver lands. */
+// Protocol id → driver class. The 'dualsense' key historically named
+// just the DS5 protocol; it now covers PlayStation's DS4 + DS5 layouts
+// (the class was renamed to PlayStationDriver to reflect that, but the
+// key is preserved so the visualizer's PROFILES['dualsense'] GLB
+// continues to load for all Sony entries without needing a per-entry
+// controllerProfile override).
 export const PROTOCOLS = {
-  'dualsense':        DualSenseDriver,
+  'dualsense':        PlayStationDriver,
   'switch-pro':       SwitchProDriver,
   'xbox':             XboxDriver,
   'steam-controller': SteamControllerDriver,
