@@ -262,6 +262,11 @@ export const PROFILES = {
     triggerMaxAngle: 0.52,
     stickMaxTilt: 0.26,
     hasGyro: true,
+    // Axis remap is applied inside the driver itself (Y↔Z swap on both
+    // gyro and accel — see steam-controller-driver.js parseReport).
+    // gyroTransform here is informational; the field isn't actively
+    // consumed anywhere in the pipeline, but the identity transform
+    // documents that no further visualizer-side rotation is needed.
     gyroTransform: (gx, gy, gz) => [gx, gy, gz],
     hasTouchpad: false,     // touchpads exist on hardware but not as sub-meshes
     bodyMeshes: ['node_0'],
