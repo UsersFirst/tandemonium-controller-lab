@@ -6,6 +6,12 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+// Required to decode geometry from GLBs that use EXT_meshopt_compression
+// (the default in `gltf-transform optimize`). Without it, meshopt-
+// compressed buffer views silently fail to decode and the mesh renders
+// as an empty bounding box. Loaded lazily inside _loadModel so callers
+// without meshopt GLBs don't pay the import cost.
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { PROFILES } from './controller-profiles.js';
 
 const DEADZONE = 0.08;
@@ -140,6 +146,10 @@ export class ControllerOverlay {
 
     return new Promise((resolve, reject) => {
       const loader = new GLTFLoader();
+      // MeshoptDecoder is a WASM-backed module; the registration tells
+      // the GLTFLoader to use it when it encounters EXT_meshopt_compression.
+      // Cheap to call repeatedly — Three's loader checks if it's already set.
+      loader.setMeshoptDecoder(MeshoptDecoder);
       loader.load(
         profile.model,
         (gltf) => {
