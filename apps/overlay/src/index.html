@@ -429,6 +429,158 @@
     opacity: 0.85;
   }
 
+  /* ── Button HUD — compact 2D readout of gamepad state ── */
+  /* Renders face buttons, dpad, shoulders, analog triggers, stick positions,
+     and system buttons. Each element flips between 'idle' and 'pressed' via
+     a .pressed class toggled by updateButtonHud() in app.js. Hidden by
+     default; toggleable in settings; remembers position via a body class. */
+  #button-hud {
+    position: fixed;
+    left: 12px;
+    bottom: 12px;
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    background: rgba(15, 15, 20, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    pointer-events: none;
+    z-index: 50;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-app-region: no-drag;
+    user-select: none;
+  }
+  body.show-button-hud #button-hud { display: flex; }
+  #button-hud.pos-top-left    { left: 12px; top: 12px;    bottom: auto; right: auto; }
+  #button-hud.pos-top-right   { right: 12px; top: 12px;   bottom: auto; left: auto; }
+  #button-hud.pos-bottom-right{ right: 12px; bottom: 12px; top: auto; left: auto; }
+  #button-hud.pos-bottom-left { left: 12px; bottom: 12px;  top: auto; right: auto; }
+
+  #button-hud .bh-section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  /* Buttons: small rounded squares; light up cyan on press */
+  #button-hud .bh-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #999;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    transition: background 60ms linear, color 60ms linear, transform 60ms linear;
+  }
+  #button-hud .bh-btn.bh-sm { width: 20px; height: 16px; font-size: 9px; }
+  #button-hud .bh-btn.bh-dp { width: 18px; height: 18px; font-size: 8px; color: #777; }
+  #button-hud .bh-btn.pressed {
+    background: #3388ff;
+    color: #fff;
+    border-color: #3388ff;
+    transform: scale(1.08);
+    box-shadow: 0 0 6px rgba(51, 136, 255, 0.65);
+  }
+  /* Face button accents — keep their familiar colors */
+  #button-hud .bh-face-a.pressed { background: #2ec27e; border-color: #2ec27e; box-shadow: 0 0 6px rgba(46,194,126,0.65); }
+  #button-hud .bh-face-b.pressed { background: #ed333b; border-color: #ed333b; box-shadow: 0 0 6px rgba(237,51,59,0.65); }
+  #button-hud .bh-face-x.pressed { background: #3388ff; border-color: #3388ff; box-shadow: 0 0 6px rgba(51,136,255,0.65); }
+  #button-hud .bh-face-y.pressed { background: #f6c343; border-color: #f6c343; color: #222; box-shadow: 0 0 6px rgba(246,195,67,0.65); }
+
+  /* Dpad: 3-column grid (up centered, ←  → on a row, down centered) */
+  #button-hud .bh-dpad {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    grid-template-rows: repeat(3, auto);
+    gap: 2px;
+  }
+  #button-hud .bh-dpad .bh-btn:nth-child(1) { grid-area: 1 / 2; }
+  #button-hud .bh-dpad .bh-btn:nth-child(2) { grid-area: 2 / 1; }
+  #button-hud .bh-dpad .bh-btn:nth-child(3) { grid-area: 2 / 3; }
+  #button-hud .bh-dpad .bh-btn:nth-child(4) { grid-area: 3 / 2; }
+
+  /* Face buttons: 3-column grid (Y top, X-B middle, A bottom — diamond layout) */
+  #button-hud .bh-face {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    grid-template-rows: repeat(3, auto);
+    gap: 2px;
+  }
+  #button-hud .bh-face .bh-face-y { grid-area: 1 / 2; }
+  #button-hud .bh-face .bh-face-x { grid-area: 2 / 1; }
+  #button-hud .bh-face .bh-face-b { grid-area: 2 / 3; }
+  #button-hud .bh-face .bh-face-a { grid-area: 3 / 2; }
+
+  .bh-main { display: flex; gap: 12px; }
+
+  /* Analog triggers: vertical bars whose fill grows with value 0-1 */
+  .bh-triggers { gap: 10px; }
+  #button-hud .bh-trigger {
+    position: relative;
+    width: 18px; height: 30px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #button-hud .bh-trigger-fill {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 0%;
+    background: linear-gradient(to top, #3388ff, #66bbff);
+    transition: height 50ms linear;
+  }
+  #button-hud .bh-trigger-label {
+    position: absolute;
+    left: 0; right: 0; bottom: 1px;
+    text-align: center;
+    color: #ccc;
+    font-size: 8px;
+    font-weight: 600;
+    text-shadow: 0 0 2px rgba(0,0,0,0.8);
+    pointer-events: none;
+  }
+
+  /* Sticks: small square with a moving dot showing current XY; border lights up on click */
+  .bh-sticks { gap: 8px; }
+  #button-hud .bh-stick {
+    position: relative;
+    width: 28px; height: 28px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    transition: border-color 60ms linear, box-shadow 60ms linear;
+  }
+  #button-hud .bh-stick.pressed {
+    border-color: #3388ff;
+    box-shadow: 0 0 6px rgba(51, 136, 255, 0.65);
+  }
+  #button-hud .bh-stick-dot {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 6px; height: 6px;
+    background: #cfd;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  #button-hud .bh-stick-label {
+    position: absolute;
+    left: 50%; bottom: -10px;
+    transform: translateX(-50%);
+    color: #888;
+    font-size: 8px;
+    font-weight: 600;
+    pointer-events: none;
+  }
+
   /* ── Gyro HUD (arc, arrows, calibration text) ── */
   #gyro-hud {
     position: fixed;
@@ -613,6 +765,19 @@
     <label>Gimbal: full orientation</label>
     <input type="checkbox" id="gimbal-full-mode">
   </div>
+  <div class="setting-row">
+    <label>Show Button HUD</label>
+    <input type="checkbox" id="show-button-hud">
+  </div>
+  <div class="setting-row">
+    <label>Button HUD position</label>
+    <select id="button-hud-position">
+      <option value="bottom-left" selected>Bottom-left</option>
+      <option value="bottom-right">Bottom-right</option>
+      <option value="top-left">Top-left</option>
+      <option value="top-right">Top-right</option>
+    </select>
+  </div>
 
   <hr class="settings-divider">
   <h3>Shortcuts</h3>
@@ -709,6 +874,47 @@
     <span id="lean-arrow-left">&#x25C0;</span>
     <span id="calib-hint" class="hidden"></span>
     <span id="lean-arrow-right">&#x25B6;</span>
+  </div>
+</div>
+
+<!-- ── Button HUD — 2D state readout for monolithic-mesh controllers ── -->
+<!-- Shows face buttons, dpad, shoulders, analog triggers, stick positions,
+     and system buttons lighting up as you press. Useful for any controller
+     whose GLB doesn't have separated per-button meshes (AI-generated
+     monolithic models like the Super Nova, Steam Controller 2026, etc.),
+     and as a debug readout for any controller. Toggled via settings. -->
+<div id="button-hud">
+  <div class="bh-section bh-triggers">
+    <div class="bh-trigger" data-trigger="l2"><div class="bh-trigger-fill"></div><span class="bh-trigger-label">L2</span></div>
+    <div class="bh-trigger" data-trigger="r2"><div class="bh-trigger-fill"></div><span class="bh-trigger-label">R2</span></div>
+  </div>
+  <div class="bh-section bh-shoulders">
+    <div class="bh-btn bh-sm" data-btn="4">L1</div>
+    <div class="bh-btn bh-sm" data-btn="5">R1</div>
+  </div>
+  <div class="bh-section bh-main">
+    <div class="bh-dpad">
+      <div class="bh-btn bh-dp" data-btn="12">&#x25B2;</div>
+      <div class="bh-btn bh-dp" data-btn="14">&#x25C0;</div>
+      <div class="bh-btn bh-dp" data-btn="15">&#x25B6;</div>
+      <div class="bh-btn bh-dp" data-btn="13">&#x25BC;</div>
+    </div>
+    <div class="bh-face">
+      <div class="bh-btn bh-face-y" data-btn="3">Y</div>
+      <div class="bh-btn bh-face-x" data-btn="2">X</div>
+      <div class="bh-btn bh-face-b" data-btn="1">B</div>
+      <div class="bh-btn bh-face-a" data-btn="0">A</div>
+    </div>
+  </div>
+  <div class="bh-section bh-sticks">
+    <div class="bh-stick" data-stick="l"><div class="bh-stick-dot"></div><span class="bh-stick-label">L</span></div>
+    <div class="bh-stick" data-stick="r"><div class="bh-stick-dot"></div><span class="bh-stick-label">R</span></div>
+  </div>
+  <div class="bh-section bh-system">
+    <div class="bh-btn bh-sm" data-btn="8">Sh</div>
+    <div class="bh-btn bh-sm" data-btn="9">Op</div>
+    <div class="bh-btn bh-sm" data-btn="16">PS</div>
+    <div class="bh-btn bh-sm" data-btn="17">TP</div>
   </div>
 </div>
 

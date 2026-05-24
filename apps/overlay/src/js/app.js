@@ -200,6 +200,87 @@ function leanColor(t) {
   return '#ff4444';
 }
 
+// ── Button HUD update ──
+// Cached DOM refs so the per-frame update doesn't query the DOM repeatedly.
+// Built lazily on first call so the script doesn't crash if the HUD markup
+// is missing for any reason.
+let _bhRefs = null;
+function _getButtonHudRefs() {
+  if (_bhRefs) return _bhRefs;
+  const buttons = {};
+  document.querySelectorAll('#button-hud [data-btn]').forEach(el => {
+    buttons[Number(el.getAttribute('data-btn'))] = el;
+  });
+  const triggers = {
+    l2: { wrap: document.querySelector('#button-hud [data-trigger="l2"]'),
+          fill: document.querySelector('#button-hud [data-trigger="l2"] .bh-trigger-fill') },
+    r2: { wrap: document.querySelector('#button-hud [data-trigger="r2"]'),
+          fill: document.querySelector('#button-hud [data-trigger="r2"] .bh-trigger-fill') },
+  };
+  const sticks = {
+    l: { wrap: document.querySelector('#button-hud [data-stick="l"]'),
+         dot:  document.querySelector('#button-hud [data-stick="l"] .bh-stick-dot') },
+    r: { wrap: document.querySelector('#button-hud [data-stick="r"]'),
+         dot:  document.querySelector('#button-hud [data-stick="r"] .bh-stick-dot') },
+  };
+  _bhRefs = { buttons, triggers, sticks };
+  return _bhRefs;
+}
+
+/**
+ * Update the 2D button HUD from a gamepad snapshot. Cheap: ~30 class
+ * toggles + 4 style writes per frame. Skips entirely if the HUD is hidden
+ * (animation loop guards on body.show-button-hud).
+ *
+ * Conventions are Gamepad-API-standard:
+ *   buttons 0-3   → face buttons (A/B/X/Y)
+ *   buttons 4-5   → L1/R1 (digital shoulders)
+ *   buttons 6-7   → L2/R2 (digital backstop; analog comes from .value)
+ *   buttons 8-9   → Share/Options (Select/Start equivalents)
+ *   buttons 10-11 → L3/R3 (stick clicks)
+ *   buttons 12-15 → dpad up/down/left/right
+ *   buttons 16-17 → PS/Touchpad (or Home/Capture etc. depending on pad)
+ *   axes 0/1, 2/3 → left/right stick X/Y, range [-1, 1]
+ */
+function updateButtonHud(gamepad) {
+  const refs = _getButtonHudRefs();
+  if (!refs) return;
+
+  const buttons = gamepad?.buttons || [];
+  for (const [idx, el] of Object.entries(refs.buttons)) {
+    const pressed = !!buttons[idx]?.pressed;
+    if (el.classList.contains('pressed') !== pressed) {
+      el.classList.toggle('pressed', pressed);
+    }
+  }
+  // Analog triggers: scale the fill height from the .value (already 0-1).
+  const l2v = buttons[6]?.value || 0;
+  const r2v = buttons[7]?.value || 0;
+  if (refs.triggers.l2.fill) refs.triggers.l2.fill.style.height = (l2v * 100) + '%';
+  if (refs.triggers.r2.fill) refs.triggers.r2.fill.style.height = (r2v * 100) + '%';
+  // Sticks: position the dot at (axis * radius). Radius is half the stick
+  // box minus the dot half-size, expressed as a percentage offset from
+  // center (translate -50% + axis*PCT). axisY in Gamepad-API is "up = -1"
+  // so we negate to make "up = dot up" visually intuitive.
+  const axes = gamepad?.axes || [0, 0, 0, 0];
+  const STICK_RADIUS_PCT = 40;
+  if (refs.sticks.l.dot) {
+    const x = (axes[0] || 0) * STICK_RADIUS_PCT;
+    const y = (axes[1] || 0) * STICK_RADIUS_PCT;
+    refs.sticks.l.dot.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+  }
+  if (refs.sticks.r.dot) {
+    const x = (axes[2] || 0) * STICK_RADIUS_PCT;
+    const y = (axes[3] || 0) * STICK_RADIUS_PCT;
+    refs.sticks.r.dot.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+  }
+  // L3 / R3 clicks light up the stick border (separate from button 10/11
+  // which already get mapped above — that's the bh-btn variant; the stick
+  // wrapper just gets the same .pressed class for the border glow).
+  if (refs.sticks.l.wrap) refs.sticks.l.wrap.classList.toggle('pressed', !!buttons[10]?.pressed);
+  if (refs.sticks.r.wrap) refs.sticks.r.wrap.classList.toggle('pressed', !!buttons[11]?.pressed);
+}
+
 function updateGyroHud(leanDeg) {
   if (!gyroHud.classList.contains('visible')) return;
 
@@ -718,6 +799,11 @@ function loop() {
   }
 
   overlay.update(gamepad, gyroActive ? gyroFusion.orientation : null);
+
+  // Drive the 2D button HUD (cheap; ~30 DOM class flips per frame).
+  if (document.body.classList.contains('show-button-hud')) {
+    updateButtonHud(gamepad);
+  }
 
   // Drive the 3D gimbal widget when visible
   if (gimbal && document.body.classList.contains('show-gimbal')) {
@@ -1309,6 +1395,8 @@ const showGimbalCheck = document.getElementById('show-gimbal');
 const gimbalFullCheck = document.getElementById('gimbal-full-mode');
 const showRollHudCheck = document.getElementById('show-roll-hud');
 const showAxisReadoutCheck = document.getElementById('show-axis-readout');
+const showButtonHudCheck = document.getElementById('show-button-hud');
+const buttonHudPositionSelect = document.getElementById('button-hud-position');
 const axPitchVal = document.getElementById('ax-pitch-val');
 const axRollVal = document.getElementById('ax-roll-val');
 const axYawVal = document.getElementById('ax-yaw-val');
@@ -1320,6 +1408,8 @@ try {
   if (typeof saved.gimbalFull === 'boolean') gimbalFullCheck.checked = saved.gimbalFull;
   if (typeof saved.rollHud === 'boolean') showRollHudCheck.checked = saved.rollHud;
   if (typeof saved.axisReadout === 'boolean') showAxisReadoutCheck.checked = saved.axisReadout;
+  if (typeof saved.buttonHud === 'boolean') showButtonHudCheck.checked = saved.buttonHud;
+  if (typeof saved.buttonHudPos === 'string') buttonHudPositionSelect.value = saved.buttonHudPos;
 } catch (e) { /* ignore */ }
 
 function applyDisplayToggles() {
@@ -1329,6 +1419,13 @@ function applyDisplayToggles() {
   document.body.classList.toggle('show-gimbal', showGimbalCheck.checked);
   document.body.classList.toggle('hide-roll-hud', !showRollHudCheck.checked);
   document.body.classList.toggle('show-axis-readout', showAxisReadoutCheck.checked);
+  document.body.classList.toggle('show-button-hud', showButtonHudCheck.checked);
+  // Position class: prefix `pos-` and the selected value (bottom-left etc.)
+  const buttonHud = document.getElementById('button-hud');
+  if (buttonHud) {
+    buttonHud.classList.remove('pos-bottom-left', 'pos-bottom-right', 'pos-top-left', 'pos-top-right');
+    buttonHud.classList.add('pos-' + (buttonHudPositionSelect.value || 'bottom-left'));
+  }
   if (showGimbalCheck.checked) ensureGimbal();
   if (gimbal) gimbal.fullMode = gimbalFullCheck.checked;
   try {
@@ -1337,6 +1434,8 @@ function applyDisplayToggles() {
       gimbalFull: gimbalFullCheck.checked,
       rollHud: showRollHudCheck.checked,
       axisReadout: showAxisReadoutCheck.checked,
+      buttonHud: showButtonHudCheck.checked,
+      buttonHudPos: buttonHudPositionSelect.value,
     }));
   } catch (e) { /* ignore */ }
 }
@@ -1357,6 +1456,8 @@ showGimbalCheck.addEventListener('change', applyDisplayToggles);
 gimbalFullCheck.addEventListener('change', applyDisplayToggles);
 showRollHudCheck.addEventListener('change', applyDisplayToggles);
 showAxisReadoutCheck.addEventListener('change', applyDisplayToggles);
+showButtonHudCheck.addEventListener('change', applyDisplayToggles);
+buttonHudPositionSelect.addEventListener('change', applyDisplayToggles);
 applyDisplayToggles(); // apply defaults (all unchecked = all hidden)
 
 // Right-click opens settings (needed when gear icon is hidden)
