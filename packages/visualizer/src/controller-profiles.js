@@ -238,6 +238,38 @@ export const PROFILES = {
       8: 'Vw', 9: 'Mn', 16: 'Hm', 17: '',
     },
   },
+
+  // ─────────────────────────────────────────────────────────────
+  // Steam Controller (2026) — Valve CAD-sourced model (CC BY-NC-SA)
+  // ─────────────────────────────────────────────────────────────
+  //
+  // GLB derived from Valve's official engineering STL release
+  // (gitlab.steamos.cloud/SteamHardware/SteamController). See
+  // assets/controllers/STEAM_CONTROLLER_ATTRIBUTION.md for the full
+  // license + conversion pipeline. The source is a single solid body
+  // with no separated parts, so this profile is body-only — gyro
+  // rotates the whole mesh; buttons/sticks/triggers don't animate.
+  //
+  // NOTE on licensing: this single asset is CC BY-NC-SA 4.0 — see the
+  // attribution file. The rest of the visualizer is MIT.
+  'steam-controller': {
+    model: 'assets/controllers/steam-controller.glb',
+    name: 'Steam Controller (2026)',
+    buttonMap: {},          // empty — single solid body, no separated buttons
+    triggerMap: {},
+    stickMap: {},
+    pressDepth: 0.002,
+    triggerMaxAngle: 0.52,
+    stickMaxTilt: 0.26,
+    hasGyro: true,
+    gyroTransform: (gx, gy, gz) => [gx, gy, gz],
+    hasTouchpad: false,     // touchpads exist on hardware but not as sub-meshes
+    bodyMeshes: ['node_0'],
+    bodyColorMeshes: [],
+    accentColorMeshes: [],
+    defaultBodyColor: '#ffffff',
+    defaultAccentColor: '#ffffff',
+  },
 };
 
 /**
