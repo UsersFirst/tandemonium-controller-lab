@@ -161,6 +161,11 @@
       <span id="file-name">(no file)</span>
       <span class="spacer"></span>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#aab">
+        Brush
+        <input type="range" id="brush-radius" min="1" max="30" value="1" style="width:80px" />
+        <span id="brush-radius-val" style="min-width:34px;text-align:right;color:#e8ecf2">1 px</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#aab">
         Smart-fill stop angle
         <input type="range" id="smart-fill-angle" min="5" max="80" value="30" style="width:90px" />
         <span id="smart-fill-angle-val" style="min-width:30px;text-align:right;color:#e8ecf2">30°</span>
@@ -184,7 +189,7 @@
       <span id="status-mesh">no mesh</span>
       <span id="status-active" class="hint"></span>
       <span class="spacer" style="flex:1"></span>
-      <span class="hint">left-drag = paint · shift+left = unpaint · alt+click = smart fill · right-drag = orbit · middle-drag = pan · wheel = zoom · Ctrl+Z = undo</span>
+      <span class="hint">left-drag = paint (brush radius set above) · shift+left = unpaint · alt+click = smart fill · right-drag = orbit · middle-drag = pan · wheel = zoom · Ctrl+Z = undo</span>
     </div>
   </div>
 

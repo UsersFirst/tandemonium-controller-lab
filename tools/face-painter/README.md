@@ -43,14 +43,22 @@ The output GLB has one `Mesh` per region, named exactly what you typed in the pa
 
 | Action | Binding |
 | --- | --- |
-| Paint hovered triangle into active region | Left-click + drag |
-| Unpaint hovered triangle | Shift + left-click + drag |
+| Paint at brush radius (1px = single face) | Left-click + drag |
+| Unpaint at brush radius | Shift + left-click + drag |
 | **Smart fill** — flood fill from click, stopping at sharp edges | **Alt + left-click** |
 | Smart fill in unpaint mode | Shift + Alt + left-click |
 | Orbit camera | Right-click + drag |
 | Pan camera | Middle-click + drag |
 | Zoom | Mouse wheel |
 | Undo last stroke (or fill) | Ctrl+Z (Cmd+Z on Mac) |
+
+## Brush radius
+
+The **Brush** slider in the top bar sets the brush size in pixels (1–30). At 1px each click paints exactly the hovered triangle. Larger values include all surface-adjacent faces within that screen-space radius of the hit point — drag to "sweep" wide coverage in one stroke.
+
+Brush selection respects mesh topology: it BFS-expands along precomputed face adjacency, so a 30-px brush on the front of the controller can't bleed through to faces on the back even if they're physically close in 3D space. Each click + drag is one undo stroke regardless of how many faces ended up painted.
+
+Tip: combine a wide brush with **shift+drag** to quickly unpaint a chunk of accidentally-painted area, then refine with a narrow brush.
 
 ## Smart fill
 

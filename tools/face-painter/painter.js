@@ -39,6 +39,8 @@ const statusActiveEl = document.getElementById('status-active');
 const canvas = document.getElementById('canvas');
 const smartFillAngleInput = document.getElementById('smart-fill-angle');
 const smartFillAngleValEl = document.getElementById('smart-fill-angle-val');
+const brushRadiusInput = document.getElementById('brush-radius');
+const brushRadiusValEl = document.getElementById('brush-radius-val');
 
 // ── Scene ──
 const scene = new THREE.Scene();
@@ -109,10 +111,12 @@ let faceColors = null;       // Float32Array (3 vertices * 3 channels per face)
 let faceRegion = null;       // Int32Array (per-face region index; -1 = unassigned)
 let regions = [];            // [{ name, color: '#hex', faces: Set<int> }]
 let activeRegionIdx = -1;
-// Precomputed topology for smart fill — built once per mesh load.
+// Precomputed topology for smart fill + brush — built once per mesh load.
 let faceNormals = null;      // Float32Array (3 floats per face)
+let faceCentroids = null;    // Float32Array (3 floats per face) — for brush-radius distance checks
 let faceNeighbors = null;    // Array<Int32Array> — per face, indices of 0-3 edge-neighbors
 let smartFillAngleDeg = 30;  // dihedral threshold; lower = stricter (won't cross gentle curves)
+let brushRadiusPx = 1;       // 1 = single-face paint, >1 = BFS within pixel radius of hit
 
 // ── Loading ──
 glbInput.addEventListener('change', (e) => {
@@ -372,8 +376,10 @@ function precomputeTopology(positions) {
       faceVerts[f * 3 + v] = id;
     }
   }
-  // Step 2: face normals (cross product of two edges)
+  // Step 2: face normals (cross product of two edges) + centroids (for
+  // brush-radius distance checks; cheap to compute alongside).
   faceNormals = new Float32Array(totalFaces * 3);
+  faceCentroids = new Float32Array(totalFaces * 3);
   for (let f = 0; f < totalFaces; f++) {
     const b = f * 9;
     const ax = positions[b],     ay = positions[b + 1], az = positions[b + 2];
@@ -388,6 +394,9 @@ function precomputeTopology(positions) {
     faceNormals[f * 3]     = nx / len;
     faceNormals[f * 3 + 1] = ny / len;
     faceNormals[f * 3 + 2] = nz / len;
+    faceCentroids[f * 3]     = (ax + bx + cx) / 3;
+    faceCentroids[f * 3 + 1] = (ay + by + cy) / 3;
+    faceCentroids[f * 3 + 2] = (az + bz + cz) / 3;
   }
   // Step 3: edge → face buckets, then face → neighbor list
   const edgeToFaces = new Map();
@@ -461,13 +470,62 @@ const undoStack = [];          // [{ changes: Map<faceIdx, prevRegionIdx> }, ...
 let currentStroke = null;      // active stroke's change map, or null
 
 function pickFaceFromEvent(ev) {
-  if (!targetMesh) return -1;
+  if (!targetMesh) return null;
   const rect = canvas.getBoundingClientRect();
   mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
   mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
   const hits = raycaster.intersectObject(targetMesh, false);
-  return hits.length > 0 ? hits[0].faceIndex : -1;
+  if (hits.length === 0) return null;
+  return { faceIdx: hits[0].faceIndex, point: hits[0].point };
+}
+
+/**
+ * BFS from the hit face, including faces whose centroid is within
+ * `pixelRadius` of the hit point. Pixel radius is converted to world
+ * radius via the hit point's camera distance and the camera's vertical
+ * FOV — so a 10px brush is always ~10px on screen regardless of zoom.
+ * BFS along precomputed adjacency means the brush flows along the
+ * surface and doesn't accidentally paint through to the back of the
+ * model at large radii.
+ *
+ * Hit point is in WORLD coordinates; we use bodyGroup-local centroids,
+ * so we transform the point into local space first. (No transforms in
+ * our painter scene, but doing it correctly future-proofs.)
+ */
+function brushSelect(startFace, hitPointWorld, pixelRadius) {
+  if (!faceCentroids || !faceNeighbors || pixelRadius <= 1) {
+    return new Set([startFace]);
+  }
+  // Convert pixel radius to world-space distance at the hit point.
+  const cameraDist = camera.position.distanceTo(hitPointWorld);
+  const viewHeight = canvas.clientHeight;
+  const fovRad = camera.fov * Math.PI / 180;
+  const worldRadius = (pixelRadius / viewHeight) * 2 * cameraDist * Math.tan(fovRad / 2);
+  const worldRadiusSq = worldRadius * worldRadius;
+  // Transform hit point into target-mesh local space (matches the
+  // coordinate frame of the precomputed faceCentroids).
+  const hitLocal = targetMesh.worldToLocal(hitPointWorld.clone());
+  const out = new Set();
+  out.add(startFace);
+  const queue = [startFace];
+  while (queue.length > 0) {
+    const f = queue.shift();
+    const neighbors = faceNeighbors[f];
+    for (let i = 0; i < neighbors.length; i++) {
+      const nb = neighbors[i];
+      if (out.has(nb)) continue;
+      const cx = faceCentroids[nb * 3];
+      const cy = faceCentroids[nb * 3 + 1];
+      const cz = faceCentroids[nb * 3 + 2];
+      const dx = cx - hitLocal.x, dy = cy - hitLocal.y, dz = cz - hitLocal.z;
+      if (dx * dx + dy * dy + dz * dz <= worldRadiusSq) {
+        out.add(nb);
+        queue.push(nb);
+      }
+    }
+  }
+  return out;
 }
 
 function assignFaceToRegion(f, targetIdx) {
@@ -501,38 +559,47 @@ canvas.addEventListener('mousedown', (ev) => {
   // controls.mouseButtons above), middle is pan, scroll is zoom.
   if (ev.button !== 0) return;
   paintMode = ev.shiftKey ? 'remove' : 'add';
-  // Alt+click = smart fill. Single click only — no drag mode for fill
-  // (one click selects the whole region; redo by clicking again).
+  const hit = pickFaceFromEvent(ev);
+  if (!hit) return;
+  if (paintMode === 'add' && activeRegionIdx < 0) return;
+  const targetIdx = paintMode === 'add' ? activeRegionIdx : -1;
+  // Alt+click = smart fill (BFS with crease detection). Otherwise =
+  // brush paint (BFS within pixel radius), which collapses to single-
+  // face paint when brush size is 1.
+  currentStroke = new Map();
   if (ev.altKey) {
-    const f = pickFaceFromEvent(ev);
-    if (f < 0) return;
-    if (paintMode === 'add' && activeRegionIdx < 0) return;
-    const targetIdx = paintMode === 'add' ? activeRegionIdx : -1;
-    currentStroke = new Map();
-    const filled = smartFill(f, smartFillAngleDeg);
+    const filled = smartFill(hit.faceIdx, smartFillAngleDeg);
     for (const ff of filled) assignFaceToRegion(ff, targetIdx);
-    if (currentStroke.size > 0) {
-      undoStack.push({ changes: currentStroke });
-      while (undoStack.length > UNDO_LIMIT) undoStack.shift();
-    }
-    currentStroke = null;
-    colorAttrDirty();
-    renderRegions();
+    finalizeStrokeImmediate();
     return;
   }
-  // Plain click = single-face paint with drag support.
+  // Plain (or brush) paint — single click + drag.
   painting = true;
-  currentStroke = new Map();
-  const f = pickFaceFromEvent(ev);
-  paintFace(f);
+  applyBrush(hit, targetIdx);
+});
+function applyBrush(hit, targetIdx) {
+  const faces = brushRadiusPx > 1
+    ? brushSelect(hit.faceIdx, hit.point, brushRadiusPx)
+    : new Set([hit.faceIdx]);
+  for (const f of faces) assignFaceToRegion(f, targetIdx);
   colorAttrDirty();
   renderRegions();
-});
+}
+function finalizeStrokeImmediate() {
+  if (currentStroke && currentStroke.size > 0) {
+    undoStack.push({ changes: currentStroke });
+    while (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  }
+  currentStroke = null;
+  colorAttrDirty();
+  renderRegions();
+}
 canvas.addEventListener('mousemove', (ev) => {
   if (!painting) return;
-  const f = pickFaceFromEvent(ev);
-  paintFace(f);
-  colorAttrDirty();
+  const hit = pickFaceFromEvent(ev);
+  if (!hit) return;
+  const targetIdx = paintMode === 'add' ? activeRegionIdx : -1;
+  applyBrush(hit, targetIdx);
 });
 function finishStroke() {
   if (!painting) return;
@@ -627,6 +694,13 @@ if (smartFillAngleInput) {
   smartFillAngleInput.addEventListener('input', (e) => {
     smartFillAngleDeg = +e.target.value;
     smartFillAngleValEl.textContent = `${smartFillAngleDeg}°`;
+  });
+}
+
+if (brushRadiusInput) {
+  brushRadiusInput.addEventListener('input', (e) => {
+    brushRadiusPx = +e.target.value;
+    brushRadiusValEl.textContent = `${brushRadiusPx} px`;
   });
 }
 
