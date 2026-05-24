@@ -49,8 +49,8 @@ const gyroToggleBtn = document.getElementById('gyro-toggle');
 const clickThroughIndicator = document.getElementById('click-through-indicator');
 const noControllerSplash = document.getElementById('no-controller');
 const puckHint = document.getElementById('puck-hint');
-const puckWarningBanner = document.getElementById('puck-warning-banner');
-const puckWarningDismiss = document.getElementById('puck-warning-dismiss');
+const puckStatusBanner = document.getElementById('puck-status-banner');
+const puckStatusDismiss = document.getElementById('puck-status-dismiss');
 
 // ── Steam Controller Puck state ──
 // puckConnected: a Puck device (vid:pid 28de:1304) is the active HID device.
@@ -70,11 +70,11 @@ function isPuckDevice(device) {
 }
 
 function showPuckBanner() {
-  if (!puckWarningBanner || puckBannerDismissed) return;
-  puckWarningBanner.hidden = false;
+  if (!puckStatusBanner || puckBannerDismissed) return;
+  puckStatusBanner.hidden = false;
 }
 function hidePuckBanner() {
-  if (puckWarningBanner) puckWarningBanner.hidden = true;
+  if (puckStatusBanner) puckStatusBanner.hidden = true;
 }
 function showPuckHint() { if (puckHint) puckHint.hidden = false; }
 function hidePuckHint() {
@@ -103,8 +103,8 @@ function onPuckStateReport() {
   hidePuckHint();
 }
 
-if (puckWarningDismiss) {
-  puckWarningDismiss.addEventListener('click', () => {
+if (puckStatusDismiss) {
+  puckStatusDismiss.addEventListener('click', () => {
     puckBannerDismissed = true;
     hidePuckBanner();
   });

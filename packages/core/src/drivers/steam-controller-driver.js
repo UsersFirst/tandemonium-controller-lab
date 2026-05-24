@@ -84,27 +84,33 @@ export class SteamControllerDriver extends ControllerDriver {
   async init() {
     if (this.device.productId !== PUCK_PID) return;
 
-    // Puck path: best-effort lizard-mode disable. Sends
-    // CLEAR_DIGITAL_MAPPINGS + SET_SETTINGS to every Puck HID handle,
-    // then heartbeats CLEAR every 800ms to all of them. Per-tick errors
-    // swallowed silently.
+    // Puck path: disable lizard-mode (the firmware's default keyboard +
+    // mouse + scroll emulation) by sending CLEAR_DIGITAL_MAPPINGS +
+    // SET_SETTINGS (trackpads = NONE) to every Puck HID handle, then
+    // heartbeating CLEAR every 800ms — without the heartbeat the
+    // firmware reverts to lizard mode after roughly that interval.
     //
-    // KNOWN LIMITATION (2026-05): On the current 2026 Puck firmware,
-    // these feature reports are accepted by one slot interface but
-    // produce no behavior change — the paired controller continues to
-    // emit OS-level mouse/keyboard/scroll events. Confirmed via direct
-    // hardware test: identical mouse/kbd interference whether heartbeat
-    // runs or not. Root cause is suspected to be WebHID routing feature
-    // reports to the wrong HID collection (mouse / kbd / vendor share
-    // reportId 0x01 on the slot interface, and WebHID's sendFeatureReport
-    // doesn't let callers target a specific collection).
+    // VERIFIED on 2026 firmware: trackpad mouse + scroll wheel, dpad
+    // arrow keys, and button-to-keyboard scancodes are ALL suppressed
+    // while the heartbeat is active. The paired controller acts as a
+    // pure HID source through the vendor collection. When this app
+    // exits the heartbeat stops, the firmware reverts to lizard mode
+    // within ~800ms, and the controller behaves as default mouse/kbd
+    // again on the user's desktop — that's the correct lifecycle.
     //
-    // Heartbeat is kept in place as a no-cost best-effort: if a future
-    // Puck firmware revision starts honoring the commands, the existing
-    // code will silently start working without changes. The accompanying
-    // console.warn below tells users to prefer USB-C for clean input.
+    // Key implementation details that made this work:
+    //   1. Broadcasting to all 5 sibling HID handles each tick (not
+    //      just the first one that accepted on init) — only one is the
+    //      gamepad-control channel and we can't tell which in advance.
+    //   2. SET_SETTINGS key/value pair order matching SteamlessController
+    //      exactly (LEFT then RIGHT trackpad).
+    //   3. Heartbeat re-issuing CLEAR every 800ms to keep firmware out
+    //      of fallback.
     //
-    // See issue #8 for the full diagnostic trail.
+    // The app.js banner alongside this driver tells the user that the
+    // suppression is conditional on the overlay running, and recommends
+    // direct USB-C (pid 0x1302) for a setup that has no lizard-mode
+    // dependency at all.
     const candidates = await this._candidatePuckDevices();
     console.log(`Steam Controller (Puck): probing ${candidates.length} candidate HID interface(s) for feature reports`);
     for (const dev of candidates) {
@@ -126,12 +132,12 @@ export class SteamControllerDriver extends ControllerDriver {
       }
     }
 
-    console.warn(
-      'Steam Controller (Puck): the Puck firmware does not honor lizard-mode disable via WebHID on this version. ' +
-      'The paired controller will continue to emit mouse + keyboard + scroll events to Windows ' +
-      '(cursor drift, settings panel toggling, scancode noise in other apps). ' +
-      'For clean input, plug the controller in directly via USB-C — that path uses pid 0x1302 and has no leak. ' +
-      'See https://github.com/UsersFirst/tandemonium-controller-lab/issues/8 for details.'
+    console.log(
+      'Steam Controller (Puck): lizard-mode (mouse/keyboard/scroll emulation) is suppressed via the 800ms ' +
+      'CLEAR_DIGITAL_MAPPINGS heartbeat. The paired controller acts as a pure HID source while this overlay ' +
+      'is running. Closing the overlay stops the heartbeat and the firmware reverts to lizard mode within ' +
+      '~800ms. Direct USB-C (pid 0x1302) avoids lizard mode entirely. See ' +
+      'https://github.com/UsersFirst/tandemonium-controller-lab/issues/8 for the implementation history.'
     );
 
     if (this._lizardCandidates.length === 0) return;

@@ -393,36 +393,37 @@
   #gyro-toggle:hover { opacity: 0.8; }
   #gyro-toggle.visible { display: flex; }
 
-  /* ── Steam Controller Puck warning banner ── */
-  /* Top-of-window strip explaining the OS-level mouse/keyboard leak
-     that the Puck firmware emits and that no WebHID command can silence
-     on the 2026 firmware. Sits below the 40px drag bar so it doesn't
+  /* ── Steam Controller Puck status banner ── */
+  /* Top-of-window informational strip that appears while a Puck is
+     connected. The driver's 800ms heartbeat suppresses the firmware's
+     lizard-mode mouse/keyboard emulation, so this is just a status
+     note (not a warning). Sits below the 40px drag bar so it doesn't
      interfere with window-drag. Dismissible per session. */
-  #puck-warning-banner {
+  #puck-status-banner {
     position: fixed;
     top: 40px;
     left: 0;
     right: 0;
     z-index: 100;
-    background: rgba(214, 156, 18, 0.92);
-    color: #1a1a1e;
-    padding: 0.5rem 0.75rem;
+    background: rgba(40, 60, 100, 0.85);
+    color: #e8ecf2;
+    padding: 0.4rem 0.75rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     line-height: 1.3;
     -webkit-app-region: no-drag;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   }
-  #puck-warning-banner[hidden] { display: none; }
-  #puck-warning-banner .banner-text { flex: 1; }
-  #puck-warning-banner a { color: #1a1a1e; text-decoration: underline; }
-  #puck-warning-banner #puck-warning-dismiss {
+  #puck-status-banner[hidden] { display: none; }
+  #puck-status-banner .banner-text { flex: 1; }
+  #puck-status-banner a { color: #9cc8ff; text-decoration: underline; }
+  #puck-status-banner #puck-status-dismiss {
     background: transparent;
     border: none;
-    color: #1a1a1e;
-    font-size: 1.4rem;
+    color: #e8ecf2;
+    font-size: 1.3rem;
     line-height: 1;
     cursor: pointer;
     padding: 0 0.4rem;
@@ -977,16 +978,17 @@
   </div>
 </div>
 
-<!-- Steam Controller Puck warning banner. Shown only when a Puck is
-     actively connected — the paired controller emits OS-level mouse +
-     keyboard events that no WebHID command can silence on the 2026
-     firmware. Click the × to dismiss for this session. -->
-<div id="puck-warning-banner" hidden>
+<!-- Steam Controller Puck status banner. Shown only when a Puck is
+     actively connected. Informational, not a warning — our heartbeat
+     suppresses the firmware's mouse/keyboard emulation while the
+     overlay runs. Closing the overlay restores default Puck behavior
+     (mouse + keyboard) on the desktop. Click × to dismiss for the session. -->
+<div id="puck-status-banner" hidden>
   <span class="banner-text">
-    Steam Controller <strong>Puck</strong> connected — paired controller is sending mouse + keyboard events to Windows.
-    Plug in via <strong>USB-C</strong> for clean input. <a href="https://github.com/UsersFirst/tandemonium-controller-lab/issues/8" target="_blank">Why?</a>
+    <strong>Steam Controller Puck</strong> mode active — mouse/keyboard emulation suppressed while overlay runs.
+    Closing the overlay restores default Puck behavior. <a href="https://github.com/UsersFirst/tandemonium-controller-lab/issues/8" target="_blank">Details</a>
   </span>
-  <button id="puck-warning-dismiss" type="button" aria-label="Dismiss">&times;</button>
+  <button id="puck-status-dismiss" type="button" aria-label="Dismiss">&times;</button>
 </div>
 
 <!-- No-controller splash (shown until a gamepad connects) -->
