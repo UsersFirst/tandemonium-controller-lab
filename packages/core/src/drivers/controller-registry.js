@@ -97,6 +97,11 @@ export class ControllerRegistry {
     const toResult = (entry) => ({
       driverName: entry.name,
       protocol: entry.protocol,
+      // The visualizer profile key. Defaults to protocol so existing
+      // entries (Sony DS4/DS5 → 'dualsense', Switch Pro → 'switch-pro')
+      // keep loading the same GLB models. Override per-entry to point a
+      // clone at a controller-specific GLB.
+      controllerProfile: entry.controllerProfile || entry.protocol,
       hasGyro: entry.capabilities.gyro,
       hasTouchpad: entry.capabilities.touchpad,
       hasAccel: entry.capabilities.accel,

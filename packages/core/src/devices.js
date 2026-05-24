@@ -39,6 +39,14 @@
 //                               entry is a clone advertising another
 //                               device's USB identity. `of` is the
 //                               human-readable name of the spoofed device.
+//   controllerProfile?: string — visualizer profile key (a key in the
+//                               visualizer's PROFILES map). Defaults to
+//                               `protocol` when missing — so Sony DS4/DS5
+//                               entries get the existing `dualsense.glb`
+//                               model for free. Set explicitly to point
+//                               a clone at its own GLB asset, e.g.
+//                               `controllerProfile: 'gamesir-super-nova'`
+//                               once that model + PROFILES entry exists.
 //   notes?:           string  — free-text shown in pickers/docs
 // }
 // ============================================================

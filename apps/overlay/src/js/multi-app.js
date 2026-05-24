@@ -144,8 +144,11 @@ class SlotView {
     this.hintEl.textContent = 'Hold PS/Home 2s to release';
     this.subEl.textContent = (s.controllerId || '').slice(0, 28);
 
-    // Swap 3D model to match the claimed controller.
-    const desired = detectControllerType(s.controllerLabel || '') || 'dualsense';
+    // Swap 3D model to match the claimed controller. Prefer the dictionary
+    // entry's controllerProfile (so a registered clone with its own GLB
+    // wins) and fall back to the visualizer's id-pattern sniff.
+    const idInfo = ControllerRegistry.identifyFromGamepadId(s.controllerLabel || '');
+    const desired = idInfo?.controllerProfile || detectControllerType(s.controllerLabel || '') || 'dualsense';
     if (desired !== this.controllerType && this.overlay) {
       this.controllerType = desired;
       this.overlay.setControllerType(desired);

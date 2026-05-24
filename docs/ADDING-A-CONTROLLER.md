@@ -110,15 +110,25 @@ If the IMU offsets are **non-standard** (the analyzer flags this — it knows of
    - Buttons / triggers / sticks all respond as expected
 3. Re-run the Test Report wizard against your new entry, verify the analyzer's output now matches the entry you wrote.
 
-## 7 — Future: 3D model + image-driven feature detection
+## 7 — Adding a custom 3D visualizer for the controller
 
-The current visualizer uses GLB models keyed by controller "profile" (DualSense, Switch Pro, Xbox). Adding a new model is currently a manual step (drop a `.glb` into `packages/visualizer/assets/controllers/` and add a `PROFILES` entry).
+By default, every entry whose `protocol` is `'dualsense'` gets the Sony DualSense GLB model — including GameSir clones. That's wrong-looking but functional: the buttons still respond correctly because the protocol parser is right; only the visual shape is off.
 
-Planned future work:
-- **Photo → 3D model**: pipe 3–4 photos of the controller through a photogrammetry tool (Polycam, Trellis, Meshroom) and ingest the resulting GLB.
-- **Photo → feature detection**: use a vision model (Claude with vision, e.g.) to identify face buttons / sticks / paddles from the same photos, auto-populating the `features` block.
+To give a controller its own visual model:
 
-For now, GLB and feature inventory are manual.
+1. **Get a GLB**. Sources, easiest first:
+   - **Photogrammetry** from 3–4 photos via [Polycam](https://poly.cam), [Trellis](https://trellis3d.github.io), or [Meshroom](https://alicevision.org/#meshroom). 10–15 minutes; mesh names will be random and need a rename pass.
+   - **Stock asset / modify existing**. Some controller GLBs are available on Sketchfab, Itch, or CGTrader; recoloring an existing model in Blender is often the fastest path to a "close enough" result.
+   - **Hand-model in Blender**. Maximum control, lots of time. Overkill for the lab.
+2. **Rename meshes** to match the visualizer's button-map convention — `face_cross`, `face_circle`, `face_square`, `face_triangle` (or `face_a`/`face_b`/`face_x`/`face_y` for Xbox-style), `bumper_l1`/`bumper_r1`, `trigger_l2`/`trigger_r2`, `stick_left`/`stick_right`, `dpad_up`/`dpad_down`/`dpad_left`/`dpad_right`, `button_create`/`button_options`/`button_ps`, `body_top`/`body_bottom`. Existing models in [`packages/visualizer/assets/controllers/`](../packages/visualizer/assets/controllers/) and their corresponding `PROFILES` entries are the reference.
+3. **Drop the file** into `packages/visualizer/assets/controllers/<your-key>.glb` (e.g. `gamesir-super-nova.glb`).
+4. **Add a PROFILES entry** in [`packages/visualizer/src/controller-profiles.js`](../packages/visualizer/src/controller-profiles.js) keyed by the same `<your-key>`. Copy the closest existing profile (`dualsense` for DS-family pads, `xbox` for Xbox-style) and adjust `model:` path, mesh names, and stick/trigger meshes to match your GLB.
+5. **Point the DEVICES entry at the new profile** by setting `controllerProfile: '<your-key>'` on the relevant entry in [`packages/core/src/devices.js`](../packages/core/src/devices.js). Default behavior (no `controllerProfile` set) is to use `entry.protocol` as the profile key, so existing entries continue to load the protocol-default GLB.
+6. **Run the overlay** and verify the new model loads and buttons animate. If a button doesn't depress visually, the mesh name in the GLB and the name in PROFILES disagree — check the GLB in [glb-viewer](https://gltf-viewer.donmccurdy.com) or open it in Blender to read the actual mesh names.
+
+Planned future work to make this less manual:
+- **Photo → 3D model pipeline**: a script that takes 3–4 photos and outputs a renamed GLB ready to drop in.
+- **Photo → feature detection**: vision model identifies face buttons / sticks / paddles from photos, auto-populating both the DEVICES `features` block and a candidate PROFILES mesh map.
 
 ## Appendix — Where things live
 
