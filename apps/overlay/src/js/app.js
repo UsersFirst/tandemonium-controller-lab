@@ -394,7 +394,6 @@ async function init() {
 
   if (hasGamepad) {
     currentControllerType = initialType;
-    applyHudLabels(initialType);
     modelReady = true;
     noControllerSplash.classList.add('hidden');
   } else {
@@ -402,6 +401,11 @@ async function init() {
     overlay.setVisible(false);
     modelReady = false;
   }
+  // Apply HUD labels for whatever the current profile resolved to, even
+  // when no gamepad was detected at startup — the user might enable the
+  // HUD before plugging in, and the labels should match the model's
+  // controllerType default so they look consistent.
+  applyHudLabels(currentControllerType);
 
   new ResizeObserver(() => {
     overlay.resize(canvas.clientWidth, canvas.clientHeight);
@@ -533,10 +537,15 @@ async function switchController(gamepad) {
     if (newType !== currentControllerType || !overlay.model) {
       modelReady = false;
       currentControllerType = newType;
-      applyHudLabels(newType);
       await overlay.setControllerType(newType);
       console.log('Controller model loaded:', newType);
     }
+    // Always re-apply HUD labels on a switch — even when newType matches
+    // currentControllerType (because the model was already loaded at init
+    // with the same default), we still need to push labels through, since
+    // startup may have called applyHudLabels with a null/default profile
+    // before the real gamepad arrived. Cheap; idempotent.
+    applyHudLabels(newType);
 
     // Always ensure model is ready and visible after switch
     modelReady = true;
