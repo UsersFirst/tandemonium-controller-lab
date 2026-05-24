@@ -3,15 +3,19 @@
 // ============================================================
 //
 // Runs in its own BrowserWindow (spawned by Electron main on user demand
-// from the Settings panel). Self-contained: polls navigator.getGamepads()
-// directly rather than receiving state via IPC from the main window —
-// Gamepad API is window-scoped but sees the same physical controllers,
-// so this avoids per-frame IPC chatter.
+// from the Settings panel). Receives gamepad state via IPC from the main
+// overlay window every animation frame — not via its own Gamepad API
+// polling, because:
+//   - Chromium's Gamepad API requires per-document user activation
+//     (click/keypress inside the popout window) before reporting state,
+//     which is invisible UX for a frameless transparent popout.
+//   - The main overlay already has the gamepad working; forwarding state
+//     is cheaper than re-establishing it in a second context.
 //
-// IPC is only used for two things:
-//   1. Initial profile (passed via URL query at open-time as ?profile=key)
-//   2. Mid-session profile changes (main forwards 'profile-changed' via
-//      window.electronAPI.onPopoutProfileChange)
+// IPC channels (via window.electronAPI from preload.js):
+//   - onPopoutProfileChange — fires when the main window's controller
+//     profile changes (dropdown / IMU probe), so labels track
+//   - onButtonHudState — fires every frame with {buttons, axes} snapshot
 
 import { PROFILES } from '@usersfirst/controller-visualizer';
 
@@ -63,15 +67,10 @@ if (window.electronAPI?.onPopoutProfileChange) {
   window.electronAPI.onPopoutProfileChange((profile) => applyProfile(profile));
 }
 
-// ── Per-frame HUD update ─────────────────────────────────────────────
-function findActiveGamepad() {
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-  for (const gp of pads) if (gp && gp.connected) return gp;
-  return null;
-}
-
-function update(gamepad) {
-  const buttons = gamepad?.buttons || [];
+// ── HUD state update (driven by IPC frames from main) ────────────────
+function applyState(state) {
+  if (!state) return;
+  const buttons = state.buttons || [];
   for (const [idx, el] of Object.entries(refs.buttons)) {
     const pressed = !!buttons[idx]?.pressed;
     if (el.classList.contains('pressed') !== pressed) el.classList.toggle('pressed', pressed);
@@ -81,7 +80,7 @@ function update(gamepad) {
   if (refs.triggers.l2.fill) refs.triggers.l2.fill.style.height = (l2v * 100) + '%';
   if (refs.triggers.r2.fill) refs.triggers.r2.fill.style.height = (r2v * 100) + '%';
 
-  const axes = gamepad?.axes || [0, 0, 0, 0];
+  const axes = state.axes || [0, 0, 0, 0];
   const STICK_RADIUS_PCT = 40;
   if (refs.sticks.l.dot) {
     const x = (axes[0] || 0) * STICK_RADIUS_PCT;
@@ -97,18 +96,9 @@ function update(gamepad) {
   if (refs.sticks.r.wrap) refs.sticks.r.wrap.classList.toggle('pressed', !!buttons[11]?.pressed);
 }
 
-function loop() {
-  requestAnimationFrame(loop);
-  update(findActiveGamepad());
+if (window.electronAPI?.onButtonHudState) {
+  window.electronAPI.onButtonHudState(applyState);
 }
-
-// Gamepad events fire only after a button press on a fresh pad — this is
-// just a heads-up log, not required for operation.
-window.addEventListener('gamepadconnected', (e) => {
-  console.log('[button-hud-window] gamepad connected:', e.gamepad.id);
-});
-
-requestAnimationFrame(loop);
 
 // ── Close button (frameless window has no titlebar close) ────────────
 closeBtn.addEventListener('click', () => {

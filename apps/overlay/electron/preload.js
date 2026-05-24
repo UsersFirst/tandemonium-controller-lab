@@ -18,10 +18,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('open-button-hud-window', { profile }),
   updateButtonHudProfile: (profile) =>
     ipcRenderer.send('update-button-hud-profile', { profile }),
-  // Used by the popout window only: subscribe to profile change events
-  // forwarded by main.
+  // Per-frame gamepad-state forward (main renderer → popout). Cheap; the
+  // state object is just {buttons:[{pressed,value}…], axes:[…]} so JSON
+  // serialization stays small even at 60+Hz.
+  sendButtonHudState: (state) =>
+    ipcRenderer.send('button-hud-state', state),
+  // Subscriptions used by the popout window only.
   onPopoutProfileChange: (callback) =>
     ipcRenderer.on('popout-profile-changed', (_, profile) => callback(profile)),
+  onButtonHudState: (callback) =>
+    ipcRenderer.on('button-hud-state-update', (_, state) => callback(state)),
   // Used by the popout window's close button to close itself cleanly.
   closeWindow: () => ipcRenderer.send('close-this-window'),
 });
