@@ -45,10 +45,21 @@ The output GLB has one `Mesh` per region, named exactly what you typed in the pa
 | --- | --- |
 | Paint hovered triangle into active region | Left-click + drag |
 | Unpaint hovered triangle | Shift + left-click + drag |
+| **Smart fill** — flood fill from click, stopping at sharp edges | **Alt + left-click** |
+| Smart fill in unpaint mode | Shift + Alt + left-click |
 | Orbit camera | Right-click + drag |
 | Pan camera | Middle-click + drag |
 | Zoom | Mouse wheel |
-| Undo last stroke | Ctrl+Z (Cmd+Z on Mac) |
+| Undo last stroke (or fill) | Ctrl+Z (Cmd+Z on Mac) |
+
+## Smart fill
+
+Alt+click a face and the painter does a BFS from there across mesh topology, crossing edges only where the dihedral angle (the bend between two adjacent triangles) is below the *stop angle* slider at the top of the window. Default 30° catches most "ridges" (a button's edge, the seam between a stick base and stick cap) while flowing freely across gentle curves (the controller body, the top of a trackpad).
+
+- **Lower angle** (e.g. 15°) = stricter, won't cross even mild curves. Use when buttons are on a slightly-curved face.
+- **Higher angle** (e.g. 60°) = laxer, jumps small ridges. Use to grab broader regions in one click.
+
+The whole fill counts as one undo stroke, so Ctrl+Z reverts it cleanly even if it painted thousands of faces.
 
 The right-click-to-orbit convention matches Blender / Maya / Sketchfab. Left-click is reserved entirely for paint, so the camera and painter never conflict.
 

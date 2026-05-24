@@ -37,6 +37,8 @@ const fileNameEl = document.getElementById('file-name');
 const statusMeshEl = document.getElementById('status-mesh');
 const statusActiveEl = document.getElementById('status-active');
 const canvas = document.getElementById('canvas');
+const smartFillAngleInput = document.getElementById('smart-fill-angle');
+const smartFillAngleValEl = document.getElementById('smart-fill-angle-val');
 
 // ── Scene ──
 const scene = new THREE.Scene();
@@ -107,6 +109,10 @@ let faceColors = null;       // Float32Array (3 vertices * 3 channels per face)
 let faceRegion = null;       // Int32Array (per-face region index; -1 = unassigned)
 let regions = [];            // [{ name, color: '#hex', faces: Set<int> }]
 let activeRegionIdx = -1;
+// Precomputed topology for smart fill — built once per mesh load.
+let faceNormals = null;      // Float32Array (3 floats per face)
+let faceNeighbors = null;    // Array<Int32Array> — per face, indices of 0-3 edge-neighbors
+let smartFillAngleDeg = 30;  // dihedral threshold; lower = stricter (won't cross gentle curves)
 
 // ── Loading ──
 glbInput.addEventListener('change', (e) => {
@@ -153,6 +159,12 @@ function setupMesh(gltfScene) {
   geo.computeVertexNormals();
 
   totalFaces = geo.attributes.position.count / 3;
+
+  // Precompute face normals + edge-adjacency for smart fill.
+  // Non-indexed geometry means adjacent triangles have separate copies
+  // of their shared vertices (same positions, different indices), so
+  // we hash vertex positions to recover logical adjacency.
+  precomputeTopology(geo.attributes.position.array);
 
   // Per-face region tracking + per-vertex color buffer
   faceRegion = new Int32Array(totalFaces).fill(-1);
@@ -331,6 +343,107 @@ function renderRegions() {
     : '(no active region — add one to start painting)';
 }
 
+// ── Topology precompute for smart fill ──
+//
+// Non-indexed geometry means each triangle owns its own 3 vertices, so
+// adjacent triangles share vertex POSITIONS but not vertex INDICES.
+// To recover topology we hash vertex positions into logical vertex IDs,
+// then bucket triangles by shared edge (pair of vertex IDs). Faces in
+// the same bucket are neighbors. Hashing uses ~10-micron precision at
+// meter scale, which is below the GLB's float precision.
+//
+// After this runs we have:
+//   faceNormals[f*3..f*3+2] — unit normal of face f (face normal, not vertex)
+//   faceNeighbors[f]        — Int32Array of 0..3 neighbor face indices
+
+function precomputeTopology(positions) {
+  console.time('precomputeTopology');
+  // Step 1: hash vertex positions → logical vertex IDs
+  const PRECISION = 1e5; // grid cells per unit (= 10 microns at meter scale)
+  const hashToId = new Map();
+  const faceVerts = new Int32Array(totalFaces * 3);
+  let nextId = 0;
+  for (let f = 0; f < totalFaces; f++) {
+    for (let v = 0; v < 3; v++) {
+      const b = f * 9 + v * 3;
+      const key = `${Math.round(positions[b] * PRECISION)},${Math.round(positions[b + 1] * PRECISION)},${Math.round(positions[b + 2] * PRECISION)}`;
+      let id = hashToId.get(key);
+      if (id === undefined) { id = nextId++; hashToId.set(key, id); }
+      faceVerts[f * 3 + v] = id;
+    }
+  }
+  // Step 2: face normals (cross product of two edges)
+  faceNormals = new Float32Array(totalFaces * 3);
+  for (let f = 0; f < totalFaces; f++) {
+    const b = f * 9;
+    const ax = positions[b],     ay = positions[b + 1], az = positions[b + 2];
+    const bx = positions[b + 3], by = positions[b + 4], bz = positions[b + 5];
+    const cx = positions[b + 6], cy = positions[b + 7], cz = positions[b + 8];
+    const e1x = bx - ax, e1y = by - ay, e1z = bz - az;
+    const e2x = cx - ax, e2y = cy - ay, e2z = cz - az;
+    let nx = e1y * e2z - e1z * e2y;
+    let ny = e1z * e2x - e1x * e2z;
+    let nz = e1x * e2y - e1y * e2x;
+    const len = Math.hypot(nx, ny, nz) || 1;
+    faceNormals[f * 3]     = nx / len;
+    faceNormals[f * 3 + 1] = ny / len;
+    faceNormals[f * 3 + 2] = nz / len;
+  }
+  // Step 3: edge → face buckets, then face → neighbor list
+  const edgeToFaces = new Map();
+  for (let f = 0; f < totalFaces; f++) {
+    const a = faceVerts[f * 3], b = faceVerts[f * 3 + 1], c = faceVerts[f * 3 + 2];
+    for (const [v1, v2] of [[a, b], [b, c], [c, a]]) {
+      const key = v1 < v2 ? (v1 * (nextId + 1) + v2) : (v2 * (nextId + 1) + v1);
+      let arr = edgeToFaces.get(key);
+      if (!arr) { arr = []; edgeToFaces.set(key, arr); }
+      arr.push(f);
+    }
+  }
+  const neighborLists = new Array(totalFaces);
+  for (let f = 0; f < totalFaces; f++) neighborLists[f] = [];
+  for (const faces of edgeToFaces.values()) {
+    // Manifold edges connect exactly 2 faces. Non-manifold (>2) and
+    // boundary (1) edges produce no adjacency for smart fill — that's
+    // correct (a ridge has 2 sides; a hole is, well, a hole).
+    if (faces.length === 2) {
+      neighborLists[faces[0]].push(faces[1]);
+      neighborLists[faces[1]].push(faces[0]);
+    }
+  }
+  faceNeighbors = neighborLists.map((l) => new Int32Array(l));
+  console.timeEnd('precomputeTopology');
+}
+
+/**
+ * BFS from `startFace`, crossing only neighbor edges where the dihedral
+ * angle (= angle between the two face normals) is below the threshold.
+ * Returns a Set<faceIdx> of all faces in the contiguous flat-ish region.
+ */
+function smartFill(startFace, angleDeg) {
+  if (!faceNormals || !faceNeighbors) return new Set([startFace]);
+  const cosThreshold = Math.cos(angleDeg * Math.PI / 180);
+  const out = new Set();
+  out.add(startFace);
+  const queue = [startFace];
+  while (queue.length > 0) {
+    const f = queue.shift();
+    const nx = faceNormals[f * 3], ny = faceNormals[f * 3 + 1], nz = faceNormals[f * 3 + 2];
+    const neigh = faceNeighbors[f];
+    for (let i = 0; i < neigh.length; i++) {
+      const nb = neigh[i];
+      if (out.has(nb)) continue;
+      const nnx = faceNormals[nb * 3], nny = faceNormals[nb * 3 + 1], nnz = faceNormals[nb * 3 + 2];
+      const dot = nx * nnx + ny * nny + nz * nnz;
+      if (dot >= cosThreshold) {
+        out.add(nb);
+        queue.push(nb);
+      }
+    }
+  }
+  return out;
+}
+
 // ── Painting + undo ──
 //
 // Left-click owns paint exclusively (OrbitControls is remapped to right-
@@ -387,10 +500,28 @@ canvas.addEventListener('mousedown', (ev) => {
   // Left-button only. Right-button is OrbitControls' rotate (see
   // controls.mouseButtons above), middle is pan, scroll is zoom.
   if (ev.button !== 0) return;
-  // Open a new undo stroke. Even if no faces end up changing, the
-  // stroke just stays empty and we drop it on mouseup.
-  painting = true;
   paintMode = ev.shiftKey ? 'remove' : 'add';
+  // Alt+click = smart fill. Single click only — no drag mode for fill
+  // (one click selects the whole region; redo by clicking again).
+  if (ev.altKey) {
+    const f = pickFaceFromEvent(ev);
+    if (f < 0) return;
+    if (paintMode === 'add' && activeRegionIdx < 0) return;
+    const targetIdx = paintMode === 'add' ? activeRegionIdx : -1;
+    currentStroke = new Map();
+    const filled = smartFill(f, smartFillAngleDeg);
+    for (const ff of filled) assignFaceToRegion(ff, targetIdx);
+    if (currentStroke.size > 0) {
+      undoStack.push({ changes: currentStroke });
+      while (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    }
+    currentStroke = null;
+    colorAttrDirty();
+    renderRegions();
+    return;
+  }
+  // Plain click = single-face paint with drag support.
+  painting = true;
   currentStroke = new Map();
   const f = pickFaceFromEvent(ev);
   paintFace(f);
@@ -491,6 +622,13 @@ loadInput.addEventListener('change', async (e) => {
   colorAttrDirty();
   renderRegions();
 });
+
+if (smartFillAngleInput) {
+  smartFillAngleInput.addEventListener('input', (e) => {
+    smartFillAngleDeg = +e.target.value;
+    smartFillAngleValEl.textContent = `${smartFillAngleDeg}°`;
+  });
+}
 
 clearBtn.addEventListener('click', () => {
   if (!regions.length) return;
