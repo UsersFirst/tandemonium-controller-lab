@@ -326,7 +326,25 @@ export const PROFILES = {
     // 'body' (the residual mesh after all regions are extracted) so
     // pressing a button doesn't drag the whole controller along.
     bodyMeshes: ['body'],
-    bodyColorMeshes: [],
+    // Every painted region (buttons, sticks, triggers, dpad, trackpads,
+    // back paddles, system buttons) PLUS the residual shell — the
+    // Steam Controller is single-color, so all 29 split meshes share
+    // the body theme color. Per-press emissive glow still animates on
+    // top because the visualizer drives glow via material.emissive,
+    // not material.color. Move any name to accentColorMeshes later to
+    // give that region a distinct theme color.
+    bodyColorMeshes: [
+      'body',
+      'A', 'B', 'X', 'Y',
+      'Bumper L2', 'Bumper R2',
+      'Trigger L1', 'Trigger R1',
+      'view', 'menu', 'steam', 'qucick access',
+      'joystick Left', 'joystick Left cap', 'joystick Left top button',
+      'joystick Right', 'joystick Right cap', 'joystick Right Top Button',
+      'dpad_up', 'dpad_down', 'dpad_left', 'dpad_right',
+      'trackpad left', 'trackpad right',
+      'L4', 'L5', 'R4', 'R5',
+    ],
     accentColorMeshes: [],
     defaultBodyColor: '#ffffff',
     defaultAccentColor: '#ffffff',
