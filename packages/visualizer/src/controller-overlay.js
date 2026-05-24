@@ -185,25 +185,55 @@ export class ControllerOverlay {
     this.bodyGroup.add(scene);
     this.model = scene;
 
-    // Collect mesh names that need special pivot handling
-    const triggerMeshNames = new Set(Object.values(profile.triggerMap));
+    // Collect mesh names that need special pivot handling. Index both
+    // the profile-form name (may contain spaces) AND the GLTFLoader-
+    // sanitized form (spaces → underscores) so the pass-3 lookup
+    // `triggerMeshNames.has(child.name)` matches whichever form the
+    // loaded Object3D ended up with.
+    const triggerMeshNames = new Set();
+    for (const n of Object.values(profile.triggerMap)) {
+      triggerMeshNames.add(n);
+      triggerMeshNames.add(n.replace(/ /g, '_'));
+    }
 
     // Collect all stick mesh names into a set for identification
+    // stickMeshNames is used downstream to skip stick parts in the
+    // pass-3 generic-mesh loop. Profile names may be space-form (face-
+    // painter export) but the loaded Object3D names are underscore-
+    // form (GLTFLoader sanitization). Index BOTH spellings so the
+    // skip-check works against whichever form the mesh's name ended up.
     const stickMeshNames = new Set();
     const stickAssemblies = {}; // 'left' | 'right' → { meshes[], pivotKey }
     for (const [key, stick] of Object.entries(profile.stickMap)) {
       const names = stick.meshes || [stick.mesh];
-      for (const n of names) stickMeshNames.add(n);
+      for (const n of names) {
+        stickMeshNames.add(n);
+        stickMeshNames.add(n.replace(/ /g, '_'));
+      }
       stickAssemblies[key] = { names, stick };
     }
 
     // Pass 1: index all meshes by name and clone shared materials.
     // GLB loader shares material instances for identical materials, so
     // pressing one button would glow all buttons with the same color.
+    //
+    // Three.js's GLTFLoader replaces spaces in glTF node names with
+    // underscores ("Bumper L2" → "Bumper_L2"). Profiles authored from
+    // face-painter regions use the original space-form names. Alias
+    // each underscored name to its space form right here so the
+    // subsequent setup passes (stick pivots, trigger pivots) can find
+    // the meshes by either spelling. Without this alias, stick part
+    // lookups via `meshByName[stick.meshes[i]]` return undefined and
+    // the stick pivot never gets created — tilt animation has nothing
+    // to rotate.
     const meshByName = {};
     scene.traverse((child) => {
       if (child.isMesh) {
         meshByName[child.name] = child;
+        if (child.name.includes('_')) {
+          const alias = child.name.replace(/_/g, ' ');
+          if (meshByName[alias] === undefined) meshByName[alias] = child;
+        }
         // Clone material so each mesh can animate independently
         if (child.material) {
           child.material = child.material.clone();
@@ -212,42 +242,59 @@ export class ControllerOverlay {
     });
 
     // Pass 2: create stick pivot groups — group all parts of each stick
-    // assembly into a single pivot at the base of the stick shaft
+    // assembly into a single pivot at the base of the stick shaft.
+    //
+    // World-space bounding boxes are required here: `gltf-transform
+    // optimize` quantizes per-mesh geometry to int16 and stores the
+    // actual position in the node's translate. So `geometry.boundingBox`
+    // gives local-space bounds centered near the origin, and any pivot
+    // math based on those bounds would place every pivot at world (0,0,0).
+    // `Box3.setFromObject` walks the world transform and returns true
+    // world bounds, which works for both quantized and non-quantized GLBs.
+    //
+    // Reparenting uses Object3D.attach() (preserves world transform)
+    // instead of remove/add (which would drop the node's translate and
+    // collapse the part onto the pivot's origin).
+    this.bodyGroup.updateMatrixWorld(true);
     this.stickPivots = {};
+    const _wb = new THREE.Box3();
+    const _wv = new THREE.Vector3();
     for (const [key, asm] of Object.entries(stickAssemblies)) {
       const parts = asm.names.map(n => meshByName[n]).filter(Boolean);
       if (parts.length === 0) continue;
 
-      // Find the lowest Y across all parts — that's the tilt base
-      let pivotY = Infinity, pivotX = 0, pivotZ = 0;
+      // Find the lowest Y across all parts (world space) — tilt base
+      let pivotWorldY = Infinity, pivotWorldX = 0, pivotWorldZ = 0;
       let partCount = 0;
       for (const part of parts) {
-        part.geometry.computeBoundingBox();
-        const bb = part.geometry.boundingBox;
-        pivotY = Math.min(pivotY, bb.min.y);
-        pivotX += (bb.min.x + bb.max.x) / 2;
-        pivotZ += (bb.min.z + bb.max.z) / 2;
+        _wb.setFromObject(part);
+        pivotWorldY = Math.min(pivotWorldY, _wb.min.y);
+        pivotWorldX += (_wb.min.x + _wb.max.x) / 2;
+        pivotWorldZ += (_wb.min.z + _wb.max.z) / 2;
         partCount++;
       }
-      pivotX /= partCount;
-      pivotZ /= partCount;
+      pivotWorldX /= partCount;
+      pivotWorldZ /= partCount;
 
-      // Create pivot group at the base of the stick
+      // Place pivot in the first part's parent space, at the equivalent
+      // of that world point. worldToLocal mutates the vector, so pass
+      // a fresh one.
+      const sceneParent = parts[0].parent;
+      const pivotLocal = sceneParent.worldToLocal(
+        _wv.set(pivotWorldX, pivotWorldY, pivotWorldZ).clone()
+      );
+
       const pivot = new THREE.Group();
       pivot.name = key + '_stick_pivot';
-      pivot.position.set(pivotX, pivotY, pivotZ);
-
-      // Reparent all parts into the pivot, offsetting geometry
-      const sceneParent = parts[0].parent;
-      for (const part of parts) {
-        part.geometry.translate(-pivotX, -pivotY, -pivotZ);
-        const parent = part.parent;
-        parent.remove(part);
-        part.position.set(0, 0, 0);
-        part.rotation.set(0, 0, 0);
-        pivot.add(part);
-      }
+      pivot.position.copy(pivotLocal);
       sceneParent.add(pivot);
+
+      // attach() keeps each part's visible world position while moving
+      // it into the pivot, so rotating the pivot rotates the parts
+      // around the pivot's world position.
+      for (const part of parts) {
+        pivot.attach(part);
+      }
 
       this.stickPivots[key] = pivot;
       // Also register individual meshes for lookup. Each part gets an
@@ -268,31 +315,35 @@ export class ControllerOverlay {
       }
     }
 
-    // Pass 3: set up trigger pivots
-    const allMeshes = Object.values(meshByName).filter(
+    // Pass 3: set up trigger pivots + register everything else.
+    // meshByName may contain two keys per mesh (loaded "Foo_Bar" name
+    // + space-form alias "Foo Bar") pointing at the SAME Object3D —
+    // dedupe by reference via Set so each mesh is processed once.
+    const allMeshes = [...new Set(Object.values(meshByName))].filter(
       m => !stickMeshNames.has(m.name)  // sticks already handled
     );
     for (const child of allMeshes) {
       if (triggerMeshNames.has(child.name) && child.geometry) {
-        child.geometry.computeBoundingBox();
-        const bb = child.geometry.boundingBox;
-        // Trigger pivot at the top-back (hinge point)
-        const pivotX = (bb.min.x + bb.max.x) / 2;
-        const pivotY = bb.max.y;
-        const pivotZ = bb.min.z;
+        // World-space bbox — see comment in pass 2 about why
+        // geometry.boundingBox isn't usable for quantized GLBs.
+        _wb.setFromObject(child);
+        // Trigger pivot at the top-back (hinge point) in world space
+        const pivotWorldX = (_wb.min.x + _wb.max.x) / 2;
+        const pivotWorldY = _wb.max.y;
+        const pivotWorldZ = _wb.min.z;
 
-        child.geometry.translate(-pivotX, -pivotY, -pivotZ);
+        const parent = child.parent;
+        const pivotLocal = parent.worldToLocal(
+          _wv.set(pivotWorldX, pivotWorldY, pivotWorldZ).clone()
+        );
 
         const pivot = new THREE.Group();
         pivot.name = child.name + '_pivot';
-        pivot.position.set(pivotX, pivotY, pivotZ);
-
-        const parent = child.parent;
-        parent.remove(child);
-        child.position.set(0, 0, 0);
-        child.rotation.set(0, 0, 0);
-        pivot.add(child);
+        pivot.position.copy(pivotLocal);
         parent.add(pivot);
+        // attach() preserves the trigger's world position; rotations on
+        // the pivot now rotate the mesh around the hinge point.
+        pivot.attach(child);
 
         this.meshes[child.name] = pivot;
         this.originals[child.name] = {

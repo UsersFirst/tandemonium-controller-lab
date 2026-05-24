@@ -275,11 +275,15 @@ export const PROFILES = {
       9:  'menu',
       10: 'joystick Left top button', // L3 / left stick click
       11: 'joystick Right Top Button',// R3 / right stick click
-      // Dpad: user painted it as a single region rather than four
-      // directions, so individual direction presses can't animate.
-      // We point all four indices at the same mesh so any press lights
-      // it up — better than nothing, easy to refine later by repainting.
-      12: 'dpad', 13: 'dpad', 14: 'dpad', 15: 'dpad',
+      // Dpad: original single `dpad` region was split into four
+      // cardinal wedges by tools/split-dpad.js (PCA on the dpad face
+      // centroids → in-plane axes → angle-bucket each face into the
+      // nearest cardinal). Each direction is now its own mesh and
+      // animates independently.
+      12: 'dpad_up',
+      13: 'dpad_down',
+      14: 'dpad_left',
+      15: 'dpad_right',
       16: 'steam',
       // QAM "..." button position is painted but the driver doesn't
       // parse a button bit for it yet. Leave commented until the bit
