@@ -78,6 +78,15 @@ export const PROFILES = {
     ],
     defaultBodyColor: '#e8e8ec',
     defaultAccentColor: '#1a1a1e',
+    // Per-controller labels for the 2D button HUD. Keys are Gamepad-API
+    // standard button indices; missing keys fall back to the default
+    // ABXY/L1-R1-L2-R2 labels in the HTML markup. Use short text (≤3
+    // chars) — the HUD elements are small.
+    hudLabels: {
+      0: '✕', 1: '○', 2: '□', 3: '△',   // ✕ ○ □ △
+      4: 'L1', 5: 'R1', 6: 'L2', 7: 'R2',
+      8: 'Cre', 9: 'Opt', 16: 'PS', 17: 'TP',
+    },
   },
 
   'switch-pro': {
@@ -127,6 +136,14 @@ export const PROFILES = {
     ],
     defaultBodyColor: '#2d2d2d',
     defaultAccentColor: '#1a1a1a',
+    // Chromium remaps Nintendo Switch Pro to the Gamepad-API standard
+    // layout (button 0 = bottom-of-face, etc.), so the labels reflect
+    // whatever Nintendo's physical button is at that index position.
+    hudLabels: {
+      0: 'B',  1: 'A',  2: 'Y',  3: 'X',          // Nintendo: A right, B bottom
+      4: 'L',  5: 'R',  6: 'ZL', 7: 'ZR',
+      8: '−', 9: '+', 16: 'H', 17: 'Cap',    // − Plus Home Capture
+    },
   },
 
   xbox: {
@@ -172,6 +189,11 @@ export const PROFILES = {
     ],
     defaultBodyColor: '#f0f0f0',
     defaultAccentColor: '#1a1a1a',
+    hudLabels: {
+      0: 'A',  1: 'B',  2: 'X',  3: 'Y',
+      4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT',
+      8: 'Vw', 9: 'Mn', 16: 'Xb', 17: '',         // no standard 17 on Xbox
+    },
   },
 
   // ─────────────────────────────────────────────────────────────
@@ -208,6 +230,13 @@ export const PROFILES = {
     accentColorMeshes: [],
     defaultBodyColor: '#ffffff',
     defaultAccentColor: '#ffffff',
+    // Super Nova ships with Xbox-style labels printed on the pad
+    // (A B X Y, LB/LT/RB/RT) — match what's physically on the device.
+    hudLabels: {
+      0: 'A',  1: 'B',  2: 'X',  3: 'Y',
+      4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT',
+      8: 'Vw', 9: 'Mn', 16: 'Hm', 17: '',
+    },
   },
 };
 
