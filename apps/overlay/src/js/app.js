@@ -48,6 +48,67 @@ const gamepadStatusEl = document.getElementById('gamepad-status');
 const gyroToggleBtn = document.getElementById('gyro-toggle');
 const clickThroughIndicator = document.getElementById('click-through-indicator');
 const noControllerSplash = document.getElementById('no-controller');
+const puckHint = document.getElementById('puck-hint');
+const puckWarningBanner = document.getElementById('puck-warning-banner');
+const puckWarningDismiss = document.getElementById('puck-warning-dismiss');
+
+// ── Steam Controller Puck state ──
+// puckConnected: a Puck device (vid:pid 28de:1304) is the active HID device.
+// puckHasState: at least one 53-byte STATE report has arrived (= controller
+//   body is paired and emitting). Until true, we show the splash hint.
+// puckBannerDismissed: user clicked × on the warning banner this session.
+let puckConnected = false;
+let puckHasState = false;
+let puckBannerDismissed = false;
+let puckHintTimer = null;
+const PUCK_HINT_DELAY_MS = 2000;
+const PUCK_VID = 0x28de;
+const PUCK_PID = 0x1304;
+
+function isPuckDevice(device) {
+  return device && device.vendorId === PUCK_VID && device.productId === PUCK_PID;
+}
+
+function showPuckBanner() {
+  if (!puckWarningBanner || puckBannerDismissed) return;
+  puckWarningBanner.hidden = false;
+}
+function hidePuckBanner() {
+  if (puckWarningBanner) puckWarningBanner.hidden = true;
+}
+function showPuckHint() { if (puckHint) puckHint.hidden = false; }
+function hidePuckHint() {
+  if (puckHint) puckHint.hidden = true;
+  if (puckHintTimer) { clearTimeout(puckHintTimer); puckHintTimer = null; }
+}
+
+function onPuckConnected() {
+  puckConnected = true;
+  puckHasState = false;
+  showPuckBanner();
+  if (puckHintTimer) clearTimeout(puckHintTimer);
+  puckHintTimer = setTimeout(() => {
+    if (puckConnected && !puckHasState) showPuckHint();
+  }, PUCK_HINT_DELAY_MS);
+}
+function onPuckDisconnected() {
+  puckConnected = false;
+  puckHasState = false;
+  hidePuckBanner();
+  hidePuckHint();
+}
+function onPuckStateReport() {
+  if (!puckConnected || puckHasState) return;
+  puckHasState = true;
+  hidePuckHint();
+}
+
+if (puckWarningDismiss) {
+  puckWarningDismiss.addEventListener('click', () => {
+    puckBannerDismissed = true;
+    hidePuckBanner();
+  });
+}
 
 // ── State ──
 let overlay = null;
@@ -58,6 +119,11 @@ let switchingController = false;
 
 // HID / gyro
 let hidDevice = null;
+// Additional HID handles whose inputreport feeds the same driver — used
+// only for multi-interface devices like the Steam Controller Puck where
+// requestDevice returns one of N interfaces and only one of them emits
+// STATE reports. Stays empty for single-interface controllers.
+let hidExtraDevices = [];
 let controllerDriver = null;
 let gyroActive = false;          // true when gyro is connected and feeding data
 let gyroPermitted = false;       // true once gyro has been connected at least once
@@ -754,6 +820,12 @@ async function connectControllerGyro() {
     hidDevice.removeEventListener('inputreport', handleInputReport);
     try { await hidDevice.close(); } catch (e) { /* ok */ }
     hidDevice = null;
+    for (const sib of hidExtraDevices) {
+      sib.removeEventListener('inputreport', handleInputReport);
+      try { await sib.close(); } catch (e) { /* ok */ }
+    }
+    hidExtraDevices = [];
+    if (controllerDriver?.destroy) controllerDriver.destroy();
     controllerDriver = null;
   }
 
@@ -761,12 +833,45 @@ async function connectControllerGyro() {
   hidDevice = controllerDriver.device;
   hidDevice.addEventListener('inputreport', handleInputReport);
 
+  // Multi-interface fan-out: requestDevice returns ONE HIDDevice, but
+  // some controllers (Steam Controller Puck) expose multiple interfaces
+  // sharing a vid:pid where only one emits the STATE reports we care
+  // about. Attach handleInputReport to every already-approved sibling
+  // with the same vid:pid so the active one drives the synthetic gamepad
+  // regardless of which the picker handed us. Generic logic — for
+  // DualSense / Switch Pro the usagePage filter in getHIDFilters keeps
+  // siblings out of the approval list, so this is a no-op there.
+  hidExtraDevices = [];
+  try {
+    const approved = await navigator.hid.getDevices();
+    const siblings = approved.filter((d) =>
+      d !== hidDevice && d.vendorId === hidDevice.vendorId && d.productId === hidDevice.productId
+    );
+    for (const sib of siblings) {
+      try {
+        if (!sib.opened) await sib.open();
+        sib.addEventListener('inputreport', handleInputReport);
+        hidExtraDevices.push(sib);
+      } catch (err) {
+        console.log('inputreport fan-out: skipping', sib.productName, '—', err.message);
+      }
+    }
+    if (hidExtraDevices.length > 0) {
+      console.log(`inputreport fan-out: listening on ${hidExtraDevices.length} extra HID handle(s) for ${hidDevice.productName}`);
+    }
+  } catch (err) {
+    console.log('inputreport fan-out: getDevices failed —', err.message);
+  }
+
   gyroActive = true;
   gyroPermitted = true;
   connectGyroBtn.textContent = 'Connected';
   updateGyroToggle();
   showGyroHud();
   console.log('Gyro connected:', device.productName);
+
+  if (isPuckDevice(device)) onPuckConnected();
+  else onPuckDisconnected();
 
   // Skip calibration for drivers that don't emit raw gyro rates (e.g.
   // Steam Controller, whose IMU is a quaternion that the rate-based
@@ -834,6 +939,12 @@ async function disconnectGyro() {
     hidDevice.removeEventListener('inputreport', handleInputReport);
     try { await hidDevice.close(); } catch (e) { /* ok */ }
     hidDevice = null;
+    for (const sib of hidExtraDevices) {
+      sib.removeEventListener('inputreport', handleInputReport);
+      try { await sib.close(); } catch (e) { /* ok */ }
+    }
+    hidExtraDevices = [];
+    onPuckDisconnected();
   }
   if (controllerDriver) {
     if (controllerDriver.destroy) controllerDriver.destroy();
@@ -871,9 +982,9 @@ function loop() {
       captureRemap(gamepad);
     } else if (settingsPanel.classList.contains('visible')) {
       navigateSettings(gamepad);
-      checkCombo(gamepad, 'settings', toggleSettings);
+      checkCombo(gamepad, 'settings', () => toggleSettings('gamepad-combo'));
     } else {
-      checkCombo(gamepad, 'settings', toggleSettings);
+      checkCombo(gamepad, 'settings', () => toggleSettings('gamepad-combo'));
     }
 
     // Gyro shortcuts work regardless of settings panel state
@@ -948,12 +1059,41 @@ function loop() {
   }
 }
 
-function toggleSettings() {
-  settingsPanel.classList.toggle('visible');
-  if (settingsPanel.classList.contains('visible')) {
+// ── Settings panel visibility — single canonical entry point ──
+//
+// The settings panel can be opened/closed from many UI paths: the gear
+// icon, the X close button, right-click anywhere, gamepad button combos,
+// gamepad dpad/B inside the panel, click-outside, IPC from the tray menu.
+// When the Steam Controller Puck is connected, its lizard-mode firmware
+// fires phantom mouse + keyboard + gamepad-button events at unpredictable
+// intervals — and rate-limiting alone can't suppress the flicker because
+// phantom events keep landing right at the cooldown boundary.
+//
+// So we tag every caller with a `source` and whitelist which sources are
+// allowed when Puck is connected. The whitelist is the two MOST DELIBERATE
+// gestures: clicking the visible gear icon, and clicking the X inside the
+// panel. Everything else is silently dropped while Puck is connected.
+// Non-Puck users keep the full set of interactions unchanged.
+//
+// All settings-visibility mutations MUST go through setSettingsVisible
+// (or toggleSettings, which delegates). Direct settingsPanel.classList
+// changes are forbidden — they bypass this guard.
+
+const PUCK_ALLOWED_SETTINGS_SOURCES = new Set(['gear-click', 'close-button']);
+
+function setSettingsVisible(visible, source) {
+  if (puckConnected && !PUCK_ALLOWED_SETTINGS_SOURCES.has(source)) return;
+  if (settingsPanel.classList.contains('visible') === visible) return;
+  settingsPanel.classList.toggle('visible', visible);
+  if (visible) {
     settingsFocusIndex = 0;
     updateSettingsFocus();
   }
+}
+
+function toggleSettings(source) {
+  const visible = !settingsPanel.classList.contains('visible');
+  setSettingsVisible(visible, source);
 }
 
 async function toggleGyro() {
@@ -999,6 +1139,15 @@ function getSettingRows() {
 }
 
 function navigateSettings(gamepad) {
+  // Gamepad-driven settings navigation is unsafe while the Puck is
+  // connected: the lizard-mode firmware (or wireless link transients)
+  // intermittently flips dpad / B-button bits in the STATE report, and
+  // our parser dutifully forwards them — which here would auto-navigate
+  // down 1-2 rows and close the panel (line ~1191 below). Skip the
+  // entire path while a Puck is the active controller. Users on the
+  // Puck must use mouse / touch for settings; users on USB-C direct
+  // keep full gamepad nav as before.
+  if (puckConnected) return;
   const rows = getSettingRows();
   if (!rows.length) return;
 
@@ -1066,7 +1215,7 @@ function navigateSettings(gamepad) {
   }
 
   if (b && !navPrevState.b) {
-    settingsPanel.classList.remove('visible');
+    setSettingsVisible(false, 'gamepad-b');
   }
 
   navPrevState.up = up; navPrevState.down = down;
@@ -1284,6 +1433,10 @@ function handleInputReport(event) {
   const parsed = controllerDriver.parseReport(event.reportId, event.data);
   if (!parsed) return;
 
+  // Hide the "Puck waiting for paired controller" hint as soon as any
+  // valid STATE report arrives — that's the signal a controller is paired.
+  if (puckConnected) onPuckStateReport();
+
   // Keep sticks/buttons flowing even when gyro is toggled off — otherwise
   // turning gyro off on a BT DualSense (stuck in 0x31) would silently lose
   // all stick/button input since the Gamepad API can't see it either.
@@ -1376,14 +1529,14 @@ function finishCalibration() {
 
 // ── UI Events ──
 
-settingsToggle.addEventListener('click', () => toggleSettings());
+settingsToggle.addEventListener('click', () => toggleSettings('gear-click'));
 
 document.getElementById('settings-close').addEventListener('click', () => {
-  settingsPanel.classList.remove('visible');
+  setSettingsVisible(false, 'close-button');
 });
 
 document.getElementById('btn-close-settings').addEventListener('click', () => {
-  settingsPanel.classList.remove('visible');
+  setSettingsVisible(false, 'close-button');
 });
 
 // Exit application with confirmation
@@ -1406,12 +1559,18 @@ document.getElementById('exit-yes').addEventListener('click', () => {
   }
 });
 
-// Click outside settings panel to close it
+// Click outside settings panel to close it. Disabled entirely when the
+// Steam Controller Puck is connected — phantom mouse clicks from the
+// lizard-mode firmware fire too unpredictably for any rate-limit to
+// hold; the panel oscillates open/close in a tight loop. With this
+// path suppressed, the only ways to close the panel during a Puck
+// session are the X button inside the panel, the gear icon, or
+// unplugging the Puck. Tracked in #8.
 window.addEventListener('mousedown', (e) => {
   if (!settingsPanel.classList.contains('visible')) return;
   if (settingsPanel.contains(e.target)) return;
   if (e.target === settingsToggle || settingsToggle.contains(e.target)) return;
-  settingsPanel.classList.remove('visible');
+  setSettingsVisible(false, 'click-outside');
 });
 
 controllerTypeSelect.addEventListener('change', async (e) => {
@@ -1581,20 +1740,26 @@ if (popoutButtonHudBtn) {
 }
 applyDisplayToggles(); // apply defaults (all unchecked = all hidden)
 
-// Right-click opens settings (needed when gear icon is hidden)
+// Right-click opens settings (needed when gear icon is hidden). When
+// Puck is connected this is silently ignored by setSettingsVisible —
+// the lizard-mode firmware fires phantom right-clicks at unpredictable
+// intervals that no rate-limit can hold off.
 window.addEventListener('contextmenu', (e) => {
   if (settingsPanel.contains(e.target)) return;
   e.preventDefault();
-  settingsPanel.classList.toggle('visible');
+  toggleSettings('contextmenu');
 });
 
 if (window.electronAPI) {
   window.electronAPI.onClickThroughChanged((isClickThrough) => {
     clickThroughIndicator.classList.toggle('active', !isClickThrough);
+    // Click-through enabled is a deliberate window-mode change; always
+    // close the panel so it doesn't get stuck visible under a hover-
+    // transparent window. Bypasses the Puck whitelist intentionally.
     if (isClickThrough) settingsPanel.classList.remove('visible');
   });
   window.electronAPI.onToggleSettings(() => {
-    settingsPanel.classList.toggle('visible');
+    toggleSettings('ipc');
   });
 }
 
