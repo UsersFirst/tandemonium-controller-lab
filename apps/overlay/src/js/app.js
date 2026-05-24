@@ -839,6 +839,17 @@ function loop() {
     updateButtonHud(gamepad);
   }
 
+  // Forward gamepad state to the popout HUD window (no-op when popout
+  // isn't open — main process drops the message). Sending unconditionally
+  // is simpler than tracking popout-open state in this renderer; the IPC
+  // overhead is trivial for the ~16-byte serialized snapshot.
+  if (gamepad && window.electronAPI?.sendButtonHudState) {
+    window.electronAPI.sendButtonHudState({
+      buttons: gamepad.buttons.map(b => ({ pressed: !!b.pressed, value: b.value || 0 })),
+      axes: Array.from(gamepad.axes || []),
+    });
+  }
+
   // Drive the 3D gimbal widget when visible
   if (gimbal && document.body.classList.contains('show-gimbal')) {
     gimbal.update(gyroActive ? gyroFusion.orientation : null);

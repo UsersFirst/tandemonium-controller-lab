@@ -149,8 +149,13 @@ app.whenReady().then(() => {
         preload: path.join(__dirname, 'preload.js'),
       },
     });
-    const url = `file://${path.join(__dirname, '..', 'src', 'button-hud-window.html')}?profile=${encodeURIComponent(profile || '')}`;
-    buttonHudWindow.loadURL(url);
+    // loadFile handles Windows path quirks (loadURL with raw `file://` +
+    // backslashes is malformed on Windows) and the query option is the
+    // documented way to pass URL parameters.
+    buttonHudWindow.loadFile(
+      path.join(__dirname, '..', 'src', 'button-hud-window.html'),
+      { query: { profile: profile || '' } }
+    );
     buttonHudWindow.on('closed', () => { buttonHudWindow = null; });
     return { opened: true, alreadyOpen: false };
   });
@@ -160,6 +165,18 @@ app.whenReady().then(() => {
   ipcMain.on('update-button-hud-profile', (_event, { profile }) => {
     if (buttonHudWindow && !buttonHudWindow.isDestroyed()) {
       buttonHudWindow.webContents.send('popout-profile-changed', profile);
+    }
+  });
+
+  // Per-frame gamepad-state forwarding to the popout. Main renderer sends
+  // a small {buttons, axes} snapshot every animation frame; we no-op when
+  // no popout is open. Forwarding state in this direction (rather than
+  // having the popout poll its own Gamepad API) sidesteps Chromium's
+  // per-document user-activation requirement — the popout would otherwise
+  // see all-null gamepads until the user clicked inside its window.
+  ipcMain.on('button-hud-state', (_event, state) => {
+    if (buttonHudWindow && !buttonHudWindow.isDestroyed()) {
+      buttonHudWindow.webContents.send('button-hud-state-update', state);
     }
   });
 
