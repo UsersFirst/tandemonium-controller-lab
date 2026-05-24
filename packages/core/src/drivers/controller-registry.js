@@ -49,6 +49,27 @@ export class ControllerRegistry {
   }
 
   /**
+   * Find entries whose vid:pid AND imuSignature match. Called by the
+   * overlay after the PlayStation driver's IMU probe identifies the
+   * family at runtime — narrows getAllEntries() down to entries that
+   * actually match the observed wire-level layout, so a GameSir clone
+   * spoofing Sony's PID can pick its own entry (and therefore its own
+   * controllerProfile / GLB) without user input.
+   *
+   * @param {number} vendorId
+   * @param {number} productId
+   * @param {string} imuSignature — e.g. 'sony-ds5' | 'sony-ds4' | 'gamesir-ds4'
+   * @returns {object[]}
+   */
+  static getEntriesByImuFamily(vendorId, productId, imuSignature) {
+    return DEVICES.filter(e =>
+      e.vendorId === vendorId &&
+      e.productId === productId &&
+      e.imuSignature === imuSignature
+    );
+  }
+
+  /**
    * Find the driver class for a vid:pid. Returns the protocol implementation
    * (PlayStationDriver, SwitchProDriver, etc.) or null.
    * @returns {typeof ControllerDriver|null}

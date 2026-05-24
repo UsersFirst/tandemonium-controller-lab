@@ -23,6 +23,11 @@
 //   productId:        number  — USB product ID as enumerated
 //   protocol:         string  — key in PROTOCOLS map
 //   mode?:            string  — protocol sub-mode hint (e.g. 'ds4' | 'ds5')
+//   imuSignature?:    string  — IMU layout family used by the driver's
+//                               runtime IMU probe to disambiguate clones
+//                               that share a vid:pid. PlayStation values:
+//                               'sony-ds5' (IMU at byte 15), 'sony-ds4'
+//                               (byte 13), 'gamesir-ds4' (byte 12).
 //   capabilities:     { gyro, accel, touchpad } — WebHID features
 //   features:         { faceButtons, systemButtons, triggers, shoulders,
 //                       sticks, dpad, gyro, accel, touchpad, backPaddles,
@@ -108,33 +113,36 @@ const GAMESIR_DS4_FEATURES = {
 
 export const DEVICES = [
   // ── Sony DualSense (PS5) ──
-  { name: 'Sony DualSense',         vendorId: 0x054c, productId: 0x0ce6, protocol: 'dualsense', mode: 'ds5', capabilities: PS_CAPS, features: PS_FEATURES, gamepadIdPattern: PLAYSTATION_ID },
-  { name: 'Sony DualSense Edge',    vendorId: 0x054c, productId: 0x0df2, protocol: 'dualsense', mode: 'ds5', capabilities: PS_CAPS, features: PS_EDGE_FEATURES, gamepadIdPattern: PLAYSTATION_ID },
+  // imuSignature: 'sony-ds5' — IMU at byte 15 (DualSense layout)
+  { name: 'Sony DualSense',         vendorId: 0x054c, productId: 0x0ce6, protocol: 'dualsense', mode: 'ds5', imuSignature: 'sony-ds5', capabilities: PS_CAPS, features: PS_FEATURES, gamepadIdPattern: PLAYSTATION_ID },
+  { name: 'Sony DualSense Edge',    vendorId: 0x054c, productId: 0x0df2, protocol: 'dualsense', mode: 'ds5', imuSignature: 'sony-ds5', capabilities: PS_CAPS, features: PS_EDGE_FEATURES, gamepadIdPattern: PLAYSTATION_ID },
 
   // ── Sony DualShock 4 (PS4) ──
   // Same protocol class as DualSense; mode='ds4' selects the DS4 input-
-  // report layout (IMU at offset 12 instead of 15). The DS4 offsets were
-  // tuned empirically on GameSir Super Nova in DS4 mode — see
-  // docs/ADDING-A-CONTROLLER.md for the byte-diff worked example.
-  { name: 'Sony DualShock 4 v1',    vendorId: 0x054c, productId: 0x05c4, protocol: 'dualsense', mode: 'ds4', capabilities: PS_CAPS, features: PS_FEATURES, gamepadIdPattern: PLAYSTATION_ID },
-  { name: 'Sony DualShock 4 v2',    vendorId: 0x054c, productId: 0x09cc, protocol: 'dualsense', mode: 'ds4', capabilities: PS_CAPS, features: PS_FEATURES, gamepadIdPattern: PLAYSTATION_ID },
+  // report layout. imuSignature: 'sony-ds4' — IMU at byte 13 (Linux
+  // hid-sony layout). The IMU probe in PlayStationDriver.init detects
+  // this family at runtime and overrides any mode-based default.
+  { name: 'Sony DualShock 4 v1',    vendorId: 0x054c, productId: 0x05c4, protocol: 'dualsense', mode: 'ds4', imuSignature: 'sony-ds4', capabilities: PS_CAPS, features: PS_FEATURES, gamepadIdPattern: PLAYSTATION_ID },
+  { name: 'Sony DualShock 4 v2',    vendorId: 0x054c, productId: 0x09cc, protocol: 'dualsense', mode: 'ds4', imuSignature: 'sony-ds4', capabilities: PS_CAPS, features: PS_FEATURES, gamepadIdPattern: PLAYSTATION_ID },
 
   // ── GameSir DS4-mode family ──
   // Both Super Nova and Cyclone 2 spoof Sony's DS4 v2 USB identity
-  // (054c:09cc) and share the DS4 input-report layout (IMU at offsets
-  // 12/18, validated via Test Report wizard captures of both pads).
-  // The Test Report wizard's pre-capture picker surfaces all three
-  // possibilities (real Sony, Super Nova, Cyclone 2) so the user can
-  // tell us which physical pad is plugged in.
+  // (054c:09cc) and share the GameSir DS4-clone input-report layout
+  // (IMU at byte 12, validated via Test Report wizard captures of both
+  // pads). imuSignature: 'gamesir-ds4' lets the IMU probe identify
+  // them as a family at runtime and pick a GameSir entry over the Sony
+  // DS4 v2 entry without user input.
   //
   // Difference between the two GameSir pads: Super Nova's back paddles
   // expose independent HID bits we could map; Cyclone 2's back paddles
   // remap to the A/B face buttons on the controller side, so they
   // generate no new HID data and `backPaddles: false` for Cyclone 2.
+  // The IMU probe can't tell Super Nova and Cyclone 2 apart (both at
+  // offset 12) — the spoof-picker UI handles that final disambiguation.
   {
     name: 'GameSir Super Nova (DS4 mode)',
     vendorId: 0x054c, productId: 0x09cc,
-    protocol: 'dualsense', mode: 'ds4',
+    protocol: 'dualsense', mode: 'ds4', imuSignature: 'gamesir-ds4',
     capabilities: PS_CAPS,
     features: GAMESIR_DS4_FEATURES,
     gamepadIdPattern: PLAYSTATION_ID,
@@ -148,7 +156,7 @@ export const DEVICES = [
   {
     name: 'GameSir Cyclone 2 (DS4 mode)',
     vendorId: 0x054c, productId: 0x09cc,
-    protocol: 'dualsense', mode: 'ds4',
+    protocol: 'dualsense', mode: 'ds4', imuSignature: 'gamesir-ds4',
     capabilities: PS_CAPS,
     features: { ...GAMESIR_DS4_FEATURES, backPaddles: false },
     gamepadIdPattern: PLAYSTATION_ID,

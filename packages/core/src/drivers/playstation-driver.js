@@ -38,6 +38,94 @@ export class PlayStationDriver extends ControllerDriver {
         console.warn('DualSense BT: feature 0x05 query failed:', err.message);
       }
     }
+
+    // IMU-offset probe: PlayStation-family controllers (real Sony DS4/DS5 +
+    // GameSir clones in DS4 mode + future variants) all share the 054c:09cc
+    // / 054c:0ce6 vid:pid families and only differ in IMU byte offsets.
+    // Read the first ~10 input reports and score each candidate offset by
+    // at-rest accel magnitude (should be ≈ 8192 raw = 1g at the ±4g/16-bit
+    // scale). The winner sets this._detectedImuOffset, which parseReport
+    // prefers over the entry.mode default — this is what lets us identify
+    // GameSir clones automatically when they spoof Sony's PID.
+    //
+    // Family mapping (PS-family candidates):
+    //   gyroOffset 15 → 'sony-ds5'   (Sony DualSense)
+    //   gyroOffset 13 → 'sony-ds4'   (Sony DualShock 4, Linux hid-sony layout)
+    //   gyroOffset 12 → 'gamesir-ds4' (GameSir Super Nova / Cyclone 2 in DS4 mode)
+    //
+    // The probe is best-effort: if no reports arrive within 500ms (e.g.
+    // BT in compatibility mode), we fall back to the entry.mode default
+    // and downstream consumers can still rely on parseReport working.
+    const probe = await this._probeImuOffset();
+    if (probe) {
+      this._detectedImuOffset = probe;
+      this._detectedImuFamily = (
+        probe.gyroOffset === 12 ? 'gamesir-ds4' :
+        probe.gyroOffset === 13 ? 'sony-ds4' :
+        probe.gyroOffset === 15 ? 'sony-ds5' :
+        null
+      );
+      console.log(`PlayStation IMU probe: gyroOffset=${probe.gyroOffset} accelMag≈${probe.meanAccelMag.toFixed(0)} → family='${this._detectedImuFamily}' (entry name: ${this.entry?.name || 'unknown'})`);
+    }
+  }
+
+  /**
+   * One-shot IMU layout probe. Listens to inputreport for up to `timeoutMs`,
+   * collecting up to 10 reports, then scores each candidate gyro offset by
+   * how close the at-rest accel magnitude is to 8192 (1g). Returns the
+   * winner, or null if no usable reports arrived.
+   *
+   * Only runs on USB report 0x01 today. BT branch differs (offset shifts
+   * with the leading counter byte) and the offset relationship is the same
+   * up to that constant, so the same probe-then-add-baseOffset logic could
+   * extend to BT later — punted for now since the immediate case is USB.
+   *
+   * @param {number} [timeoutMs=500]
+   * @returns {Promise<{gyroOffset:number, accelOffset:number, meanAccelMag:number}|null>}
+   */
+  async _probeImuOffset(timeoutMs = 500) {
+    if (this.connectionType !== 'usb') return null;
+
+    const candidates = [12, 13, 15]; // PS-family known gyro-start offsets
+    const reports = [];
+
+    return new Promise((resolve) => {
+      const onReport = (event) => {
+        if (event.reportId !== 0x01) return;
+        reports.push(event.data);
+        if (reports.length >= 10) finish();
+      };
+
+      const finish = () => {
+        clearTimeout(timer);
+        this.device.removeEventListener('inputreport', onReport);
+
+        if (reports.length === 0) { resolve(null); return; }
+        const r = ControllerDriver.readSigned16;
+        const scores = [];
+        for (const gyroOffset of candidates) {
+          const accelOffset = gyroOffset + 6;
+          let sumMag = 0, n = 0;
+          for (const data of reports) {
+            if (data.byteLength < accelOffset + 6) continue;
+            const ax = r(data, accelOffset);
+            const ay = r(data, accelOffset + 2);
+            const az = r(data, accelOffset + 4);
+            sumMag += Math.sqrt(ax * ax + ay * ay + az * az);
+            n++;
+          }
+          if (n === 0) continue;
+          const meanMag = sumMag / n;
+          scores.push({ gyroOffset, accelOffset, meanAccelMag: meanMag, score: Math.abs(meanMag - 8192) });
+        }
+        if (scores.length === 0) { resolve(null); return; }
+        scores.sort((a, b) => a.score - b.score);
+        resolve(scores[0]);
+      };
+
+      this.device.addEventListener('inputreport', onReport);
+      const timer = setTimeout(finish, timeoutMs);
+    });
   }
 
   destroy() {
@@ -62,10 +150,15 @@ export class PlayStationDriver extends ControllerDriver {
     // reports off-by-1 IMU, ideally via another wizard capture for diff.
     let baseOffset, gyroOffset, touchOffset;
     const isDs4 = this.entry?.mode === 'ds4';
+    // Runtime IMU probe (set during init) is the source of truth when
+    // available; the mode-based default is the fallback for the BT path
+    // (probe only runs on USB today) or when the probe couldn't collect
+    // any reports.
+    const probeUsbOffset = this._detectedImuOffset?.gyroOffset;
 
     if (this.connectionType === 'usb' && reportId === 0x01) {
       baseOffset = 0;
-      gyroOffset = isDs4 ? 12 : 15;
+      gyroOffset = probeUsbOffset ?? (isDs4 ? 12 : 15);
       touchOffset = isDs4 ? 35 : 32;
     } else if (this.connectionType === 'bluetooth' && reportId === 0x31) {
       baseOffset = 1;
