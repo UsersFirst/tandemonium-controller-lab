@@ -190,6 +190,33 @@ export const DEVICES = [
   { name: 'Xbox Elite v2',          vendorId: 0x045e, productId: 0x02fd, protocol: 'xbox', capabilities: NO_CAPS, features: { ...XBOX_FEATURES, backPaddles: true }, gamepadIdPattern: XBOX_ID },
   { name: 'Xbox One',               vendorId: 0x045e, productId: 0x02e0, protocol: 'xbox', capabilities: NO_CAPS, features: XBOX_FEATURES, gamepadIdPattern: XBOX_ID },
   { name: 'Xbox 360',               vendorId: 0x045e, productId: 0x028e, protocol: 'xbox', capabilities: NO_CAPS, features: XBOX_FEATURES, gamepadIdPattern: XBOX_ID },
+
+  // ── Steam Controller (2026) — via the Puck wireless dongle ──
+  // vid:pid 28de:1304 identifies the *Puck* (wireless dongle plugged
+  // into USB), NOT the controller body itself. The handheld controller
+  // pairs to the Puck over RF; data forwards through the Puck's HID
+  // interfaces. Captured 2026-05-24 from a real device with Steam not
+  // running — see issue #8 for the full investigation.
+  //
+  // capabilities is still NO_CAPS because Chromium's Gamepad API does
+  // not enumerate any of the Puck's 5 HID interfaces (all
+  // vendor-defined, no standard gamepad usage page). The existing
+  // overlay code paths driven by getEntry won't activate this entry
+  // until a Puck-aware code path lands that talks WebHID directly to
+  // iface[3] (reportId 0x45, 53-byte reports — Valve Steam Input HID
+  // variant). Tracked in issue #8 with a per-interface investigation
+  // already done; SteamControllerDriver remains an identity-only stub
+  // until someone writes the parser.
+  {
+    name: 'Steam Controller 2026 (via Puck)',
+    vendorId: 0x28de, productId: 0x1304,
+    protocol: 'steam-controller',
+    capabilities: NO_CAPS,
+    features: { faceButtons: true, systemButtons: true, triggers: 'analog', shoulders: true, sticks: 2, dpad: false, gyro: true, accel: true, touchpad: true, backPaddles: true, lightbar: false, rumble: true },
+    gamepadIdPattern: STEAM_ID,
+    controllerProfile: 'steam-controller',
+    notes: 'Wireless dongle (Puck) vid:pid; controller body pairs over RF and data forwards through iface[3] reportId=0x45 (53-byte reports). Driver parsing TBD — see issue #8. Visualizer GLB is CC BY-NC-SA 4.0; see packages/visualizer/assets/controllers/STEAM_CONTROLLER_ATTRIBUTION.md.',
+  },
 ];
 
 // ── Pending entries — known controllers, pid not yet captured ──
@@ -199,18 +226,6 @@ export const DEVICES = [
 // vid:pid and we know which protocol/mode to dispatch.
 
 export const PENDING_DEVICES = [
-  {
-    name: 'Steam Controller 2026',
-    vendorId: 0x28de,            // Valve's USB vendor ID
-    productId: null,             // TODO: capture once hardware ships
-    protocol: 'steam-controller',
-    capabilities: NO_CAPS,       // bump when WebHID features land
-    features: { faceButtons: true, systemButtons: true, triggers: 'analog', shoulders: true, sticks: 2, dpad: false, gyro: true, accel: true, touchpad: true, backPaddles: true, lightbar: false, rumble: true },
-    gamepadIdPattern: STEAM_ID,
-    // Visualizer model + attribution already shipped — when the real pid
-    // is captured and this entry is promoted to DEVICES, no further
-    // visualizer changes are needed.
-    controllerProfile: 'steam-controller',
-    note: 'Identity-only stub. Real Steam Input HID parsing (gyro, trackpad, back paddles) lives in a follow-up. Visualizer GLB is derived from Valve\'s CC BY-NC-SA-licensed CAD release; see packages/visualizer/assets/controllers/STEAM_CONTROLLER_ATTRIBUTION.md.',
-  },
+  // (none currently — Steam Controller 2026 was promoted to DEVICES
+  // on 2026-05-24 after the Puck's vid:pid 28de:1304 was captured)
 ];
