@@ -20,6 +20,27 @@ const canvas = document.getElementById('canvas');
 const settingsToggle = document.getElementById('settings-toggle');
 const settingsPanel = document.getElementById('settings-panel');
 const controllerTypeSelect = document.getElementById('controller-type');
+
+// Populate the controller-type dropdown from PROFILES at runtime so adding a
+// new visualizer profile (drop a GLB + add a PROFILES entry) automatically
+// surfaces here without an HTML edit. The first <option value="auto"> is
+// kept from the static markup; everything else gets replaced.
+(function populateControllerTypeOptions() {
+  // Remove all options except the first ('auto')
+  while (controllerTypeSelect.options.length > 1) controllerTypeSelect.remove(1);
+  const entries = Object.entries(PROFILES).sort((a, b) => a[1].name.localeCompare(b[1].name));
+  for (const [key, profile] of entries) {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = profile.name || key;
+    controllerTypeSelect.appendChild(opt);
+  }
+  // Restore last manual choice if the user previously picked something.
+  const saved = localStorage.getItem('overlay:controllerType');
+  if (saved && (saved === 'auto' || controllerTypeSelect.querySelector(`option[value="${saved}"]`))) {
+    controllerTypeSelect.value = saved;
+  }
+})();
 const connectGyroBtn = document.getElementById('connect-gyro-btn');
 const driftModeSelect = document.getElementById('drift-mode');
 const gamepadStatusEl = document.getElementById('gamepad-status');
@@ -593,6 +614,45 @@ async function connectControllerGyro() {
   console.log('Gyro connected:', device.productName);
 
   startCalibration();
+
+  // The driver's init() has run an IMU-layout probe (PlayStation family
+  // only, for now) and set _detectedImuFamily if a wire-level signature
+  // matched a known family. When this disagrees with the profile we
+  // loaded a moment ago against gamepad.id alone — e.g. we loaded
+  // 'dualsense' because that's the first 054c:09cc match, but the
+  // pad is actually a GameSir clone — swap the visualizer to the
+  // family-matched entry's profile. Honors the dropdown override so
+  // an explicit user choice isn't undone.
+  maybeSwapProfileAfterImuProbe();
+}
+
+/**
+ * Consult the driver's runtime-detected IMU family and swap the overlay
+ * profile to the family-matched entry's controllerProfile when the auto-
+ * detection disagrees with whatever profile we loaded from gamepad.id.
+ * Skips the swap if the user has set the controller-type dropdown to a
+ * specific (non-'auto') profile — manual override wins.
+ */
+function maybeSwapProfileAfterImuProbe() {
+  const family = controllerDriver?._detectedImuFamily;
+  if (!family || !hidDevice) return;
+  if (controllerTypeSelect.value && controllerTypeSelect.value !== 'auto') return;
+
+  const candidates = ControllerRegistry.getEntriesByImuFamily(
+    hidDevice.vendorId, hidDevice.productId, family
+  );
+  if (candidates.length === 0) return;
+  // Pick the first entry for the matched family. When two share a family
+  // (e.g. Super Nova and Cyclone 2 both at offset 12), the user can still
+  // override via the dropdown — a future spoof picker would disambiguate
+  // here without a manual trip into settings.
+  const picked = candidates[0];
+  const desiredProfile = picked.controllerProfile || picked.protocol;
+  if (desiredProfile !== currentControllerType && overlay) {
+    console.log(`IMU probe wants profile '${desiredProfile}' (entry: ${picked.name}); currently '${currentControllerType}' — swapping.`);
+    currentControllerType = desiredProfile;
+    overlay.setControllerType(desiredProfile);
+  }
 }
 
 /**
@@ -1168,9 +1228,13 @@ window.addEventListener('mousedown', (e) => {
 });
 
 controllerTypeSelect.addEventListener('change', async (e) => {
+  // Persist the user's manual choice so it survives a relaunch — without
+  // this, every restart would revert to 'auto' and undo their preference.
+  localStorage.setItem('overlay:controllerType', e.target.value);
+
   const gp = gamepadIndex !== null ? navigator.getGamepads()[gamepadIndex] : null;
   if (e.target.value === 'auto' && gp) {
-    const type = detectControllerType(gp.id);
+    const type = pickControllerProfile(gp.id);
     if (type !== currentControllerType) {
       modelReady = false;
       currentControllerType = type;
