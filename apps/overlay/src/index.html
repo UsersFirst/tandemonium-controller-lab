@@ -354,17 +354,20 @@
 
   #axis-readout {
     position: fixed;
-    top: 40px; right: 42px;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
     display: none;
     gap: 14px;
     font-family: monospace;
-    font-size: 30px;
+    font-size: 24px;
     font-weight: 600;
     z-index: 110;
-    background: rgba(0,0,0,0.35);
-    padding: 4px 12px;
+    background: rgba(0,0,0,0.45);
+    padding: 4px 14px;
     border-radius: 14px;
     pointer-events: none;
+    white-space: nowrap;
   }
   body.show-axis-readout #axis-readout { display: flex; }
   #axis-readout .ax-pitch { color: #44dd66; }
@@ -784,7 +787,7 @@
   </div>
 
   <div class="setting-row">
-    <label>HUD Position</label>
+    <label>Roll HUD Position</label>
     <select id="hud-position">
       <option value="above">Above</option>
       <option value="below" selected>Below</option>
