@@ -130,11 +130,79 @@ export class ControllerOverlay {
     this.bodyGroup = new THREE.Group();
     this.scene.add(this.bodyGroup);
 
+    // Position picker: when window.__pickerMode is truthy, clicks on
+    // the canvas raycast against the model and log the hit (x, y, z)
+    // in body-local coordinates plus a copy/pasteable highlightMarkers
+    // line. Also place a small visible marker so the user can see what
+    // they picked. Used to author profile.highlightMarkers for
+    // monolithic GLBs (Steam Controller, GameSir Super Nova) without
+    // guessing AABBs blindly. Toggle: `window.__pickerMode = true`
+    // then click on the model.
+    this._pickerMarkers = [];
+    this._pickerRaycaster = new THREE.Raycaster();
+    this._pickerMouse = new THREE.Vector2();
+    canvas.addEventListener('click', (ev) => this._onPickerClick(ev));
+
     // Load model
     await this._loadModel();
 
     // Start render loop
     this._animate();
+  }
+
+  /**
+   * Click handler that, when window.__pickerMode is truthy, raycasts
+   * against the loaded model, logs the hit point in body-local
+   * coordinates, and places a small visible marker. Coordinates are
+   * already in the frame highlightMarkers uses (post-load scale +
+   * center, parent = bodyGroup). Console output is copy/pasteable.
+   */
+  _onPickerClick(ev) {
+    if (typeof window === 'undefined' || !window.__pickerMode) return;
+    if (!this.model) return;
+    const rect = this.canvas.getBoundingClientRect();
+    this._pickerMouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    this._pickerMouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+    this._pickerRaycaster.setFromCamera(this._pickerMouse, this.camera);
+    const hits = this._pickerRaycaster.intersectObject(this.model, true);
+    if (hits.length === 0) {
+      console.log('[picker] click missed the model');
+      return;
+    }
+    // Convert world-space hit to bodyGroup-local (so the coord matches
+    // what highlightMarkers expects). The model is parented under
+    // bodyGroup so a worldToLocal on bodyGroup gives marker-frame coords.
+    const localPos = this.bodyGroup.worldToLocal(hits[0].point.clone());
+    const x = localPos.x.toFixed(4);
+    const y = localPos.y.toFixed(4);
+    const z = localPos.z.toFixed(4);
+    const labelIdx = this._pickerMarkers.length;
+    console.log(
+      `[picker] hit #${labelIdx} → position: [${x}, ${y}, ${z}]\n` +
+      `  paste:  { position: [${x}, ${y}, ${z}], color: 0xffcc00 },`
+    );
+    // Place a small persistent marker so user sees where they clicked.
+    const dotGeo = new THREE.SphereGeometry(0.004, 12, 12);
+    const dotMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+    const dot = new THREE.Mesh(dotGeo, dotMat);
+    dot.position.copy(localPos);
+    this.bodyGroup.add(dot);
+    this._pickerMarkers.push(dot);
+  }
+
+  /**
+   * Clear all picker-placed marker dots and the console-side hit
+   * counter. Call from DevTools: overlay.clearPickerMarkers().
+   */
+  clearPickerMarkers() {
+    if (!this._pickerMarkers) return;
+    for (const m of this._pickerMarkers) {
+      this.bodyGroup.remove(m);
+      m.geometry?.dispose();
+      m.material?.dispose();
+    }
+    this._pickerMarkers = [];
+    console.log('[picker] cleared all hit markers');
   }
 
   async _loadModel() {
@@ -372,6 +440,22 @@ export class ControllerOverlay {
       this._setupTouchIndicators();
     }
 
+    // ── Procedural highlight markers ──
+    // For controllers whose GLB is a single monolithic mesh (Steam
+    // Controller, GameSir Super Nova from photogrammetry), the standard
+    // buttonMap/triggerMap/stickMap path can't animate per-input
+    // highlights since there are no sub-meshes to glow. profile
+    // .highlightMarkers fills the gap: it declares small 3D markers
+    // at hand-tuned positions on the body, created as separate Three.js
+    // meshes, parented to bodyGroup so they rotate with the controller.
+    // Each marker glows when its corresponding gamepad button/axis
+    // crosses an activity threshold. Position iteration is done with
+    // window.__highlightDebug = true which renders all markers at low
+    // opacity for hand-tuning.
+    if (profile.highlightMarkers) {
+      this._setupHighlightMarkers(profile.highlightMarkers);
+    }
+
     // Log found meshes for debugging
     const profileMeshes = [
       ...Object.values(profile.buttonMap),
@@ -387,6 +471,99 @@ export class ControllerOverlay {
       `Controller model loaded: ${found.length}/${profileMeshes.length} meshes mapped`,
       missing.length ? `\nMissing: ${missing.join(', ')}` : ''
     );
+  }
+
+  /**
+   * Create procedural highlight markers from a profile's
+   * highlightMarkers config. Each marker is a small Three.js mesh
+   * (sphere by default) added to bodyGroup so it rotates with the
+   * controller. Stored in this._highlightMarkers indexed by kind +
+   * key (e.g. 'button:0', 'trigger:6', 'stick:left').
+   *
+   * Config shape (all fields optional except position):
+   *   {
+   *     buttons: {
+   *       0: { position: [x, y, z], color?, radius?, kind? },
+   *       ...
+   *     },
+   *     triggers: { 6: {...}, 7: {...} },
+   *     stickClicks: { 10: {...}, 11: {...} },  // L3 / R3 click highlights
+   *   }
+   *
+   * kind: 'sphere' (default) | 'ring' | 'disc'
+   */
+  _setupHighlightMarkers(config) {
+    this._highlightMarkers = {};
+    const debug = (typeof window !== 'undefined') && window.__highlightDebug === true;
+
+    const makeMarker = (spec) => {
+      const radius = spec.radius || 0.006;
+      const color = spec.color !== undefined ? spec.color : 0xffcc00;
+      // Default 'disc' = flat circle lying on the controller surface,
+      // oriented so its normal points outward from the body center.
+      // This gives a "colored area painted onto the button" look rather
+      // than protruding half-spheres. Other shapes available via kind.
+      const kind = spec.kind || 'disc';
+      let geo;
+      switch (kind) {
+        case 'ring':
+          geo = new THREE.TorusGeometry(radius, radius * 0.25, 8, 24);
+          break;
+        case 'sphere':
+          geo = new THREE.SphereGeometry(radius, 16, 16);
+          break;
+        case 'disc':
+        default:
+          geo = new THREE.CircleGeometry(radius, 32);
+      }
+      const mat = new THREE.MeshStandardMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: debug ? 0.5 : 0,
+        roughness: 0.4,
+        metalness: 0.1,
+        transparent: true,
+        opacity: debug ? 0.6 : 1.0,
+        side: THREE.DoubleSide,    // discs are flat — render from both sides
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(spec.position[0], spec.position[1], spec.position[2]);
+      // Orient flat geometries (disc / ring) so their face normal points
+      // outward from the controller body surface. Determine outward by
+      // sign of Y (works for controllers with most buttons on the +Y
+      // face and triggers on the -Y back); fall back to normalize for
+      // markers near the Y=0 plane (top edge of grips). Three.js
+      // CircleGeometry's default normal is +Z; Object3D.lookAt makes
+      // local -Z point toward target, so we target a point in the
+      // INWARD direction to flip +Z outward.
+      if (kind === 'disc' || kind === 'ring') {
+        let outward;
+        if (mesh.position.y > 0.005) {
+          outward = new THREE.Vector3(0, 1, 0);
+        } else if (mesh.position.y < -0.005) {
+          outward = new THREE.Vector3(0, -1, 0);
+        } else {
+          outward = mesh.position.clone().normalize();
+        }
+        const inwardTarget = mesh.position.clone().sub(outward);
+        mesh.lookAt(inwardTarget);
+        // Lift the disc a hair off the surface so it doesn't z-fight
+        // with the body mesh underneath.
+        mesh.position.add(outward.clone().multiplyScalar(0.0005));
+      }
+      this.bodyGroup.add(mesh);
+      return { mesh, color };
+    };
+
+    for (const kind of ['buttons', 'triggers', 'stickClicks']) {
+      const group = config[kind];
+      if (!group) continue;
+      for (const [keyStr, spec] of Object.entries(group)) {
+        if (!spec || !spec.position) continue;
+        const tag = `${kind.replace(/s$/, '')}:${keyStr}`;
+        this._highlightMarkers[tag] = makeMarker(spec);
+      }
+    }
   }
 
   /**
@@ -592,6 +769,35 @@ export class ControllerOverlay {
       }
     }
 
+    // ── Procedural highlight markers ──
+    // For controllers with profile.highlightMarkers (Steam Controller),
+    // glow each marker based on its associated gamepad button/axis.
+    // Markers are parented to bodyGroup so they rotate with the body
+    // gyro rotation below this block — no extra positioning needed here.
+    if (this._highlightMarkers && gamepad) {
+      for (const [tag, marker] of Object.entries(this._highlightMarkers)) {
+        const [kind, keyStr] = tag.split(':');
+        const idx = parseInt(keyStr, 10);
+        let intensity = 0;
+        if (kind === 'button' || kind === 'stickClick') {
+          const btn = gamepad.buttons[idx];
+          intensity = btn?.pressed ? 3.0 : 0;
+        } else if (kind === 'trigger') {
+          const btn = gamepad.buttons[idx];
+          const v = btn?.value || 0;
+          intensity = v > 0.05 ? v * 3.0 : 0;
+        }
+        const mat = marker.mesh.material;
+        mat.emissiveIntensity = THREE.MathUtils.lerp(
+          mat.emissiveIntensity, intensity, LERP_SPEED
+        );
+        // Debug-mode opacity floor so markers stay visible even when idle.
+        const debugFloor = (typeof window !== 'undefined') && window.__highlightDebug === true;
+        if (!debugFloor && mat.opacity !== 1.0) mat.opacity = 1.0;
+        if (debugFloor && mat.opacity !== 0.6) mat.opacity = 0.6;
+      }
+    }
+
     // ── Gyro (body rotation) ──
     if (gyroQuaternion && this.bodyGroup) {
       this.animState.gyro.slerp(gyroQuaternion, LERP_SPEED);
@@ -634,6 +840,16 @@ export class ControllerOverlay {
         }
       });
       this.model = null;
+    }
+
+    // Dispose any procedural highlight markers from the previous model.
+    if (this._highlightMarkers) {
+      for (const { mesh } of Object.values(this._highlightMarkers)) {
+        this.bodyGroup.remove(mesh);
+        mesh.geometry?.dispose();
+        mesh.material?.dispose();
+      }
+      this._highlightMarkers = null;
     }
 
     this.meshes = {};

@@ -457,6 +457,9 @@ async function init() {
     controllerType: hasGamepad ? initialType : 'dualsense',
   });
   await overlay.init();
+  // Expose for DevTools-driven tooling (position picker, etc.). No
+  // runtime dependency from app.js; just a convenience handle.
+  window.overlay = overlay;
 
   if (hasGamepad) {
     currentControllerType = initialType;

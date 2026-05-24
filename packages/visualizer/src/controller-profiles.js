@@ -282,6 +282,66 @@ export const PROFILES = {
       4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT',
       8: 'Vw', 9: 'Mn', 16: 'St', 17: '',
     },
+    // Procedural highlight markers — the Steam Controller GLB is a
+    // single solid body (Valve's published CAD is the external shell
+    // only, no assembly parts), so there are no sub-meshes to animate
+    // for buttons / sticks / triggers. Instead the visualizer creates
+    // small glowing spheres at these positions, parented to bodyGroup
+    // so they rotate with the controller, and brightens each one when
+    // its mapped button/axis is active.
+    //
+    // Positions were captured by clicking on the rendered model in the
+    // overlay with window.__pickerMode = true (the in-overlay click-
+    // to-pick coordinate logger added in PR #18). Each click logs the
+    // hit (x, y, z) in body-local coordinates; values pasted here
+    // verbatim from that session. Coordinate frame post-fit:
+    //   +X = controller right (B button side)
+    //   +Y = up out of the face (face buttons at Y≈0.039, stick caps
+    //         raised to Y≈0.049, triggers behind face at Y≈-0.014)
+    //   +Z = toward the bottom of the controller (grip end). Top edge
+    //         where bumpers + Y button sit is at the most negative Z.
+    highlightMarkers: {
+      buttons: {
+        // Face buttons (Xbox arrangement: Y top, A bottom, X left, B right)
+        0:  { position: [ 0.0759, 0.0392, -0.0316], color: 0x33dd55, radius: 0.006 },  // A — green
+        1:  { position: [ 0.0901, 0.0375, -0.0455], color: 0xdd3333, radius: 0.006 },  // B — red
+        2:  { position: [ 0.0619, 0.0406, -0.0468], color: 0x3366dd, radius: 0.006 },  // X — blue
+        3:  { position: [ 0.0750, 0.0388, -0.0636], color: 0xeebb22, radius: 0.006 },  // Y — yellow
+        // Shoulders (top edge of each grip)
+        4:  { position: [-0.0796, 0.0154, -0.0848], color: 0xffaa00, radius: 0.008 },  // LB
+        5:  { position: [ 0.0725, 0.0148, -0.0861], color: 0xffaa00, radius: 0.008 },  // RB
+        // System buttons (small, flanking Steam button on the face)
+        8:  { position: [-0.0459, 0.0384, -0.0669], color: 0xcccccc, radius: 0.004 },  // View
+        9:  { position: [ 0.0438, 0.0385, -0.0663], color: 0xcccccc, radius: 0.004 },  // Menu
+        // D-pad (mirror of face buttons, on left grip side)
+        12: { position: [-0.0785, 0.0387, -0.0601], color: 0x66ccff, radius: 0.005 },  // up
+        13: { position: [-0.0795, 0.0384, -0.0363], color: 0x66ccff, radius: 0.005 },  // down
+        14: { position: [-0.0905, 0.0374, -0.0482], color: 0x66ccff, radius: 0.005 },  // left
+        15: { position: [-0.0683, 0.0394, -0.0507], color: 0x66ccff, radius: 0.005 },  // right
+        // Steam button (large center logo)
+        16: { position: [ 0.0003, 0.0394, -0.0489], color: 0x66bbff, radius: 0.008 },
+        // 2026 Steam Controller "..." Quick Access Menu button. Position
+        // captured at [-0.0009, 0.0297, +0.0191] (center-low on face,
+        // below the trackpad row). Driver doesn't yet parse a button
+        // bit for it — likely one of the "TBD" bits in
+        // SteamlessController's byte map (buf[02] bit 4 or buf[04]
+        // bit 6). Wire up when the protocol decode adds it; uncomment
+        // to surface a marker once the gamepad button index is known.
+        // 17: { position: [-0.0009, 0.0297,  0.0191], color: 0xffffff, radius: 0.005 },
+      },
+      triggers: {
+        // Trigger paddles — on the BACK side of the top edge (Y<0)
+        6: { position: [-0.0793, -0.0143, -0.0750], color: 0xffcc00, radius: 0.009 },  // LT
+        7: { position: [ 0.0760, -0.0135, -0.0758], color: 0xffcc00, radius: 0.009 },  // RT
+      },
+      stickClicks: {
+        // Stick caps — raised above the face (Y≈0.05). The cap itself
+        // glows when the user clicks the stick (L3/R3 are buttons
+        // 10/11 in Gamepad-API standard).
+        10: { position: [-0.0375, 0.0495, -0.0306], color: 0x44aaff, radius: 0.008 },  // L3
+        11: { position: [ 0.0348, 0.0494, -0.0282], color: 0x44aaff, radius: 0.008 },  // R3
+      },
+    },
   },
 };
 
