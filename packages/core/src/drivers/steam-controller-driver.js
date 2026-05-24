@@ -53,14 +53,11 @@ const FEATURE_REPORT_ID_FALLBACK = 0x02;
 
 export class SteamControllerDriver extends ControllerDriver {
 
-  // Steam Controller emits a quaternion (parsed.orientation), not raw
-  // gyro rates. The app's rate-based calibration UX should skip itself
-  // for this driver — checks this flag and avoids the "Calibrating…"
-  // hint that would otherwise hang forever waiting for raw-rate samples
-  // that never come. The visualizer body still rotates: app.js's fast
-  // path writes parsed.orientation directly into gyroFusion.orientation,
-  // bypassing the rate-based integrate-and-correct loop entirely.
-  static emitsRawGyro = false;
+  // Steam Controller emits raw 3-axis gyro (bytes 39-44, ±2000 dps)
+  // and 3-axis accel (bytes 33-38, ±2g) — same rate-based encoding as
+  // DualSense, so it flows through the standard SensorFusion pipeline.
+  // emitsRawGyro=true (the default in the base class) opts back into
+  // the calibration UX, which is correct for this driver.
 
   // Valve's HID interfaces are vendor-defined (usage page 0xFF0x), not
   // the standard gamepad usage. Filter on vid:pid only or the picker
@@ -371,35 +368,47 @@ export class SteamControllerDriver extends ControllerDriver {
       },
     ];
 
-    // IMU encoding (2026 firmware) — STILL UNDER INVESTIGATION.
+    // IMU encoding (2026 firmware) — determined by per-axis variance
+    // analysis of a real Test Report capture (see issue #8). The
+    // 53-byte STATE report's IMU layout is:
     //
-    // SteamlessController docs say quaternion at WebHID data[31-38]
-    // (4× int16 LE), but our captures show data[29-32] is a uint32 LE
-    // timestamp on this firmware. Test Report variance analysis showed
-    // bytes 33-38 carry the actual IMU signal (pitch primarily in
-    // bytes 35-36, roll primarily in bytes 33-34), but neither the
-    // compressed-quaternion (X,Y,Z + derived W) interpretation nor any
-    // axis transform matched physical motion correctly.
+    //   bytes 29-32 = uint32 LE timestamp (~1 MHz clock tick)
+    //   bytes 33-38 = 3-axis accelerometer (int16 LE per axis, ±2g full scale)
+    //   bytes 39-44 = 3-axis gyroscope    (int16 LE per axis, ±2000 dps)
+    //   bytes 45+   = always-zero padding
     //
-    // Reverting to the previously field-tested layout: read bytes
-    // 31-38 as 4 int16 LE and feed all four into Three.js's quaternion
-    // as (x, y, z, w). One component is timestamp garbage, but
-    // Three.js's normalize() flattens it out enough that pitch + roll
-    // visually track physical motion when combined with the
-    // 'yzp-xy-alt' transform in app.js. Yaw remains weak on this
-    // path (~10× smaller signal than pitch/roll per Test Report).
+    // This differs from SteamlessController's documented layout (which
+    // claims a 4-int16 quaternion at data[31-38]) — that overlaps the
+    // timestamp on 2026 firmware. The rate-based encoding is identical
+    // to DualSense's, so parsed.gyro + parsed.accel flow through the
+    // standard SensorFusion pipeline; orientation/calibration/drift-
+    // correction all work the same way as on Sony controllers, with no
+    // need for a quaternion fast-path.
     //
-    // Better encoding TBD — possibly Euler angles in radians, or a
-    // different scale/sign convention. Re-investigate when there's
-    // time.
-    const QUAT_SCALE = 1 / 0x7FFF;
-    const orientation = {
-      x: r(data, 31) * QUAT_SCALE,
-      y: r(data, 33) * QUAT_SCALE,
-      z: r(data, 35) * QUAT_SCALE,
-      w: r(data, 37) * QUAT_SCALE,
+    // At-rest verification on real hardware:
+    //   gyro all axes: 0 ± 0.2 dps (perfect zero-bias)
+    //   accel Z: ≈ 0.5 normalized = 1.0g at ±2g scale (gravity vector)
+    //
+    // Body-to-visualizer frame remap: swap Y↔Z on both gyro AND accel.
+    // The Steam Controller's IMU body frame has +Z pointing up (gravity
+    // reads as +1g on body-Z when flat face-up). The visualizer's
+    // SensorFusion expects gravity along world +Y (Three.js "Y up"
+    // convention, same as DualSense). Swapping Y and Z on accel moves
+    // gravity to body-Y so fusion converges to identity at rest instead
+    // of slerping for ~5 seconds. The matching swap on gyro keeps
+    // rotations consistent: physical roll (rotation about body Y, which
+    // becomes body Z after swap) maps to visualizer roll axis; physical
+    // yaw (body Z → body Y after swap) maps to visualizer yaw axis.
+    const gyro = {
+      x: r(data, 39),
+      y: r(data, 43),
+      z: -r(data, 41),
     };
-
+    const accel = {
+      x: r(data, 33),
+      y: r(data, 37),
+      z: -r(data, 35),
+    };
 
     return {
       sticks,
@@ -408,11 +417,10 @@ export class SteamControllerDriver extends ControllerDriver {
       paddles,
       touchpad,
       touchpadButton: false,
-      gyro: null,
-      accel: null,
-      orientation,
-      gyroScale: 2000.0 / 32768.0,
-      accelScale: 1.0 / 8192.0,
+      gyro,
+      accel,
+      gyroScale: 2000.0 / 32768.0,  // ±2000 dps, 16-bit
+      accelScale: 1.0 / 16384.0,    // ±2g, 16-bit (gravity ≈ 16384)
     };
   }
 
