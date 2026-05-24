@@ -1,94 +1,154 @@
 // ============================================================
-// CONTROLLER REGISTRY — auto-detection, driver lookup, connection
+// CONTROLLER REGISTRY — DEVICES-dictionary-backed lookup + connect
 // ============================================================
+//
+// All identity (vid, pid, name, capability flags, gamepad-id patterns,
+// quirks) lives in ../devices.js. This file only provides the lookup
+// surface that callers use: getEntry / getDriver / identifyFromGamepadId
+// / getGamepadQuirks / getHIDFilters / findApprovedDevice / connect.
+//
+// To add a new controller that speaks an existing protocol: add an entry
+// to DEVICES. To add a new protocol: write a driver class under ./ and
+// register it in the PROTOCOLS map in devices.js.
 
-import { DualSenseDriver } from './dualsense-driver.js';
-import { SwitchProDriver } from './switch-pro-driver.js';
-import { XboxDriver } from './xbox-driver.js';
-
-const DRIVERS = [DualSenseDriver, SwitchProDriver, XboxDriver];
+import { DEVICES, PROTOCOLS } from '../devices.js';
 
 export class ControllerRegistry {
 
   /**
-   * Find a driver class by vendor + product ID.
-   * @returns {typeof ControllerDriver|null}
+   * Find the primary (first-registered) dictionary entry for a vid:pid.
+   * When multiple entries share a vid:pid (clones spoofing another's USB
+   * identity), this returns whichever was declared first — the convention
+   * is that the "real" Sony/Nintendo/etc. entry is first, with clones
+   * after. Callers that need to present a chooser should use
+   * `getAllEntries` instead.
+   *
+   * @param {number} vendorId
+   * @param {number} productId
+   * @returns {object|null}
    */
-  static getDriver(vendorId, productId) {
-    for (const D of DRIVERS) {
-      if (D.vendorId === vendorId && D.productIds.includes(productId)) return D;
+  static getEntry(vendorId, productId) {
+    for (const e of DEVICES) {
+      if (e.vendorId === vendorId && e.productId === productId) return e;
     }
     return null;
   }
 
   /**
-   * Build WebHID filter array for requestDevice().
-   * Only includes drivers that have at least one WebHID capability (gyro, accel, touchpad).
-   * @returns {Array<{vendorId: number, productId: number, usagePage: number, usage: number}>}
+   * Return EVERY dictionary entry matching a vid:pid. Used by the Test
+   * Report wizard's spoof picker so the user can tell us "this 054c:09cc
+   * is actually a GameSir Super Nova, not a real Sony DS4 v2" — vital
+   * because we can't auto-distinguish at the USB level.
+   *
+   * @param {number} vendorId
+   * @param {number} productId
+   * @returns {object[]}
+   */
+  static getAllEntries(vendorId, productId) {
+    return DEVICES.filter(e => e.vendorId === vendorId && e.productId === productId);
+  }
+
+  /**
+   * Find the driver class for a vid:pid. Returns the protocol implementation
+   * (DualSenseDriver, SwitchProDriver, etc.) or null.
+   * @returns {typeof ControllerDriver|null}
+   */
+  static getDriver(vendorId, productId) {
+    const entry = ControllerRegistry.getEntry(vendorId, productId);
+    return entry ? (PROTOCOLS[entry.protocol] || null) : null;
+  }
+
+  /**
+   * Build WebHID filter array for navigator.hid.requestDevice(). Only
+   * includes entries with at least one WebHID capability (gyro, accel,
+   * touchpad) — adding usage-less devices like Xbox stubs would pull in
+   * non-gamepad HID devices from the same vendor.
+   *
+   * Default filter shape is bare vendor+product. Protocols that need a
+   * tighter filter (e.g. DualSense limits to the gamepad usage page so
+   * the picker doesn't list the audio interface) override `makeHidFilter`
+   * on their driver class.
    */
   static getHIDFilters() {
     const filters = [];
-    for (const D of DRIVERS) {
-      const caps = D.capabilities;
+    for (const entry of DEVICES) {
+      const caps = entry.capabilities;
       if (!caps.gyro && !caps.accel && !caps.touchpad) continue;
-      filters.push(...D.hidFilters);
+      const Driver = PROTOCOLS[entry.protocol];
+      if (!Driver) continue;
+      filters.push(Driver.makeHidFilter(entry.vendorId, entry.productId));
     }
     return filters;
   }
 
   /**
-   * Identify a controller from the Gamepad API id string.
-   * @param {string} idString — e.g. "DualSense Wireless Controller"
-   * @returns {{ driverName: string, hasGyro: boolean, hasTouchpad: boolean, hasAccel: boolean }|null}
+   * Identify a controller from the Gamepad API id string. Walks DEVICES
+   * in two passes: variants first (entries with a `gamepadIdMatch`
+   * secondary filter), then defaults. Variants-first is what lets a
+   * specific entry (e.g. GameSir Cyclone) claim a Gamepad-API id before
+   * the broader entry it shares vid:pid with (Switch Pro) sees it.
+   *
+   * @param {string} idString
+   * @returns {{ driverName: string, protocol: string, hasGyro: boolean, hasTouchpad: boolean, hasAccel: boolean }|null}
    */
   static identifyFromGamepadId(idString) {
     if (!idString) return null;
-    for (const D of DRIVERS) {
-      if (D.gamepadIdPattern.test(idString)) {
-        const caps = D.capabilities;
-        return {
-          driverName: D.driverName,
-          hasGyro: caps.gyro,
-          hasTouchpad: caps.touchpad,
-          hasAccel: caps.accel
-        };
-      }
+
+    const toResult = (entry) => ({
+      driverName: entry.name,
+      protocol: entry.protocol,
+      hasGyro: entry.capabilities.gyro,
+      hasTouchpad: entry.capabilities.touchpad,
+      hasAccel: entry.capabilities.accel,
+    });
+
+    // Pass 1: variants — must satisfy both primary AND secondary patterns
+    for (const entry of DEVICES) {
+      if (!entry.gamepadIdMatch) continue;
+      if (!entry.gamepadIdPattern.test(idString)) continue;
+      if (!entry.gamepadIdMatch.test(idString)) continue;
+      return toResult(entry);
+    }
+    // Pass 2: defaults — entries with no secondary filter
+    for (const entry of DEVICES) {
+      if (entry.gamepadIdMatch) continue;
+      if (!entry.gamepadIdPattern.test(idString)) continue;
+      return toResult(entry);
     }
     return null;
   }
 
   /**
-   * Return per-id quirk flags by dispatching to each registered driver's
-   * `getGamepadQuirks(idString)`. Used so callers that care about
-   * device variants (GameSir Cyclone's swapped A/B, future quirks)
-   * don't have to re-implement the id pattern checks themselves.
+   * Merged per-id quirk flags. Walks DEVICES, returns the union of `quirks`
+   * from every entry whose patterns match the id string. Used so consumers
+   * with device variants (GameSir Cyclone's swapped A/B, future quirks)
+   * don't re-implement the id pattern checks themselves.
    *
-   * @param {string} idString — gamepad.id from the Gamepad API
-   * @returns {{ swapAB?: boolean }} merged quirks — `{}` when none apply
+   * @param {string} idString
+   * @returns {{ swapAB?: boolean }}
    */
   static getGamepadQuirks(idString) {
     if (!idString) return {};
     const out = {};
-    for (const D of DRIVERS) {
-      const q = D.getGamepadQuirks(idString);
-      if (q) Object.assign(out, q);
+    for (const entry of DEVICES) {
+      if (!entry.quirks) continue;
+      if (!entry.gamepadIdPattern.test(idString)) continue;
+      if (entry.gamepadIdMatch && !entry.gamepadIdMatch.test(idString)) continue;
+      Object.assign(out, entry.quirks);
     }
     return out;
   }
 
-  /**
-   * Check if a given HID device matches any registered driver with WebHID capabilities.
-   * @param {HIDDevice} device
-   * @returns {boolean}
-   */
+  /** True if the device's vid:pid is known to the dictionary. */
   static isKnownDevice(device) {
-    return !!ControllerRegistry.getDriver(device.vendorId, device.productId);
+    return !!ControllerRegistry.getEntry(device.vendorId, device.productId);
   }
 
   /**
    * Find a previously-approved device from navigator.hid.getDevices()
-   * that matches any registered driver with the requested capability.
-   * @param {string} capability — 'gyro', 'accel', or 'touchpad'
+   * that matches a known entry with the requested capability.
+   *
+   * @param {string} capability — 'gyro' | 'accel' | 'touchpad'
    * @param {{vendorId?: number, productId?: number}} [filter] — optional
    *   vendor/product filter so a caller can demand a SPECIFIC physical
    *   device rather than "any approved gyro device" (critical for local
@@ -106,8 +166,8 @@ export class ControllerRegistry {
     const devices = await navigator.hid.getDevices();
     for (const device of devices) {
       if (excludeDevices.length > 0 && excludeDevices.includes(device)) continue;
-      const D = ControllerRegistry.getDriver(device.vendorId, device.productId);
-      if (!D || !D.capabilities[capability]) continue;
+      const entry = ControllerRegistry.getEntry(device.vendorId, device.productId);
+      if (!entry || !entry.capabilities[capability]) continue;
       if (filter) {
         if (filter.vendorId !== undefined && device.vendorId !== filter.vendorId) continue;
         if (filter.productId !== undefined && device.productId !== filter.productId) continue;
@@ -121,8 +181,9 @@ export class ControllerRegistry {
    * Parse the vendor and product IDs out of a Gamepad API `gamepad.id`
    * string. Browsers format these as e.g.
    *   "DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)"
-   * This helper extracts the hex values so callers can pass them as a
-   * filter to findApprovedDevice() or navigator.hid.requestDevice().
+   * Helper for callers that want to pass them as a filter to
+   * findApprovedDevice() or navigator.hid.requestDevice().
+   *
    * @param {string} idString
    * @returns {{vendorId: number, productId: number}|null}
    */
@@ -137,25 +198,32 @@ export class ControllerRegistry {
   }
 
   /**
-   * Connect to an HID device: match the right driver, instantiate, init.
+   * Connect to an HID device: look up the entry, instantiate the protocol
+   * driver, init it. The dictionary entry is attached to the driver instance
+   * as `driver.entry` so consumers can read `driver.entry.name` and
+   * `driver.entry.capabilities` without going back through the registry.
+   *
    * @param {HIDDevice} device
    * @returns {Promise<ControllerDriver>}
-   * @throws {Error} if no matching driver found
+   * @throws {Error} if no matching entry found
    */
   static async connect(device) {
-    const D = ControllerRegistry.getDriver(device.vendorId, device.productId);
-    if (!D) throw new Error('No driver for device ' + device.vendorId.toString(16) + ':' + device.productId.toString(16));
+    const entry = ControllerRegistry.getEntry(device.vendorId, device.productId);
+    if (!entry) {
+      throw new Error('No driver for device ' + device.vendorId.toString(16) + ':' + device.productId.toString(16));
+    }
+    const Driver = PROTOCOLS[entry.protocol];
+    if (!Driver) {
+      throw new Error('Unknown protocol "' + entry.protocol + '" for ' + entry.name);
+    }
 
     if (!device.opened) await device.open();
 
-    const connType = D.detectConnectionType(device);
-    const driver = new D(device, connType);
+    const connType = Driver.detectConnectionType(device);
+    const driver = new Driver(device, connType, entry);
     await driver.init();
 
-    console.log('Controller connected:', D.driverName, '(' + connType + ')', device.productName);
+    console.log('Controller connected:', entry.name, '(' + connType + ')', device.productName);
     return driver;
   }
-
-  /** @returns {Array<typeof ControllerDriver>} all registered drivers */
-  static get drivers() { return DRIVERS; }
 }

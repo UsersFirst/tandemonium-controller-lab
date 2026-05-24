@@ -4,19 +4,13 @@
 
 import { ControllerDriver } from './base-driver.js';
 
+// Identity (vid:pid, name, capabilities, gamepad-id pattern) lives in
+// devices.js — this class is the DualSense/DualShock 4 protocol only.
+
 export class DualSenseDriver extends ControllerDriver {
 
-  static get vendorId() { return 0x054c; }
-  static get productIds() { return [0x0ce6, 0x0df2, 0x05c4, 0x09cc]; }
-  static get driverName() { return 'DualSense'; }
-  static get gamepadIdPattern() { return /playstation|dualsense|dualshock|054c/i; }
-
-  static get capabilities() {
-    return { gyro: true, accel: true, touchpad: true };
-  }
-
-  constructor(device, connectionType) {
-    super(device, connectionType);
+  constructor(device, connectionType, entry = null) {
+    super(device, connectionType, entry);
     this._rumbleStopTimer = null;
   }
 
@@ -44,19 +38,29 @@ export class DualSenseDriver extends ControllerDriver {
   }
 
   parseReport(reportId, data) {
-    // USB 0x01 and BT 0x31 share a common input-report layout, shifted by
-    // one byte: BT prefixes with a sequence/counter byte. baseOffset handles
-    // the shift so everything downstream stays symmetric.
+    // USB 0x01 and BT 0x31 share most of the input-report layout, shifted by
+    // one byte (BT prefixes with a sequence/counter byte). baseOffset handles
+    // the shift. The IMU and touchpad bytes also shift based on protocol
+    // mode: DS4 packs IMU 3 bytes earlier than DualSense (DS5).
+    //
+    // DS4 offsets (mode === 'ds4') tuned empirically against a GameSir Super
+    // Nova which spoofs Sony's `054c:09cc` (DS4 v2) vid:pid. Per the Test
+    // Report capture: at rest, accel Y = 8242 raw at offset 18+2 = exactly
+    // ~1g (8192 raw with the ±4g/16-bit accel scale). Gyro all axes within
+    // ±15 raw of zero at offset 12. Real Sony DS4 may differ by 1 byte
+    // (Linux hid-sony places gyro at byte 13); revisit if a real-Sony user
+    // reports off-by-1 IMU, ideally via another wizard capture for diff.
     let baseOffset, gyroOffset, touchOffset;
+    const isDs4 = this.entry?.mode === 'ds4';
 
     if (this.connectionType === 'usb' && reportId === 0x01) {
       baseOffset = 0;
-      gyroOffset = 15;
-      touchOffset = 32;
+      gyroOffset = isDs4 ? 12 : 15;
+      touchOffset = isDs4 ? 35 : 32;
     } else if (this.connectionType === 'bluetooth' && reportId === 0x31) {
       baseOffset = 1;
-      gyroOffset = 16;
-      touchOffset = 33;
+      gyroOffset = isDs4 ? 13 : 16;   // +1 from USB for BT counter prefix
+      touchOffset = isDs4 ? 36 : 33;
     } else {
       return null;
     }

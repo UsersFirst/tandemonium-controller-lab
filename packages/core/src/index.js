@@ -30,3 +30,6 @@ export { ControllerRegistry } from './drivers/controller-registry.js';
 export { DualSenseDriver } from './drivers/dualsense-driver.js';
 export { SwitchProDriver } from './drivers/switch-pro-driver.js';
 export { XboxDriver } from './drivers/xbox-driver.js';
+export { SteamControllerDriver } from './drivers/steam-controller-driver.js';
+
+export { DEVICES, PENDING_DEVICES, PROTOCOLS } from './devices.js';

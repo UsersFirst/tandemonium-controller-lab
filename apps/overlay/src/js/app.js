@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { ControllerOverlay, detectControllerType, PROFILES, GyroGimbal } from '@usersfirst/controller-visualizer';
 import { ControllerRegistry, SensorFusion } from '@usersfirst/controller-core';
+import { recordStep, buildReport, exportReport, stepsForEntry } from './test-report.js';
 
 // ── DOM refs ──
 const canvas = document.getElementById('canvas');
@@ -346,12 +347,12 @@ async function bootstrapFromHID() {
     return;
   }
   for (const d of devices) {
-    const drv = ControllerRegistry.getDriver(d.vendorId, d.productId);
-    if (!drv || !drv.capabilities.gyro) continue;
+    const entry = ControllerRegistry.getEntry(d.vendorId, d.productId);
+    if (!entry || !entry.capabilities.gyro) continue;
     console.log('bootstrapFromHID: found', d.productName,
       'vid:' + d.vendorId.toString(16), 'pid:' + d.productId.toString(16));
     const stub = {
-      id: d.productName || drv.driverName,
+      id: d.productName || entry.name,
       index: -1,
       axes: [0, 0, 0, 0],
       buttons: Array.from({ length: 18 }, () => ({ pressed: false, value: 0 })),
@@ -532,8 +533,8 @@ async function connectControllerGyro() {
     const granted = await navigator.hid.getDevices();
     console.log('connectControllerGyro: getDevices returned', granted.length, 'device(s)');
     for (const d of granted) {
-      const drv = ControllerRegistry.getDriver(d.vendorId, d.productId);
-      if (drv && drv.capabilities.gyro) {
+      const entry = ControllerRegistry.getEntry(d.vendorId, d.productId);
+      if (entry && entry.capabilities.gyro) {
         device = d;
         console.log('connectControllerGyro: found granted device:', d.productName);
         break;
@@ -1301,6 +1302,317 @@ if (window.electronAPI) {
     settingsPanel.classList.toggle('visible');
   });
 }
+
+// ────────────────────────────────────────────────────────────
+// TEST REPORT — guided HID capture wizard
+// ────────────────────────────────────────────────────────────
+//
+// The button opens a modal that walks the user through eight scripted
+// capture steps (defined in test-report.js). For each step we tap the
+// inputreport stream of `hidDevice` for the step's duration, then
+// assemble a JSON document at the end and hand it to Electron's save
+// dialog. Lives in app.js (not a separate module) only because the
+// wizard needs access to the connected hidDevice + controllerDriver,
+// which are renderer-scoped state.
+
+(function wireTestReport() {
+  const btn = document.getElementById('btn-capture-report');
+  const modal = document.getElementById('test-report-modal');
+  const titleEl = document.getElementById('tr-step-title');
+  const promptTitleEl = document.getElementById('tr-step-prompt-title');
+  const promptEl = document.getElementById('tr-step-prompt');
+  const progressEl = document.getElementById('tr-progress');
+  const deviceLineEl = document.getElementById('tr-device-line');
+  const statusEl = document.getElementById('tr-status');
+  const cancelBtn = document.getElementById('tr-cancel');
+  const skipBtn = document.getElementById('tr-skip');
+  const primaryBtn = document.getElementById('tr-primary');
+  const aliasRow = document.getElementById('tr-alias-row');
+  const aliasInput = document.getElementById('tr-alias');
+  const noteInput = document.getElementById('tr-note');
+
+  if (!btn) return; // markup missing — fail quietly so we don't break the rest of the overlay
+
+  let state = null; // { stepIndex, results, cancelled }
+
+  function setStatus(msg, level = '') {
+    statusEl.className = 'status' + (level ? ' ' + level : '');
+    statusEl.textContent = msg;
+  }
+  function showDeviceLine() {
+    if (!hidDevice) { deviceLineEl.textContent = ''; return; }
+    const vid = hidDevice.vendorId.toString(16).padStart(4, '0');
+    const pid = hidDevice.productId.toString(16).padStart(4, '0');
+    deviceLineEl.innerHTML = `<strong>device</strong> ${hidDevice.productName || '(unnamed)'} &nbsp; <strong>vid:pid</strong> ${vid}:${pid}`;
+  }
+  // ── Spoof-picker phase ──
+  // When the connected vid:pid matches multiple dictionary entries
+  // (typically a real Sony/Nintendo and one or more clones spoofing the
+  // same USB identity), show the user a chooser so we record which
+  // physical pad is plugged in. Also lets the user opt into "Unknown
+  // controller" for pads that aren't in the dictionary yet.
+  function showPicker(entries) {
+    titleEl.textContent = 'Which controller is this?';
+    promptTitleEl.textContent = `Multiple known controllers report vid:pid ${hidDevice.vendorId.toString(16).padStart(4,'0')}:${hidDevice.productId.toString(16).padStart(4,'0')}`;
+    let html = '<p style="color:#ccc; margin-bottom:10px;">We can\'t auto-distinguish these at the USB level. Pick the one you actually have plugged in:</p>';
+    for (const e of entries) {
+      const spoofNote = e.spoofs ? ` <span style="color:#fa6;">(clone of ${e.spoofs.of})</span>` : '';
+      const noteLine = e.notes ? `<div style="color:#888;font-size:11px;margin-top:2px;">${e.notes}</div>` : '';
+      html += `<button class="tr-picker-btn" data-entry-name="${e.name.replace(/"/g, '&quot;')}" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#eee;cursor:pointer;font-size:12px;">
+        <strong>${e.name}</strong>${spoofNote}
+        ${noteLine}
+      </button>`;
+    }
+    html += `<button class="tr-picker-btn" data-entry-name="__unknown__" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:10px;background:rgba(255,255,255,0.04);border:1px dashed rgba(255,255,255,0.18);border-radius:6px;color:#bbb;cursor:pointer;font-size:12px;font-style:italic;">
+      <strong>Unknown / something else</strong>
+      <div style="color:#888;font-size:11px;margin-top:2px;font-style:normal;">Use this if you don't recognize any of the above — runs the full step list and labels the report as unknown.</div>
+    </button>`;
+    promptEl.innerHTML = html;
+    progressEl.style.width = '0%';
+    aliasRow.style.display = 'none';
+    skipBtn.style.display = 'none';
+    primaryBtn.style.display = 'none';      // picker uses inline buttons
+    setStatus('');
+    state.phase = 'pick-device';
+    // Wire each option to selectEntry()
+    promptEl.querySelectorAll('.tr-picker-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        const pickedName = b.getAttribute('data-entry-name');
+        const picked = pickedName === '__unknown__'
+          ? null
+          : entries.find(x => x.name === pickedName);
+        selectEntry(picked);
+      });
+    });
+  }
+
+  function selectEntry(entry) {
+    state.entry = entry;
+    state.activeSteps = entry ? stepsForEntry(entry) : stepsForEntry(null);
+    primaryBtn.style.display = '';
+    showStep(0);
+  }
+
+  function showStep(idx) {
+    const step = state.activeSteps[idx];
+    const total = state.activeSteps.length;
+    titleEl.textContent = `Capture HID Report — Step ${idx + 1} of ${total}`;
+    promptTitleEl.textContent = step.title;
+    promptEl.textContent = step.prompt;
+    progressEl.style.width = `${(idx / total) * 100}%`;
+    aliasRow.style.display = 'none';
+    skipBtn.style.display = step.optional ? '' : 'none';
+    primaryBtn.textContent = 'Start';
+    primaryBtn.disabled = false;
+    setStatus('');
+    state.phase = 'step';
+  }
+  function showSummary(savedPath) {
+    titleEl.textContent = 'Capture complete';
+    promptTitleEl.textContent = 'Done';
+    const totalReports = state.results.reduce((n, r) => n + (r.reports?.length || 0), 0);
+    promptEl.innerHTML = `Captured <strong>${totalReports}</strong> reports across ${state.results.length} steps.${savedPath ? `<br>Saved to:<br><code style="font-size:11px;color:#9ad;word-break:break-all;">${savedPath}</code>` : ''}`;
+    progressEl.style.width = '100%';
+    skipBtn.style.display = 'none';
+    primaryBtn.textContent = 'Close';
+    primaryBtn.disabled = false;
+  }
+  function close() {
+    modal.classList.remove('visible');
+    aliasRow.style.display = 'none';
+    primaryBtn.style.display = '';   // restore in case picker hid it
+    state = null;
+  }
+
+  // ── Countdown helper: 3-2-1-GO before each step starts recording ──
+  // Gives the user a beat to get into position so the prompt isn't already
+  // ticking while they're still reading it. Returns when "GO" finishes.
+  async function countdown(stepNumber, stepTotal) {
+    for (const n of [3, 2, 1]) {
+      setStatus(`Step ${stepNumber}/${stepTotal} starts in ${n}…`);
+      await new Promise(r => setTimeout(r, 700));
+      if (state.cancelled) return false;
+    }
+    setStatus('GO — recording now.', 'success');
+    return true;
+  }
+
+  async function runCurrentStep() {
+    const step = state.activeSteps[state.stepIndex];
+    primaryBtn.disabled = true;
+    skipBtn.style.display = 'none';
+
+    const ok = await countdown(state.stepIndex + 1, state.activeSteps.length);
+    if (!ok) return;
+
+    // Animate the progress bar across this step's duration + show live count
+    const stepStart = performance.now();
+    const baseProgress = (state.stepIndex / state.activeSteps.length) * 100;
+    const stepShare = (1 / state.activeSteps.length) * 100;
+    let liveCount = 0;
+    const onLive = () => { liveCount++; };
+    hidDevice.addEventListener('inputreport', onLive);
+    const ticker = setInterval(() => {
+      const elapsed = performance.now() - stepStart;
+      const frac = Math.min(1, elapsed / step.durationMs);
+      const secsLeft = Math.max(0, Math.ceil((step.durationMs - elapsed) / 1000));
+      progressEl.style.width = `${baseProgress + stepShare * frac}%`;
+      setStatus(`Recording… ${secsLeft}s left · ${liveCount} reports captured`, 'success');
+    }, 100);
+
+    try {
+      const reports = await recordStep(hidDevice, step.durationMs);
+      state.results.push({ step, reports });
+      setStatus(`Captured ${reports.length} reports for "${step.id}". Click Start for the next step.`, 'success');
+    } catch (err) {
+      state.results.push({ step, reports: [], error: err.message });
+      setStatus('Capture failed: ' + err.message, 'error');
+    } finally {
+      clearInterval(ticker);
+      hidDevice.removeEventListener('inputreport', onLive);
+    }
+
+    state.stepIndex++;
+    if (state.cancelled) return; // user clicked Cancel during recording
+    if (state.stepIndex >= state.activeSteps.length) {
+      showNamingPrompt();
+    } else {
+      showStep(state.stepIndex);
+    }
+  }
+
+  // After all steps captured, show a naming prompt so the user can label
+  // the controller (filename + JSON field) and add a free-text note (e.g.
+  // "skipped touchpad — back paddles instead"). Defaults the alias to the
+  // device's productName so a 'just hit Save' flow still produces a
+  // reasonable filename.
+  function showNamingPrompt() {
+    titleEl.textContent = 'Capture complete — name and save';
+    promptTitleEl.textContent = 'Name this controller';
+    promptEl.textContent = `All ${state.results.length} steps captured. Give the controller a short name (used in the filename and embedded in the JSON), optionally add a note, then click Save to choose where to drop the file.`;
+    progressEl.style.width = '100%';
+    deviceLineEl.innerHTML = deviceLineEl.innerHTML; // keep device line visible
+    aliasRow.style.display = '';
+    aliasInput.value = hidDevice.productName || '';
+    noteInput.value = '';
+    skipBtn.style.display = 'none';
+    primaryBtn.textContent = 'Save';
+    primaryBtn.disabled = false;
+    setStatus(`Ready to save. ${state.results.reduce((n, r) => n + (r.reports?.length || 0), 0)} reports across ${state.results.length} steps.`, 'success');
+    state.phase = 'naming';
+    setTimeout(() => aliasInput.focus(), 50);
+  }
+
+  async function finalizeAndExport() {
+    primaryBtn.disabled = true;
+    setStatus('Building report…');
+    const gpId = (() => {
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      for (const gp of pads) {
+        if (!gp) continue;
+        const m = ControllerRegistry.parseGamepadVendorProduct(gp.id);
+        if (m && m.vendorId === hidDevice.vendorId && m.productId === hidDevice.productId) return gp.id;
+      }
+      return null;
+    })();
+    const alias = (aliasInput.value || '').trim() || null;
+    const userNote = (noteInput.value || '').trim() || null;
+    const report = buildReport({
+      device: hidDevice,
+      gamepadId: gpId,
+      connectionType: controllerDriver?.connectionType || null,
+      results: state.results,
+      alias,
+      userNote,
+      pickedEntry: state.entry,   // user's spoof-picker choice (or null)
+    });
+
+    setStatus('Saving report…');
+    let result;
+    try {
+      result = await exportReport(report);
+    } catch (err) {
+      setStatus('Export failed: ' + err.message, 'error');
+      primaryBtn.textContent = 'Close';
+      primaryBtn.disabled = false;
+      state.phase = 'done';
+      return;
+    }
+    if (result.saved) {
+      aliasRow.style.display = 'none';
+      showSummary(result.path);
+      state.phase = 'done';
+    } else if (result.reason === 'cancelled') {
+      // Save dialog cancelled — keep the naming prompt up so they can retry.
+      setStatus('Save cancelled. Edit the name if you like, then click Save again — or Cancel to discard.', 'error');
+      primaryBtn.textContent = 'Save';
+      primaryBtn.disabled = false;
+    } else {
+      setStatus(result.reason || 'Save failed.', 'error');
+      primaryBtn.textContent = 'Save';
+      primaryBtn.disabled = false;
+    }
+  }
+
+  btn.addEventListener('click', () => {
+    if (!hidDevice) {
+      setStatus('No HID device connected. Plug in the controller, click "Gyro: Connect" first, then retry.', 'error');
+      modal.classList.add('visible');
+      titleEl.textContent = 'Capture HID Report';
+      promptTitleEl.textContent = 'No device';
+      promptEl.textContent = 'The wizard needs a connected HID device to tap input reports. Open the gyro flow first to grant WebHID permission, then re-open this dialog.';
+      progressEl.style.width = '0%';
+      deviceLineEl.textContent = '';
+      skipBtn.style.display = 'none';
+      primaryBtn.textContent = 'Close';
+      return;
+    }
+    state = {
+      stepIndex: 0,
+      results: [],
+      cancelled: false,
+      phase: 'step',
+      entry: null,
+      activeSteps: [],
+    };
+    modal.classList.add('visible');
+    showDeviceLine();
+    // If multiple dictionary entries claim this vid:pid (clone spoofing),
+    // ask the user which one is plugged in before running the wizard.
+    const allEntries = ControllerRegistry.getAllEntries(hidDevice.vendorId, hidDevice.productId);
+    if (allEntries.length > 1) {
+      showPicker(allEntries);
+    } else {
+      selectEntry(allEntries[0] || null);  // null = unknown controller, all steps
+    }
+  });
+
+  primaryBtn.addEventListener('click', () => {
+    if (!state) { close(); return; }
+    if (state.phase === 'pick-device') return;  // picker uses inline buttons
+    if (state.phase === 'naming') { finalizeAndExport(); return; }
+    if (state.phase === 'done')   { close(); return; }
+    if (state.stepIndex >= state.activeSteps.length) { close(); return; } // safety
+    runCurrentStep();
+  });
+
+  skipBtn.addEventListener('click', () => {
+    if (!state) return;
+    const step = state.activeSteps[state.stepIndex];
+    state.results.push({ step, reports: [], skipped: true });
+    state.stepIndex++;
+    if (state.stepIndex >= state.activeSteps.length) {
+      showNamingPrompt();
+    } else {
+      showStep(state.stepIndex);
+    }
+  });
+
+  cancelBtn.addEventListener('click', () => {
+    if (state) state.cancelled = true;
+    close();
+  });
+})();
 
 // ── Start ──
 updateRemapUI(); // populate combo labels from saved/default settings

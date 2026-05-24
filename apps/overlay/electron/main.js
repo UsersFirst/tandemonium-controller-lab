@@ -1,5 +1,6 @@
-const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 // Handle Squirrel.Windows install/update/uninstall events. When the Squirrel
 // installer launches the app with --squirrel-install / --squirrel-updated /
@@ -116,6 +117,26 @@ app.whenReady().then(() => {
 
   // Handle quit from renderer
   ipcMain.on('quit-app', () => app.quit());
+
+  // Test Report export — renderer hands us the JSON string and a suggested
+  // filename; we pop a native save dialog and write the file. Returning
+  // { saved, path?, reason? } lets the renderer update its UI accordingly.
+  ipcMain.handle('save-test-report', async (_event, { json, suggestedName }) => {
+    try {
+      const result = await dialog.showSaveDialog(mainWindow, {
+        title: 'Save Controller Test Report',
+        defaultPath: suggestedName || 'controller-test-report.json',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+      if (result.canceled || !result.filePath) {
+        return { saved: false, reason: 'cancelled' };
+      }
+      fs.writeFileSync(result.filePath, json, 'utf8');
+      return { saved: true, path: result.filePath };
+    } catch (err) {
+      return { saved: false, reason: 'error: ' + err.message };
+    }
+  });
 
   // Global shortcut: Ctrl+Shift+T to toggle click-through
   globalShortcut.register('CommandOrControl+Shift+T', toggleClickThrough);
