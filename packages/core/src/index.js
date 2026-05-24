@@ -27,7 +27,7 @@ export {
 
 export { ControllerDriver } from './drivers/base-driver.js';
 export { ControllerRegistry } from './drivers/controller-registry.js';
-export { DualSenseDriver } from './drivers/dualsense-driver.js';
+export { PlayStationDriver } from './drivers/playstation-driver.js';
 export { SwitchProDriver } from './drivers/switch-pro-driver.js';
 export { XboxDriver } from './drivers/xbox-driver.js';
 export { SteamControllerDriver } from './drivers/steam-controller-driver.js';
