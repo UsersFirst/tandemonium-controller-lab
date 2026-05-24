@@ -76,13 +76,19 @@ controls.mouseButtons = {
 };
 controls.enablePan = true;
 
-// Studio-style lighting matching the controller overlay so the GLB
-// renders with the same surface contrast you see in the main app.
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(2, 3, 2); scene.add(key);
-const front = new THREE.DirectionalLight(0xffffff, 0.8); front.position.set(0, 1, 3); scene.add(front);
-const fill = new THREE.DirectionalLight(0xb0c4de, 0.5); fill.position.set(-2, 1, -1); scene.add(fill);
-const rim = new THREE.DirectionalLight(0xffffff, 0.3); rim.position.set(0, -1, -2); scene.add(rim);
+// Lighting tuned for SURFACE DETAIL (not pretty product shots):
+//  - Low ambient so unlit faces stay dark and shadow contrast shows
+//    the body's curves + button reliefs.
+//  - HemisphereLight provides a sky/ground gradient that fills shadows
+//    softly without flattening everything to uniform brightness.
+//  - One strong key directional gives crisp shadow direction.
+//  - One opposing fill keeps the shadow side from going pitch black.
+scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+scene.add(new THREE.HemisphereLight(0xddeeff, 0x222226, 0.6));
+const key = new THREE.DirectionalLight(0xffffff, 1.6);
+key.position.set(2, 3, 2); scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff, 0.4);
+fill.position.set(-2, -1, -1); scene.add(fill);
 
 // ── State ──
 // Brighter default so the standard lighting actually shows surface
@@ -164,10 +170,17 @@ function setupMesh(gltfScene) {
   const center = new THREE.Vector3();
   geo.boundingBox.getCenter(center);
 
+  // flatShading = true uses each triangle's face normal (not the
+  // interpolated vertex normals), so every face renders with a
+  // distinct shade based on its angle to the lights. That's exactly
+  // what we need for region planning — each face becomes visually
+  // distinguishable, and the controller body's curves + button reliefs
+  // pop into view instead of blending into a uniform silhouette.
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    roughness: 0.55,
-    metalness: 0.1,
+    roughness: 0.7,
+    metalness: 0.0,
+    flatShading: true,
     side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geo, mat);
