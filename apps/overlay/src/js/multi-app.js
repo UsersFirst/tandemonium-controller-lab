@@ -250,8 +250,8 @@ function renderSlotDiagnostics(view, pads) {
   if (hid) {
     lines.push(`<span class="k">product  </span> <span class="v">${esc(hid.productName || '(unnamed)')}</span>`);
     lines.push(`<span class="k">vid:pid  </span> <span class="v">${hex4(hid.vendorId)}:${hex4(hid.productId)}</span>`);
-    lines.push(`<span class="k">driver   </span> <span class="ok">${esc(driver?.constructor?.driverName || '?')}</span>  <span class="k">conn</span> <span class="v">${esc(driver?.connectionType || '?')}</span>`);
-    const caps = driver?.constructor?.capabilities || {};
+    lines.push(`<span class="k">driver   </span> <span class="ok">${esc(driver?.entry?.name || '?')}</span>  <span class="k">conn</span> <span class="v">${esc(driver?.connectionType || '?')}</span>`);
+    const caps = driver?.entry?.capabilities || {};
     lines.push(`<span class="k">caps     </span> gyro=${caps.gyro} accel=${caps.accel} touchpad=${caps.touchpad}`);
     const gyroOk = s.fusion && s.fusion._lastGyroTime > 0 && !s.fusion.calibrating;
     lines.push(`<span class="k">gyro     </span> ${gyroOk ? '<span class="ok">integrating</span>' : (s.fusion?.calibrating ? '<span class="warn">calibrating…</span>' : '<span class="warn">idle</span>')}`);

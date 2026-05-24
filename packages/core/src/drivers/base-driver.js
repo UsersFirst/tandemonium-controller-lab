@@ -1,68 +1,49 @@
 // ============================================================
-// BASE CONTROLLER DRIVER — abstract interface for WebHID controllers
+// BASE CONTROLLER DRIVER — protocol-implementation interface
 // ============================================================
+//
+// Drivers are pure protocol implementations: parse HID reports, run any
+// init handshakes, expose the connection type. Identity (vid:pid, name,
+// capabilities, gamepad-id patterns, quirks) lives in ../devices.js;
+// the dictionary entry is passed to the constructor and stored on the
+// instance as `this.entry` for consumers that need to display the name
+// or check capabilities.
 
 export class ControllerDriver {
   /**
    * @param {HIDDevice} device — the WebHID device
-   * @param {string} connectionType — 'usb' or 'bluetooth'
+   * @param {string} connectionType — 'usb' | 'bluetooth'
+   * @param {object} [entry] — dictionary entry from devices.js (name,
+   *   capabilities, mode, quirks, ...). Optional so drivers can still be
+   *   instantiated directly in tests, but the registry always passes it.
    */
-  constructor(device, connectionType) {
+  constructor(device, connectionType, entry = null) {
     this.device = device;
     this.connectionType = connectionType;
+    this.entry = entry;
   }
 
-  // ── Identity (override in subclass) ──
-
-  /** @returns {number} USB vendor ID */
-  static get vendorId() { return 0; }
-
-  /** @returns {number[]} USB product IDs */
-  static get productIds() { return []; }
-
-  /** @returns {string} Human-readable name */
-  static get driverName() { return 'Unknown'; }
-
-  /** @returns {RegExp} Pattern to match Gamepad API id string */
-  static get gamepadIdPattern() { return /^$/; }
+  // ── HID filter shape (override per protocol if needed) ──
 
   /**
-   * Per-id quirk flags. Override in subclasses that need to flag device
-   * variants enumerating with the same vid:pid as the base controller but
-   * with different runtime behavior (e.g. GameSir Cyclone enumerates as
-   * Switch Pro but uses Nintendo A/B button ordering).
+   * Build the filter object passed to navigator.hid.requestDevice() for
+   * a given vid:pid. Default: vendor+product+gamepad usage page (so the
+   * picker only lists the gamepad interface, hiding e.g. the audio
+   * interface on DualSense). Protocols whose Gamepad-API interface is
+   * claimed exclusively (Switch Pro on macOS Chrome) should override
+   * to return just `{ vendorId, productId }`.
    *
-   * @param {string} idString — gamepad.id from the Gamepad API
-   * @returns {{ swapAB?: boolean }} quirks — empty object when none apply
+   * @param {number} vendorId
+   * @param {number} productId
+   * @returns {{vendorId: number, productId: number, usagePage?: number, usage?: number}}
    */
-  static getGamepadQuirks(_idString) { return {}; }
-
-  // ── Capabilities (override in subclass) ──
-
-  static get capabilities() {
-    return { gyro: false, accel: false, touchpad: false };
-  }
-
-  /**
-   * HID filters for requestDevice(). Override per driver if needed.
-   * Default: vendorId + productId + gamepad usage page.
-   * @returns {Array<{vendorId: number, productId: number, usagePage?: number, usage?: number}>}
-   */
-  static get hidFilters() {
-    return this.productIds.map(productId => ({
-      vendorId: this.vendorId,
-      productId,
-      usagePage: 0x0001,
-      usage: 0x0005
-    }));
+  static makeHidFilter(vendorId, productId) {
+    return { vendorId, productId, usagePage: 0x0001, usage: 0x0005 };
   }
 
   // ── Lifecycle ──
 
-  /**
-   * Send any init commands needed (e.g., Switch Pro IMU enable).
-   * No-op by default.
-   */
+  /** Send any init commands needed (e.g., Switch Pro IMU enable). No-op by default. */
   async init() {}
 
   /** Clean up event listeners. */
