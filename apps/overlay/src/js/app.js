@@ -768,7 +768,13 @@ async function connectControllerGyro() {
   showGyroHud();
   console.log('Gyro connected:', device.productName);
 
-  startCalibration();
+  // Skip calibration for drivers that don't emit raw gyro rates (e.g.
+  // Steam Controller, whose IMU is a quaternion that the rate-based
+  // calibration pipeline can't consume — leaving calibrating=true would
+  // hang the "Calibrating…" hint forever waiting for samples).
+  if (controllerDriver.constructor.emitsRawGyro !== false) {
+    startCalibration();
+  }
 
   // The driver's init() has run an IMU-layout probe (PlayStation family
   // only, for now) and set _detectedImuFamily if a wire-level signature

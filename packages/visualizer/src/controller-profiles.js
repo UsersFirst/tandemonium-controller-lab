@@ -269,6 +269,14 @@ export const PROFILES = {
     accentColorMeshes: [],
     defaultBodyColor: '#ffffff',
     defaultAccentColor: '#ffffff',
+    // Xbox-style face labels (printed on the pad). Steam button at 16,
+    // View/Menu at 8/9. No 17 (no equivalent of mute/capture on this
+    // pad — back paddles surface via parsed.paddles instead).
+    hudLabels: {
+      0: 'A',  1: 'B',  2: 'X',  3: 'Y',
+      4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT',
+      8: 'Vw', 9: 'Mn', 16: 'St', 17: '',
+    },
   },
 };
 
