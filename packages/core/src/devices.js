@@ -195,6 +195,10 @@ export const PENDING_DEVICES = [
     capabilities: NO_CAPS,       // bump when WebHID features land
     features: { faceButtons: true, systemButtons: true, triggers: 'analog', shoulders: true, sticks: 2, dpad: false, gyro: true, accel: true, touchpad: true, backPaddles: true, lightbar: false, rumble: true },
     gamepadIdPattern: STEAM_ID,
-    note: 'Identity-only stub. Real Steam Input HID parsing (gyro, trackpad, back paddles) lives in a follow-up.',
+    // Visualizer model + attribution already shipped — when the real pid
+    // is captured and this entry is promoted to DEVICES, no further
+    // visualizer changes are needed.
+    controllerProfile: 'steam-controller',
+    note: 'Identity-only stub. Real Steam Input HID parsing (gyro, trackpad, back paddles) lives in a follow-up. Visualizer GLB is derived from Valve\'s CC BY-NC-SA-licensed CAD release; see packages/visualizer/assets/controllers/STEAM_CONTROLLER_ATTRIBUTION.md.',
   },
 ];
