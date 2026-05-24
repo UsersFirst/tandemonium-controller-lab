@@ -1,13 +1,23 @@
 // ============================================================
-// DUALSENSE / DUALSHOCK 4 DRIVER
+// PLAYSTATION DRIVER — DualSense (DS5) + DualShock 4 (DS4) protocol
 // ============================================================
+//
+// Covers both Sony PlayStation HID protocols and any clones that spoof
+// them (GameSir Super Nova / Cyclone 2 in DS4 mode, etc.). The two
+// protocols share most of the input-report layout, differing mainly in
+// IMU byte offsets — that branch is driven by the dictionary entry's
+// `mode` field ('ds5' vs 'ds4'), not by a separate driver class.
+//
+// Registered in PROTOCOLS under the key 'dualsense' (preserved as-is so
+// existing visualizer profile mappings keep working without forcing a
+// controllerProfile override on every Sony PlayStation entry).
+//
+// Identity (vid:pid, name, capabilities, gamepad-id pattern) lives in
+// devices.js — this class is purely the protocol implementation.
 
 import { ControllerDriver } from './base-driver.js';
 
-// Identity (vid:pid, name, capabilities, gamepad-id pattern) lives in
-// devices.js — this class is the DualSense/DualShock 4 protocol only.
-
-export class DualSenseDriver extends ControllerDriver {
+export class PlayStationDriver extends ControllerDriver {
 
   constructor(device, connectionType, entry = null) {
     super(device, connectionType, entry);
@@ -129,8 +139,8 @@ export class DualSenseDriver extends ControllerDriver {
 
     // ── Touchpad — 2 touch points, 4 bytes each ──
     const touchpad = [
-      DualSenseDriver._parseTouchPoint(data, touchOffset),
-      DualSenseDriver._parseTouchPoint(data, touchOffset + 4)
+      PlayStationDriver._parseTouchPoint(data, touchOffset),
+      PlayStationDriver._parseTouchPoint(data, touchOffset + 4)
     ];
 
     // Touchpad click: bit 1 of the PS byte
@@ -394,7 +404,7 @@ export class DualSenseDriver extends ControllerDriver {
     crcInput[0] = 0xA2;
     crcInput[1] = 0x31;
     crcInput.set(buf.subarray(0, PAYLOAD_LEN - 4), 2);
-    const crc = DualSenseDriver._crc32(crcInput);
+    const crc = PlayStationDriver._crc32(crcInput);
     buf[PAYLOAD_LEN - 4] = crc & 0xFF;
     buf[PAYLOAD_LEN - 3] = (crc >>> 8) & 0xFF;
     buf[PAYLOAD_LEN - 2] = (crc >>> 16) & 0xFF;

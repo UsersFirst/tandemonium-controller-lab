@@ -36,7 +36,7 @@ If the vid:pid matches a known controller family, the existing protocol driver p
 
 | Family | Driver class | Examples |
 | --- | --- | --- |
-| PlayStation (DS4 + DS5) | `DualSenseDriver` | DualSense, DualSense Edge, DualShock 4, GameSir Super Nova/Cyclone in DS4 mode |
+| PlayStation (DS4 + DS5) | `PlayStationDriver` | DualSense, DualSense Edge, DualShock 4, GameSir Super Nova/Cyclone in DS4 mode |
 | Nintendo Switch Pro | `SwitchProDriver` | Switch Pro, GameSir Cyclone in Switch mode |
 | Xbox | `XboxDriver` | All Xbox families (Gamepad-API only, no WebHID features) |
 | Steam Controller 2026 | `SteamControllerDriver` | (stub — real HID parsing TBD) |
@@ -87,7 +87,7 @@ This prints:
 >   yaw     gyroY_std=257.2    likely axis: gyro Y
 > ```
 >
-> The "winner" line told us GameSir packs IMU at byte 12/18 — three bytes earlier than Sony's DualSense layout (15/21). That single insight fixed a months-old latent bug: the existing DualSense parser was *also* wrong for real Sony DS4 (which uses the same byte-12 layout), it had only ever been validated against a DualSense (DS5). The fix in [packages/core/src/drivers/dualsense-driver.js](../packages/core/src/drivers/dualsense-driver.js) branches on `entry.mode === 'ds4'` and lights up both clones and real Sony DS4 hardware simultaneously.
+> The "winner" line told us GameSir packs IMU at byte 12/18 — three bytes earlier than Sony's DualSense layout (15/21). That single insight fixed a months-old latent bug: the existing PlayStation parser was *also* wrong for real Sony DS4 (which uses the same byte-12 layout), it had only ever been validated against a DualSense (DS5). The fix in [packages/core/src/drivers/playstation-driver.js](../packages/core/src/drivers/playstation-driver.js) branches on `entry.mode === 'ds4'` and lights up both clones and real Sony DS4 hardware simultaneously.
 
 ## 5 — Update `devices.js`
 

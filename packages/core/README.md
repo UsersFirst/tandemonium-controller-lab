@@ -11,7 +11,7 @@ Vendor-agnostic gamepad drivers, WebHID sensor fusion, and the slot/claim `Contr
 | `@usersfirst/controller-core/sensor-fusion`                | `SensorFusion` (gyro orientation + bias calibration + drift correction)                                  |
 | `@usersfirst/controller-core/drivers/controller-registry`  | Registry lookup (`getEntry`, `getDriver`, `identifyFromGamepadId`, `getGamepadQuirks`, ...)              |
 | `@usersfirst/controller-core/drivers/base-driver`          | Abstract `ControllerDriver` (protocol interface)                                                         |
-| `@usersfirst/controller-core/drivers/dualsense-driver`     | DualSense / DualShock 4 protocol — gyro, accel, touchpad, lightbar                                       |
+| `@usersfirst/controller-core/drivers/playstation-driver`   | PlayStation (DualSense + DualShock 4) protocol — gyro, accel, touchpad, lightbar. Registered under the `'dualsense'` protocol key. |
 | `@usersfirst/controller-core/drivers/switch-pro-driver`    | Switch Pro protocol — IMU enable + gyro                                                                  |
 | `@usersfirst/controller-core/drivers/xbox-driver`          | Xbox identity stub (Gamepad-API only on Chromium; no WebHID capabilities today)                          |
 | `@usersfirst/controller-core/drivers/steam-controller-driver` | Steam Controller 2026 identity stub (placeholder for full Steam Input parsing)                        |
