@@ -41,8 +41,12 @@ All controller identity lives in [`src/devices.js`](./src/devices.js). Driver cl
   gamepadIdPattern: /playstation|dualsense/i,   // primary Gamepad-API matcher
   gamepadIdMatch:   /^Gamepad/i,                // optional secondary filter
   quirks:           { swapAB: true },           // optional runtime hints
+  controllerProfile: 'gamesir-super-nova',      // optional — visualizer GLB key,
+                                                //   defaults to `protocol`
 }
 ```
+
+The `controllerProfile` field decouples the 3D visualizer model from the protocol family. By default an entry uses its `protocol` as the visualizer profile key, so Sony's DualSense/DualShock 4 entries all get the same `dualsense.glb` model. Set it explicitly to point a clone at its own GLB once that asset exists — for example, a GameSir Super Nova entry would set `controllerProfile: 'gamesir-super-nova'` after a corresponding `PROFILES['gamesir-super-nova']` block + GLB file land in the visualizer package. See [`docs/ADDING-A-CONTROLLER.md`](../../docs/ADDING-A-CONTROLLER.md) for the GLB-authoring story.
 
 `identifyFromGamepadId` runs a two-pass walk over `DEVICES`: entries with a `gamepadIdMatch` secondary filter win first, then entries without one act as defaults. That ordering is what lets the GameSir Cyclone (Switch mode) entry claim the Gamepad-API string before the broader Switch Pro entry does — both share vid:pid `057e:2009`, but only Cyclone reports a `gamepad.id` starting with `"Gamepad"`.
 

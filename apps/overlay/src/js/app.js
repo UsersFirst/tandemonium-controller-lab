@@ -302,11 +302,20 @@ async function init() {
 /**
  * Detect what controller is already connected at startup.
  */
+// Resolve the visualizer profile key for a given gamepad. Prefer the
+// dictionary's `controllerProfile` field (so a registered clone with
+// its own GLB wins over the protocol default); fall back to the
+// visualizer's own gamepad.id pattern sniff when no dictionary match.
+function pickControllerProfile(gamepadId) {
+  const info = ControllerRegistry.identifyFromGamepadId(gamepadId);
+  return info?.controllerProfile || detectControllerType(gamepadId);
+}
+
 function detectInitialController() {
   const gamepads = navigator.getGamepads();
   for (let i = 0; i < gamepads.length; i++) {
     if (gamepads[i]) {
-      const type = detectControllerType(gamepads[i].id);
+      const type = pickControllerProfile(gamepads[i].id);
       console.log('Initial controller detected:', type, '(' + gamepads[i].id + ')');
       return type;
     }
@@ -379,7 +388,7 @@ async function switchController(gamepad) {
 
   try {
     const newType = controllerTypeSelect.value === 'auto'
-      ? detectControllerType(gamepad.id)
+      ? pickControllerProfile(gamepad.id)
       : controllerTypeSelect.value;
 
     // Tear down gyro — physical device changed

@@ -483,7 +483,7 @@ export class ControllerManager {
     const gp = candidates[0];
     const info = ControllerRegistry.identifyFromGamepadId(gp.id);
     slot.claim(gp, {
-      controllerTypeHint: info?.protocol || null,
+      controllerTypeHint: info?.controllerProfile || info?.protocol || null,
       silent: true,
     });
     this._attachMatchingPoolEntry(slot);
@@ -641,7 +641,7 @@ export class ControllerManager {
       if (!empty) break;
       const info = ControllerRegistry.identifyFromGamepadId(gp.id);
       empty.claim(gp, {
-        controllerTypeHint: info?.protocol || null,
+        controllerTypeHint: info?.controllerProfile || info?.protocol || null,
         silent: true,
       });
       claimedThisFrame.push(empty.id);
@@ -707,7 +707,7 @@ export class ControllerManager {
       };
       const info = ControllerRegistry.identifyFromGamepadId(pseudoPad.id);
       empty.claim(pseudoPad, {
-        controllerTypeHint: info?.protocol || null,
+        controllerTypeHint: info?.controllerProfile || info?.protocol || null,
         silent: true,
       });
       this._attachEntryToSlot(empty, entry);
