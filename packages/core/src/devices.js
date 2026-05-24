@@ -191,31 +191,61 @@ export const DEVICES = [
   { name: 'Xbox One',               vendorId: 0x045e, productId: 0x02e0, protocol: 'xbox', capabilities: NO_CAPS, features: XBOX_FEATURES, gamepadIdPattern: XBOX_ID },
   { name: 'Xbox 360',               vendorId: 0x045e, productId: 0x028e, protocol: 'xbox', capabilities: NO_CAPS, features: XBOX_FEATURES, gamepadIdPattern: XBOX_ID },
 
-  // ── Steam Controller (2026) — via the Puck wireless dongle ──
-  // vid:pid 28de:1304 identifies the *Puck* (wireless dongle plugged
-  // into USB), NOT the controller body itself. The handheld controller
-  // pairs to the Puck over RF; data forwards through the Puck's HID
-  // interfaces. Captured 2026-05-24 from a real device with Steam not
-  // running — see issue #8 for the full investigation.
+  // ── Steam Controller (2026) — two USB identities for one physical pad ──
   //
-  // capabilities is still NO_CAPS because Chromium's Gamepad API does
-  // not enumerate any of the Puck's 5 HID interfaces (all
-  // vendor-defined, no standard gamepad usage page). The existing
-  // overlay code paths driven by getEntry won't activate this entry
-  // until a Puck-aware code path lands that talks WebHID directly to
-  // iface[3] (reportId 0x45, 53-byte reports — Valve Steam Input HID
-  // variant). Tracked in issue #8 with a per-interface investigation
-  // already done; SteamControllerDriver remains an identity-only stub
-  // until someone writes the parser.
+  // The 2026 Steam Controller exposes two completely different USB
+  // identities depending on how the controller body is connected:
+  //
+  //   0x1302 — controller body plugged directly via USB-C cable.
+  //            Single HID interface. Streams Steam Input HID format
+  //            immediately at ~249 Hz on connect — no mode switch
+  //            needed. THIS IS THE EASY PATH.
+  //
+  //   0x1304 — wireless Puck dongle plugged into USB; controller body
+  //            pairs to it over RF. Five HID interfaces, all
+  //            vendor-defined (no standard gamepad usage page). Puck
+  //            defaults to keyboard+mouse fallback mode — iface[3] is
+  //            silent until a CLEAR_DIGITAL_MAPPINGS feature report is
+  //            sent + repeated every 800ms (the "lizard mode disable"
+  //            handshake documented in ddeverill/SteamlessController and
+  //            libsdl-org/SDL's hidapi_steam.c).
+  //
+  // Both entries point at the same protocol + visualizer profile; the
+  // driver branches on this.device.productId for the Puck-specific init.
+  //
+  // The Gamepad API never enumerates either of these (vendor-defined HID
+  // in both cases). The overlay's HID pool path is what brings them in:
+  // the registry's HID filter list includes them (capabilities are no
+  // longer NO_CAPS so getHIDFilters returns them), they're paired via
+  // navigator.hid.requestDevice on first connect, the manager pools each
+  // approved device, the driver's parseReport runs on each inputreport.
+  // For the Puck, only one of its five interfaces will receive feature
+  // reports successfully; the rest silently no-op (4× ~no-overhead pool
+  // entries that emit no inputreports either).
+  //
+  // See issue #8 for the full investigation: capture timeline, 53-byte
+  // STATE-report layout, prior art survey, the lizard-mode bytes, and
+  // the 0x42-vs-0x45 reportId discrepancy that's resolved at runtime by
+  // the driver (it accepts whichever id the firmware actually emits).
+  {
+    name: 'Steam Controller 2026 (direct USB-C)',
+    vendorId: 0x28de, productId: 0x1302,
+    protocol: 'steam-controller',
+    capabilities: PS_CAPS,
+    features: { faceButtons: true, systemButtons: true, triggers: 'analog', shoulders: true, sticks: 2, dpad: true, gyro: true, accel: true, touchpad: true, backPaddles: true, lightbar: false, rumble: true },
+    gamepadIdPattern: STEAM_ID,
+    controllerProfile: 'steam-controller',
+    notes: 'Controller body plugged in directly over USB-C. One HID interface; Steam Input HID format flows on connect, no mode switch needed. Visualizer GLB is CC BY-NC-SA 4.0; see packages/visualizer/assets/controllers/STEAM_CONTROLLER_ATTRIBUTION.md.',
+  },
   {
     name: 'Steam Controller 2026 (via Puck)',
     vendorId: 0x28de, productId: 0x1304,
     protocol: 'steam-controller',
-    capabilities: NO_CAPS,
-    features: { faceButtons: true, systemButtons: true, triggers: 'analog', shoulders: true, sticks: 2, dpad: false, gyro: true, accel: true, touchpad: true, backPaddles: true, lightbar: false, rumble: true },
+    capabilities: PS_CAPS,
+    features: { faceButtons: true, systemButtons: true, triggers: 'analog', shoulders: true, sticks: 2, dpad: true, gyro: true, accel: true, touchpad: true, backPaddles: true, lightbar: false, rumble: true },
     gamepadIdPattern: STEAM_ID,
     controllerProfile: 'steam-controller',
-    notes: 'Wireless dongle (Puck) vid:pid; controller body pairs over RF and data forwards through iface[3] reportId=0x45 (53-byte reports). Driver parsing TBD — see issue #8. Visualizer GLB is CC BY-NC-SA 4.0; see packages/visualizer/assets/controllers/STEAM_CONTROLLER_ATTRIBUTION.md.',
+    notes: 'Wireless Puck dongle. Driver sends CLEAR_DIGITAL_MAPPINGS feature report on init + every 800ms to keep the controller out of keyboard/mouse fallback. Only one of the Puck\'s 5 HID interfaces (iface[3]) emits 53-byte STATE reports.',
   },
 ];
 
