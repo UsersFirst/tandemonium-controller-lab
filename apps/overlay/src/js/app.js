@@ -1431,6 +1431,14 @@ controllerTypeSelect.addEventListener('change', async (e) => {
       await overlay.setControllerType(e.target.value);
       modelReady = true;
     }
+    // Even when the type didn't change (e.g. user picks the profile the
+    // overlay already loaded by default), force the model visible and
+    // hide the no-controller splash. Manually picking a profile is an
+    // explicit "I want to see this model" — useful for previewing a
+    // controller's GLB without one actually connected (e.g. Steam
+    // Controller, which Chromium's Gamepad API can't enumerate at all).
+    overlay.setVisible(true);
+    noControllerSplash.classList.add('hidden');
   }
 });
 
