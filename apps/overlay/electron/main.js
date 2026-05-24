@@ -156,10 +156,6 @@ app.whenReady().then(() => {
       path.join(__dirname, '..', 'src', 'button-hud-window.html'),
       { query: { profile: profile || '' } }
     );
-    // TEMPORARY: auto-open DevTools on the popout so we can see whether
-    // electronAPI is bound and whether state-update events are arriving.
-    // Remove once popout IPC is confirmed working.
-    buttonHudWindow.webContents.openDevTools({ mode: 'detach' });
     buttonHudWindow.on('closed', () => { buttonHudWindow = null; });
     return { opened: true, alreadyOpen: false };
   });
@@ -178,19 +174,7 @@ app.whenReady().then(() => {
   // having the popout poll its own Gamepad API) sidesteps Chromium's
   // per-document user-activation requirement — the popout would otherwise
   // see all-null gamepads until the user clicked inside its window.
-  let _bhFrameCount = 0;
   ipcMain.on('button-hud-state', (_event, state) => {
-    _bhFrameCount++;
-    // Diagnostic — log first frame received and every ~600 frames after
-    // (~10s at 60Hz) so we can see whether the channel is alive without
-    // flooding stdout.
-    if (_bhFrameCount === 1 || _bhFrameCount % 600 === 0) {
-      const popoutOpen = !!(buttonHudWindow && !buttonHudWindow.isDestroyed());
-      console.log('[ipc] button-hud-state frame#' + _bhFrameCount,
-        'popoutOpen=' + popoutOpen,
-        'buttons=' + (state?.buttons?.length || 0),
-        'axes=' + (state?.axes?.length || 0));
-    }
     if (buttonHudWindow && !buttonHudWindow.isDestroyed()) {
       buttonHudWindow.webContents.send('button-hud-state-update', state);
     }
