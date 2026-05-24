@@ -257,6 +257,9 @@ export const PROFILES = {
     // + tools/split-glb.js. Each named mesh below corresponds to a
     // region the user painted on the source surface. The remaining
     // unpainted faces form a "body" mesh used for the gyro rotation.
+    // Region source-of-truth lives alongside the GLB at
+    // `assets/controllers/steam-controller.regions.json` — see
+    // STEAM_CONTROLLER_ATTRIBUTION.md for the regenerate pipeline.
     model: 'assets/controllers/steam-controller-split.glb',
     name: 'Steam Controller (2026)',
     // Standard Gamepad-API button index → mesh name in the split GLB.
