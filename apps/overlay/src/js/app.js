@@ -205,6 +205,37 @@ function leanColor(t) {
 // Built lazily on first call so the script doesn't crash if the HUD markup
 // is missing for any reason.
 let _bhRefs = null;
+
+/**
+ * Apply the active profile's hudLabels to the in-overlay button HUD so the
+ * labels match the physical controller (Sony shows ✕○□△, Nintendo's
+ * standard-mapped order shows B/A/Y/X, Xbox-style shows A/B/X/Y, etc.).
+ * Falls back to whatever was last in the markup if the profile has no
+ * hudLabels — keeps the default ABXY readout for any profile that hasn't
+ * declared per-vendor glyphs yet.
+ */
+function applyHudLabels(profileKey) {
+  const profile = PROFILES[profileKey];
+  // Forward profile to the popout regardless of whether this profile has
+  // hudLabels — popout uses the profile name + falls back to defaults too.
+  // IPC handler in main is a no-op when no popout is open.
+  if (window.electronAPI?.updateButtonHudProfile) {
+    window.electronAPI.updateButtonHudProfile(profileKey);
+  }
+  if (!profile?.hudLabels) return;
+  const labels = profile.hudLabels;
+  // Buttons: data-btn elements get their textContent swapped to the
+  // profile's label for that gamepad index.
+  document.querySelectorAll('#button-hud [data-btn]').forEach(el => {
+    const idx = Number(el.getAttribute('data-btn'));
+    if (labels[idx] !== undefined) el.textContent = labels[idx];
+  });
+  // Trigger labels live inside the trigger fill containers.
+  const l2Label = document.querySelector('#button-hud [data-trigger="l2"] .bh-trigger-label');
+  const r2Label = document.querySelector('#button-hud [data-trigger="r2"] .bh-trigger-label');
+  if (l2Label && labels[6] !== undefined) l2Label.textContent = labels[6];
+  if (r2Label && labels[7] !== undefined) r2Label.textContent = labels[7];
+}
 function _getButtonHudRefs() {
   if (_bhRefs) return _bhRefs;
   const buttons = {};
@@ -363,6 +394,7 @@ async function init() {
 
   if (hasGamepad) {
     currentControllerType = initialType;
+    applyHudLabels(initialType);
     modelReady = true;
     noControllerSplash.classList.add('hidden');
   } else {
@@ -501,6 +533,7 @@ async function switchController(gamepad) {
     if (newType !== currentControllerType || !overlay.model) {
       modelReady = false;
       currentControllerType = newType;
+      applyHudLabels(newType);
       await overlay.setControllerType(newType);
       console.log('Controller model loaded:', newType);
     }
@@ -732,6 +765,7 @@ function maybeSwapProfileAfterImuProbe() {
   if (desiredProfile !== currentControllerType && overlay) {
     console.log(`IMU probe wants profile '${desiredProfile}' (entry: ${picked.name}); currently '${currentControllerType}' — swapping.`);
     currentControllerType = desiredProfile;
+    applyHudLabels(desiredProfile);
     overlay.setControllerType(desiredProfile);
   }
 }
@@ -1324,6 +1358,7 @@ controllerTypeSelect.addEventListener('change', async (e) => {
     if (type !== currentControllerType) {
       modelReady = false;
       currentControllerType = type;
+      applyHudLabels(type);
       await overlay.setControllerType(type);
       modelReady = true;
     }
@@ -1331,6 +1366,7 @@ controllerTypeSelect.addEventListener('change', async (e) => {
     if (e.target.value !== currentControllerType) {
       modelReady = false;
       currentControllerType = e.target.value;
+      applyHudLabels(e.target.value);
       await overlay.setControllerType(e.target.value);
       modelReady = true;
     }
@@ -1397,6 +1433,7 @@ const showRollHudCheck = document.getElementById('show-roll-hud');
 const showAxisReadoutCheck = document.getElementById('show-axis-readout');
 const showButtonHudCheck = document.getElementById('show-button-hud');
 const buttonHudPositionSelect = document.getElementById('button-hud-position');
+const popoutButtonHudBtn = document.getElementById('popout-button-hud');
 const axPitchVal = document.getElementById('ax-pitch-val');
 const axRollVal = document.getElementById('ax-roll-val');
 const axYawVal = document.getElementById('ax-yaw-val');
@@ -1458,6 +1495,15 @@ showRollHudCheck.addEventListener('change', applyDisplayToggles);
 showAxisReadoutCheck.addEventListener('change', applyDisplayToggles);
 showButtonHudCheck.addEventListener('change', applyDisplayToggles);
 buttonHudPositionSelect.addEventListener('change', applyDisplayToggles);
+// Pop out the Button HUD into its own draggable window. When already open
+// the IPC handler focuses the existing window and re-sends the current
+// profile, so clicking again is harmless.
+if (popoutButtonHudBtn) {
+  popoutButtonHudBtn.addEventListener('click', async () => {
+    if (!window.electronAPI?.openButtonHudWindow) return;
+    await window.electronAPI.openButtonHudWindow(currentControllerType);
+  });
+}
 applyDisplayToggles(); // apply defaults (all unchecked = all hidden)
 
 // Right-click opens settings (needed when gear icon is hidden)

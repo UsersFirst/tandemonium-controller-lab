@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Controller Buttons</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: transparent;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #eee;
+    user-select: none;
+  }
+
+  /* Whole window is draggable so the user can reposition it on any monitor;
+     the close button + HUD interactive bits opt out via no-drag. */
+  #drag-region {
+    position: fixed;
+    inset: 0;
+    -webkit-app-region: drag;
+    z-index: 1;
+  }
+
+  /* Close button — fixed top-right, no-drag so it's clickable */
+  #close-btn {
+    position: fixed;
+    top: 4px; right: 4px;
+    width: 18px; height: 18px;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 50%;
+    color: #ccc;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    z-index: 200;
+    opacity: 0;
+    transition: opacity 120ms linear;
+  }
+  body:hover #close-btn { opacity: 1; }
+  #close-btn:hover { background: rgba(255, 50, 50, 0.6); color: #fff; }
+
+  /* Controller-name banner — bottom-center, only on hover so it doesn't
+     clutter a streaming layout. */
+  #profile-name {
+    position: fixed;
+    left: 0; right: 0; bottom: 2px;
+    text-align: center;
+    color: #888;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 120ms linear;
+  }
+  body:hover #profile-name { opacity: 0.7; }
+
+  /* HUD itself — same look/layout as the in-overlay version. Centered in
+     the window; window can be resized by the user (frame:false but
+     resizable:true in the BrowserWindow config). */
+  #button-hud {
+    position: fixed;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    background: rgba(15, 15, 20, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    -webkit-app-region: no-drag;
+    z-index: 100;
+  }
+  #button-hud .bh-section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  #button-hud .bh-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #999;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    transition: background 60ms linear, color 60ms linear, transform 60ms linear;
+  }
+  #button-hud .bh-btn.bh-sm { width: 20px; height: 16px; font-size: 9px; }
+  #button-hud .bh-btn.bh-dp { width: 18px; height: 18px; font-size: 8px; color: #777; }
+  #button-hud .bh-btn.pressed {
+    background: #3388ff; color: #fff; border-color: #3388ff;
+    transform: scale(1.08);
+    box-shadow: 0 0 6px rgba(51, 136, 255, 0.65);
+  }
+  #button-hud .bh-face-a.pressed { background: #2ec27e; border-color: #2ec27e; box-shadow: 0 0 6px rgba(46,194,126,0.65); }
+  #button-hud .bh-face-b.pressed { background: #ed333b; border-color: #ed333b; box-shadow: 0 0 6px rgba(237,51,59,0.65); }
+  #button-hud .bh-face-x.pressed { background: #3388ff; border-color: #3388ff; box-shadow: 0 0 6px rgba(51,136,255,0.65); }
+  #button-hud .bh-face-y.pressed { background: #f6c343; border-color: #f6c343; color: #222; box-shadow: 0 0 6px rgba(246,195,67,0.65); }
+  #button-hud .bh-dpad { display: grid; grid-template-columns: repeat(3, auto); grid-template-rows: repeat(3, auto); gap: 2px; }
+  #button-hud .bh-dpad .bh-btn:nth-child(1) { grid-area: 1 / 2; }
+  #button-hud .bh-dpad .bh-btn:nth-child(2) { grid-area: 2 / 1; }
+  #button-hud .bh-dpad .bh-btn:nth-child(3) { grid-area: 2 / 3; }
+  #button-hud .bh-dpad .bh-btn:nth-child(4) { grid-area: 3 / 2; }
+  #button-hud .bh-face { display: grid; grid-template-columns: repeat(3, auto); grid-template-rows: repeat(3, auto); gap: 2px; }
+  #button-hud .bh-face .bh-face-y { grid-area: 1 / 2; }
+  #button-hud .bh-face .bh-face-x { grid-area: 2 / 1; }
+  #button-hud .bh-face .bh-face-b { grid-area: 2 / 3; }
+  #button-hud .bh-face .bh-face-a { grid-area: 3 / 2; }
+  .bh-main { display: flex; gap: 12px; }
+  .bh-triggers { gap: 10px; }
+  #button-hud .bh-trigger { position: relative; width: 18px; height: 30px;
+    background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px; overflow: hidden; }
+  #button-hud .bh-trigger-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0%;
+    background: linear-gradient(to top, #3388ff, #66bbff); transition: height 50ms linear; }
+  #button-hud .bh-trigger-label { position: absolute; left: 0; right: 0; bottom: 1px;
+    text-align: center; color: #ccc; font-size: 8px; font-weight: 600;
+    text-shadow: 0 0 2px rgba(0,0,0,0.8); pointer-events: none; }
+  .bh-sticks { gap: 8px; }
+  #button-hud .bh-stick { position: relative; width: 28px; height: 28px;
+    background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    transition: border-color 60ms linear, box-shadow 60ms linear; }
+  #button-hud .bh-stick.pressed { border-color: #3388ff; box-shadow: 0 0 6px rgba(51, 136, 255, 0.65); }
+  #button-hud .bh-stick-dot { position: absolute; left: 50%; top: 50%;
+    width: 6px; height: 6px; background: #cfd; border-radius: 50%;
+    transform: translate(-50%, -50%); pointer-events: none; }
+  #button-hud .bh-stick-label { position: absolute; left: 50%; bottom: -10px;
+    transform: translateX(-50%); color: #888; font-size: 8px; font-weight: 600;
+    pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div id="drag-region"></div>
+<button id="close-btn" title="Close">&times;</button>
+<div id="profile-name">—</div>
+
+<div id="button-hud">
+  <div class="bh-section bh-triggers">
+    <div class="bh-trigger" data-trigger="l2"><div class="bh-trigger-fill"></div><span class="bh-trigger-label">L2</span></div>
+    <div class="bh-trigger" data-trigger="r2"><div class="bh-trigger-fill"></div><span class="bh-trigger-label">R2</span></div>
+  </div>
+  <div class="bh-section bh-shoulders">
+    <div class="bh-btn bh-sm" data-btn="4">L1</div>
+    <div class="bh-btn bh-sm" data-btn="5">R1</div>
+  </div>
+  <div class="bh-section bh-main">
+    <div class="bh-dpad">
+      <div class="bh-btn bh-dp" data-btn="12">&#x25B2;</div>
+      <div class="bh-btn bh-dp" data-btn="14">&#x25C0;</div>
+      <div class="bh-btn bh-dp" data-btn="15">&#x25B6;</div>
+      <div class="bh-btn bh-dp" data-btn="13">&#x25BC;</div>
+    </div>
+    <div class="bh-face">
+      <div class="bh-btn bh-face-y" data-btn="3">Y</div>
+      <div class="bh-btn bh-face-x" data-btn="2">X</div>
+      <div class="bh-btn bh-face-b" data-btn="1">B</div>
+      <div class="bh-btn bh-face-a" data-btn="0">A</div>
+    </div>
+  </div>
+  <div class="bh-section bh-sticks">
+    <div class="bh-stick" data-stick="l"><div class="bh-stick-dot"></div><span class="bh-stick-label">L</span></div>
+    <div class="bh-stick" data-stick="r"><div class="bh-stick-dot"></div><span class="bh-stick-label">R</span></div>
+  </div>
+  <div class="bh-section bh-system">
+    <div class="bh-btn bh-sm" data-btn="8">Sh</div>
+    <div class="bh-btn bh-sm" data-btn="9">Op</div>
+    <div class="bh-btn bh-sm" data-btn="16">PS</div>
+    <div class="bh-btn bh-sm" data-btn="17">TP</div>
+  </div>
+</div>
+
+<script>
+// Importmap — popout reads the workspace packages from the same vendored
+// ./lib/ tree that index.html does. No three.js needed here.
+(function() {
+  const map = {
+    "@usersfirst/controller-visualizer": "./lib/controller-visualizer/index.js",
+  };
+  const el = document.createElement('script');
+  el.type = 'importmap';
+  el.textContent = JSON.stringify({ imports: map });
+  document.currentScript.after(el);
+})();
+</script>
+<script type="module" src="js/button-hud-window.js"></script>
+</body>
+</html>

@@ -14,6 +14,10 @@ if (require('electron-squirrel-startup')) {
 let mainWindow = null;
 let tray = null;
 let clickThrough = false;
+// Button HUD popout window — at most one open at a time. Tracked so the
+// main renderer can forward profile-change events to it via IPC without
+// re-opening or duplicating.
+let buttonHudWindow = null;
 
 function createWindow() {
   const useMulti = process.env.OVERLAY_MULTI === '1' || process.argv.includes('--multi');
@@ -117,6 +121,54 @@ app.whenReady().then(() => {
 
   // Handle quit from renderer
   ipcMain.on('quit-app', () => app.quit());
+
+  // Open the Button HUD popout window — spawns a small frameless,
+  // transparent, always-on-top BrowserWindow that loads
+  // src/button-hud-window.html. Only one popout at a time; if already
+  // open, focus it instead of opening a duplicate.
+  //
+  // The popout polls navigator.getGamepads() in its own renderer (Gamepad
+  // API is window-scoped but sees the same physical pads), so no
+  // per-frame IPC traffic is needed. Profile is passed via URL query.
+  ipcMain.handle('open-button-hud-window', async (_event, { profile }) => {
+    if (buttonHudWindow && !buttonHudWindow.isDestroyed()) {
+      buttonHudWindow.focus();
+      // Update profile in case the caller passed a different one this time
+      buttonHudWindow.webContents.send('popout-profile-changed', profile);
+      return { opened: true, alreadyOpen: true };
+    }
+    buttonHudWindow = new BrowserWindow({
+      width: 300, height: 240,
+      transparent: true, frame: false,
+      alwaysOnTop: true, resizable: true,
+      hasShadow: false, skipTaskbar: false,
+      backgroundColor: '#00000000',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
+      },
+    });
+    const url = `file://${path.join(__dirname, '..', 'src', 'button-hud-window.html')}?profile=${encodeURIComponent(profile || '')}`;
+    buttonHudWindow.loadURL(url);
+    buttonHudWindow.on('closed', () => { buttonHudWindow = null; });
+    return { opened: true, alreadyOpen: false };
+  });
+
+  // Main renderer forwards a profile change to the popout (if any) so its
+  // labels track the active controller without the user reopening it.
+  ipcMain.on('update-button-hud-profile', (_event, { profile }) => {
+    if (buttonHudWindow && !buttonHudWindow.isDestroyed()) {
+      buttonHudWindow.webContents.send('popout-profile-changed', profile);
+    }
+  });
+
+  // Popout's close button uses this to close itself (frameless windows
+  // have no titlebar close affordance).
+  ipcMain.on('close-this-window', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win && !win.isDestroyed()) win.close();
+  });
 
   // Test Report export — renderer hands us the JSON string and a suggested
   // filename; we pop a native save dialog and write the file. Returning
