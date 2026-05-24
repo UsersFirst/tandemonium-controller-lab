@@ -41,6 +41,7 @@ const smartFillAngleInput = document.getElementById('smart-fill-angle');
 const smartFillAngleValEl = document.getElementById('smart-fill-angle-val');
 const brushRadiusInput = document.getElementById('brush-radius');
 const brushRadiusValEl = document.getElementById('brush-radius-val');
+const respectRegionsInput = document.getElementById('respect-regions');
 
 // ── Scene ──
 const scene = new THREE.Scene();
@@ -117,6 +118,7 @@ let faceCentroids = null;    // Float32Array (3 floats per face) — for brush-r
 let faceNeighbors = null;    // Array<Int32Array> — per face, indices of 0-3 edge-neighbors
 let smartFillAngleDeg = 30;  // dihedral threshold; lower = stricter (won't cross gentle curves)
 let brushRadiusPx = 1;       // 1 = single-face paint, >1 = BFS within pixel radius of hit
+let respectRegions = true;   // when true, smart fill + brush won't cross into faces already in a different region
 
 // ── Loading ──
 glbInput.addEventListener('change', (e) => {
@@ -428,8 +430,12 @@ function precomputeTopology(positions) {
  * BFS from `startFace`, crossing only neighbor edges where the dihedral
  * angle (= angle between the two face normals) is below the threshold.
  * Returns a Set<faceIdx> of all faces in the contiguous flat-ish region.
+ *
+ * `isFaceAllowed(faceIdx)` optionally gates which faces the BFS may
+ * enter — used to "respect existing regions" so a fill into unpainted
+ * area doesn't bulldoze through a neighbor region.
  */
-function smartFill(startFace, angleDeg) {
+function smartFill(startFace, angleDeg, isFaceAllowed) {
   if (!faceNormals || !faceNeighbors) return new Set([startFace]);
   const cosThreshold = Math.cos(angleDeg * Math.PI / 180);
   const out = new Set();
@@ -442,6 +448,7 @@ function smartFill(startFace, angleDeg) {
     for (let i = 0; i < neigh.length; i++) {
       const nb = neigh[i];
       if (out.has(nb)) continue;
+      if (isFaceAllowed && !isFaceAllowed(nb)) continue;
       const nnx = faceNormals[nb * 3], nny = faceNormals[nb * 3 + 1], nnz = faceNormals[nb * 3 + 2];
       const dot = nx * nnx + ny * nny + nz * nnz;
       if (dot >= cosThreshold) {
@@ -451,6 +458,26 @@ function smartFill(startFace, angleDeg) {
     }
   }
   return out;
+}
+
+/**
+ * Builds the predicate that smartFill / brushSelect consult when
+ * `respectRegions` is on. In add mode, blocks faces already painted
+ * into any region OTHER than the active target. In remove mode, only
+ * allows faces in the same region as the start face (so unpaint
+ * doesn't accidentally bleed past a region boundary into another).
+ */
+function makeRegionPredicate(startFace, targetIdx) {
+  if (!respectRegions) return null;
+  if (targetIdx >= 0) {
+    return (nb) => {
+      const r = faceRegion[nb];
+      return r === -1 || r === targetIdx;
+    };
+  }
+  // Unpaint mode: only spread through same-region faces.
+  const startRegion = faceRegion[startFace];
+  return (nb) => faceRegion[nb] === startRegion;
 }
 
 // ── Painting + undo ──
@@ -493,7 +520,7 @@ function pickFaceFromEvent(ev) {
  * so we transform the point into local space first. (No transforms in
  * our painter scene, but doing it correctly future-proofs.)
  */
-function brushSelect(startFace, hitPointWorld, pixelRadius) {
+function brushSelect(startFace, hitPointWorld, pixelRadius, isFaceAllowed) {
   if (!faceCentroids || !faceNeighbors || pixelRadius <= 1) {
     return new Set([startFace]);
   }
@@ -515,6 +542,7 @@ function brushSelect(startFace, hitPointWorld, pixelRadius) {
     for (let i = 0; i < neighbors.length; i++) {
       const nb = neighbors[i];
       if (out.has(nb)) continue;
+      if (isFaceAllowed && !isFaceAllowed(nb)) continue;
       const cx = faceCentroids[nb * 3];
       const cy = faceCentroids[nb * 3 + 1];
       const cz = faceCentroids[nb * 3 + 2];
@@ -568,7 +596,8 @@ canvas.addEventListener('mousedown', (ev) => {
   // face paint when brush size is 1.
   currentStroke = new Map();
   if (ev.altKey) {
-    const filled = smartFill(hit.faceIdx, smartFillAngleDeg);
+    const pred = makeRegionPredicate(hit.faceIdx, targetIdx);
+    const filled = smartFill(hit.faceIdx, smartFillAngleDeg, pred);
     for (const ff of filled) assignFaceToRegion(ff, targetIdx);
     finalizeStrokeImmediate();
     return;
@@ -578,9 +607,13 @@ canvas.addEventListener('mousedown', (ev) => {
   applyBrush(hit, targetIdx);
 });
 function applyBrush(hit, targetIdx) {
-  const faces = brushRadiusPx > 1
-    ? brushSelect(hit.faceIdx, hit.point, brushRadiusPx)
-    : new Set([hit.faceIdx]);
+  let faces;
+  if (brushRadiusPx > 1) {
+    const pred = makeRegionPredicate(hit.faceIdx, targetIdx);
+    faces = brushSelect(hit.faceIdx, hit.point, brushRadiusPx, pred);
+  } else {
+    faces = new Set([hit.faceIdx]);
+  }
   for (const f of faces) assignFaceToRegion(f, targetIdx);
   colorAttrDirty();
   renderRegions();
@@ -701,6 +734,12 @@ if (brushRadiusInput) {
   brushRadiusInput.addEventListener('input', (e) => {
     brushRadiusPx = +e.target.value;
     brushRadiusValEl.textContent = `${brushRadiusPx} px`;
+  });
+}
+
+if (respectRegionsInput) {
+  respectRegionsInput.addEventListener('change', (e) => {
+    respectRegions = e.target.checked;
   });
 }
 

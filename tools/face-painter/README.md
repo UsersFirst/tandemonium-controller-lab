@@ -69,6 +69,15 @@ Alt+click a face and the painter does a BFS from there across mesh topology, cro
 
 The whole fill counts as one undo stroke, so Ctrl+Z reverts it cleanly even if it painted thousands of faces.
 
+## Respect existing regions
+
+The **Respect existing regions** checkbox (default ON, top-right) controls whether smart-fill + brush operations stop at the boundary of faces already painted into a *different* region.
+
+- **On** (default): a fill from an unpainted area into the active region grows freely through unpainted faces and same-region faces, but stops as soon as it reaches a face in any other region. You can safely paint without worrying about overwriting an adjacent region you've already finished.
+- **Off**: fills bulldoze through everything (the original behavior). Useful when you want to redo a large area — paint it again with this off and the new region replaces whatever was there.
+
+Single-face clicks (brush = 1 px without Alt) are always allowed to overwrite, since you're explicitly targeting one face.
+
 The right-click-to-orbit convention matches Blender / Maya / Sketchfab. Left-click is reserved entirely for paint, so the camera and painter never conflict.
 
 ## Per-region actions
