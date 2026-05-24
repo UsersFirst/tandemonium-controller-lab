@@ -96,8 +96,24 @@ function applyState(state) {
   if (refs.sticks.r.wrap) refs.sticks.r.wrap.classList.toggle('pressed', !!buttons[11]?.pressed);
 }
 
+// Diagnostic: confirm electronAPI is bound at all + first state callback
+// fires. If electronAPI is undefined here, the preload script didn't bind
+// (possible preload-path mismatch on the BrowserWindow webPreferences).
+console.log('[popout] electronAPI present:', typeof window.electronAPI,
+  'onButtonHudState:', typeof window.electronAPI?.onButtonHudState);
+let _popoutFrameCount = 0;
 if (window.electronAPI?.onButtonHudState) {
-  window.electronAPI.onButtonHudState(applyState);
+  window.electronAPI.onButtonHudState((state) => {
+    _popoutFrameCount++;
+    if (_popoutFrameCount === 1 || _popoutFrameCount % 600 === 0) {
+      console.log('[popout] state frame#' + _popoutFrameCount,
+        'buttons=' + (state?.buttons?.length || 0),
+        'firstPressed=' + (state?.buttons?.findIndex(b => b?.pressed) ?? -1));
+    }
+    applyState(state);
+  });
+} else {
+  console.warn('[popout] window.electronAPI.onButtonHudState is undefined — preload script did not bind. The popout will not receive button updates.');
 }
 
 // ── Close button (frameless window has no titlebar close) ────────────
