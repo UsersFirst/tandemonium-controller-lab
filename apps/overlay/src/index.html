@@ -394,6 +394,13 @@
   #gyro-toggle.visible { display: flex; }
 
   /* ── No-controller splash ── */
+  /* Sits no-drag so right-click reaches the page's contextmenu handler
+     (which opens the settings panel). Without this, the splash covers
+     the whole window AND inherits drag behavior, so right-click fires
+     the OS title-bar system menu instead of our settings — leaving
+     first-time users with no visible way in. The top 40px drag-bar
+     element above the splash still handles window-drag, so users can
+     still reposition the window even with the splash visible. */
   #no-controller {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -401,7 +408,7 @@
     align-items: center;
     justify-content: center;
     z-index: 50;
-    -webkit-app-region: drag;
+    -webkit-app-region: no-drag;
     transition: opacity 0.4s ease;
   }
   #no-controller.hidden { display: none; }
@@ -747,7 +754,7 @@
   </div>
   <div class="setting-row">
     <label>Show Gear Icon</label>
-    <input type="checkbox" id="show-gear">
+    <input type="checkbox" id="show-gear" checked>
   </div>
   <div class="setting-row">
     <label>Show Roll HUD</label>
