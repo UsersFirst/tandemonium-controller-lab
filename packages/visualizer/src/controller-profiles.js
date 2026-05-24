@@ -173,6 +173,42 @@ export const PROFILES = {
     defaultBodyColor: '#f0f0f0',
     defaultAccentColor: '#1a1a1a',
   },
+
+  // ─────────────────────────────────────────────────────────────
+  // GameSir Super Nova (DS4 mode) — photogrammetry-sourced model
+  // ─────────────────────────────────────────────────────────────
+  //
+  // Single monolithic mesh from a photogrammetry capture (~400K tris,
+  // ~2.8 MB). Because the model isn't separated into per-button meshes,
+  // **button presses / stick tilts / trigger pulls cannot animate** —
+  // only whole-body gyro rotation works. The body mesh is named `node_0`
+  // (the photogrammetry tool's auto-name; preserved on purpose so future
+  // re-captures don't need a profile edit).
+  //
+  // To enable button animations on this controller, source or model a
+  // GLB with separated meshes (see docs/OPTIMIZING-GLB.md "Blender
+  // path") and replace this entry.
+  'gamesir-super-nova': {
+    model: 'assets/controllers/gamesir-super-nova.glb',
+    name: 'GameSir Super Nova',
+    buttonMap: {},          // empty — no separated button meshes to animate
+    triggerMap: {},         // empty — no separated trigger meshes
+    stickMap: {},           // empty — no separated stick meshes
+    pressDepth: 0.002,
+    triggerMaxAngle: 0.52,
+    stickMaxTilt: 0.26,
+    hasGyro: true,
+    // GameSir DS4 mode uses Sony's IMU layout (the lab's DS4 fix lands
+    // gyro already aligned to the visualizer's convention).
+    gyroTransform: (gx, gy, gz) => [gx, gy, gz],
+    hasTouchpad: false,     // single mesh — no touchpad sub-mesh to highlight
+    bodyMeshes: ['node_0'], // whole-body rotation target for gyro orientation
+    // No color customization for a textured photogrammetry model.
+    bodyColorMeshes: [],
+    accentColorMeshes: [],
+    defaultBodyColor: '#ffffff',
+    defaultAccentColor: '#ffffff',
+  },
 };
 
 /**
