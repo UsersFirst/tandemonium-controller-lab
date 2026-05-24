@@ -138,6 +138,61 @@ let syntheticGamepad = null;
 // Keeps orientation, gravity tracking, stillness & sensor-fusion bias
 // calibration, and all related scratch vectors internal. See #224.
 const gyroFusion = new SensorFusion();
+
+// ── Quaternion-direct driver state (Steam Controller) ──
+// Scratch THREE.Quaternions for the quaternion fast-path. The reference
+// is captured on first valid orientation report (or whenever recalibrate
+// fires) and used to express subsequent reports as relative rotations.
+const _steamRawQuat = new THREE.Quaternion();
+const _steamDelta = new THREE.Quaternion();
+const _steamRefQuatInverse = new THREE.Quaternion();
+let _steamRefQuat = null;
+function recalibrateSteamReference() { _steamRefQuat = null; }
+
+// Runtime-switchable axis transform from the IMU's body frame to the
+// visualizer's world frame. Different IMUs use different conventions
+// (X-forward vs Y-forward, Z-up vs Z-down, handedness). Each transform
+// permutes / negates the quaternion (x, y, z) components — W is the
+// scalar and stays put. Switch via DevTools:
+//   setSteamQuatTransform('swap-yz')
+// after calibrating with L3+R3 if results look stuck.
+const STEAM_QUAT_TRANSFORMS = {
+  'identity':       (x, y, z) => [x, y, z],
+  'swap-yz':        (x, y, z) => [x, z, -y],      // rotate -90° about X (IMU forward→up swap)
+  'swap-yz-pos':    (x, y, z) => [x, -z, y],      // rotate +90° about X — roll axis correct, pitch goes to yaw
+  'swap-xy':        (x, y, z) => [y, x, z],       // swap X↔Y
+  'swap-xz':        (x, y, z) => [z, y, x],       // swap X↔Z
+  'switch-pro-like':(x, y, z) => [-z, y, -x],     // Switch Pro's gyro-frame remap
+  'neg-x':          (x, y, z) => [-x, y, z],
+  'neg-y':          (x, y, z) => [x, -y, z],
+  'neg-z':          (x, y, z) => [x, y, -z],
+  'neg-xz':         (x, y, z) => [-x, y, -z],     // 180° about Y
+  // Compositions building on swap-yz-pos (which got roll right) and
+  // adding an X↔Y swap to move pitch off the yaw axis onto the pitch axis.
+  'yzp-xy':         (x, y, z) => [-z, x, y],      // swap-yz-pos + swap-xy
+  'yzp-xy-pos':     (x, y, z) => [-z, -x, y],     // ...with X sign flipped
+  'yzp-xy-alt':     (x, y, z) => [z, x, y],
+  'yzp-xy-alt-neg': (x, y, z) => [z, -x, y],
+  // Cyclic permutations
+  'cycle-zxy':      (x, y, z) => [z, x, y],
+  'cycle-yzx':      (x, y, z) => [y, z, x],
+};
+// Default: 'yzp-xy-alt' = (z, x, y). Field-tested as best-of-options
+// for the 2026 Steam Controller — produces correct pitch + roll with
+// the driver reading bytes 31-38 as a 4-component quaternion. Yaw
+// signal is weak (~10× smaller than pitch/roll per Test Report
+// variance analysis) and is not visually convincing. Call
+// setSteamQuatTransform('mode-name') in DevTools to try alternates.
+let steamQuatTransform = 'yzp-xy-alt';
+window.setSteamQuatTransform = function(mode) {
+  if (!STEAM_QUAT_TRANSFORMS[mode]) {
+    console.warn(`Unknown transform '${mode}'. Available: ${Object.keys(STEAM_QUAT_TRANSFORMS).join(', ')}`);
+    return;
+  }
+  steamQuatTransform = mode;
+  recalibrateSteamReference();
+  console.log(`Steam quat transform: ${mode} (reference recaptured)`);
+};
 // App-layer calibration still owns variance-check + retry UX — on success
 // it pushes the captured bias into gyroFusion.bias.
 let calibrating = false;
@@ -954,6 +1009,7 @@ async function disconnectGyro() {
   gyroPermitted = false;
   syntheticGamepad = null;
   _firstReportLogged = false;
+  recalibrateSteamReference();
   // Shared SensorFusion owns orientation + all intermediate state.
   gyroFusion.reset();
   gyroFusion.resetBias();
@@ -992,8 +1048,18 @@ function loop() {
       checkCombo(gamepad, 'gyroToggle', toggleGyro);
       checkCombo(gamepad, 'calibrate', () => {
         if (gyroActive) {
-          startCalibration();
-          console.log('Gyro recalibrating');
+          // Quaternion-direct drivers (Steam Controller) use the
+          // reference-capture model: clearing _steamRefQuat causes the
+          // next parsed.orientation to become the new "rest." Rate-based
+          // drivers go through the SensorFusion bias-estimation path.
+          if (controllerDriver?.constructor?.emitsRawGyro === false) {
+            recalibrateSteamReference();
+            showCalibHint('Recalibrated', 2000);
+            console.log('Quaternion reference re-captured');
+          } else {
+            startCalibration();
+            console.log('Gyro recalibrating');
+          }
         }
       });
     }
@@ -1446,6 +1512,34 @@ function handleInputReport(event) {
 
   if (parsed.touchpad) {
     overlay.updateTouchpad(parsed.touchpad, parsed.touchpadButton);
+  }
+
+  // Quaternion fast-path: drivers that emit orientation directly (Steam
+  // Controller — IMU is a quaternion at offsets 31-38 of the STATE report)
+  // bypass the rate-based SensorFusion pipeline.
+  //
+  // The raw quaternion is in the controller's body frame, which doesn't
+  // align with the visualizer's identity orientation — e.g. the Steam
+  // Controller emits ~(−0.58, 0, −0.09, 0.49) when flat on a desk, not
+  // identity. We capture the FIRST valid quaternion as a reference and
+  // emit each subsequent one as a delta against it: delta = current ·
+  // ref⁻¹. This makes "wherever the controller was when you started"
+  // the on-screen rest position, regardless of physical orientation.
+  // The calibrate combo (L3+R3) re-captures the reference, same way the
+  // rate-based gyro calibration recenters drift.
+  if (parsed.orientation && gyroActive) {
+    const p = parsed.orientation;
+    const [tx, ty, tz] = STEAM_QUAT_TRANSFORMS[steamQuatTransform](p.x, p.y, p.z);
+    _steamRawQuat.set(tx, ty, tz, p.w).normalize();
+    if (!_steamRefQuat) {
+      _steamRefQuat = _steamRawQuat.clone();
+    }
+    // delta = current * ref⁻¹ (post-multiply = rotation since reference)
+    _steamDelta.copy(_steamRawQuat).multiply(
+      _steamRefQuatInverse.copy(_steamRefQuat).invert()
+    );
+    gyroFusion.orientation.copy(_steamDelta);
+    return;
   }
 
   if (!gyroActive || !parsed.gyro) return;

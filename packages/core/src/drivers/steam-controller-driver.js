@@ -53,11 +53,13 @@ const FEATURE_REPORT_ID_FALLBACK = 0x02;
 
 export class SteamControllerDriver extends ControllerDriver {
 
-  // Phase 1 returns null gyro/accel (the IMU is a quaternion at offsets
-  // 31-38 and doesn't fit the raw-rate fusion pipeline that PlayStation /
-  // Switch drivers feed). App-layer calibration UX should skip itself for
-  // this driver — checks this flag and avoids the "Calibrating…" hint
-  // that would otherwise hang forever waiting for samples that never come.
+  // Steam Controller emits a quaternion (parsed.orientation), not raw
+  // gyro rates. The app's rate-based calibration UX should skip itself
+  // for this driver — checks this flag and avoids the "Calibrating…"
+  // hint that would otherwise hang forever waiting for raw-rate samples
+  // that never come. The visualizer body still rotates: app.js's fast
+  // path writes parsed.orientation directly into gyroFusion.orientation,
+  // bypassing the rate-based integrate-and-correct loop entirely.
   static emitsRawGyro = false;
 
   // Valve's HID interfaces are vendor-defined (usage page 0xFF0x), not
@@ -369,12 +371,35 @@ export class SteamControllerDriver extends ControllerDriver {
       },
     ];
 
-    // IMU is a quaternion at offsets 31-38 (4× int16 LE). Phase 1 omits
-    // it — feeding raw quaternion components to a gyro-rate fusion
-    // pipeline produces garbage. Wiring quaternion-orientation through
-    // the visualizer (bypassing fusion entirely for this driver) is
-    // tracked as follow-up; returning null here keeps the gyro pipeline
-    // safely idle in the meantime.
+    // IMU encoding (2026 firmware) — STILL UNDER INVESTIGATION.
+    //
+    // SteamlessController docs say quaternion at WebHID data[31-38]
+    // (4× int16 LE), but our captures show data[29-32] is a uint32 LE
+    // timestamp on this firmware. Test Report variance analysis showed
+    // bytes 33-38 carry the actual IMU signal (pitch primarily in
+    // bytes 35-36, roll primarily in bytes 33-34), but neither the
+    // compressed-quaternion (X,Y,Z + derived W) interpretation nor any
+    // axis transform matched physical motion correctly.
+    //
+    // Reverting to the previously field-tested layout: read bytes
+    // 31-38 as 4 int16 LE and feed all four into Three.js's quaternion
+    // as (x, y, z, w). One component is timestamp garbage, but
+    // Three.js's normalize() flattens it out enough that pitch + roll
+    // visually track physical motion when combined with the
+    // 'yzp-xy-alt' transform in app.js. Yaw remains weak on this
+    // path (~10× smaller signal than pitch/roll per Test Report).
+    //
+    // Better encoding TBD — possibly Euler angles in radians, or a
+    // different scale/sign convention. Re-investigate when there's
+    // time.
+    const QUAT_SCALE = 1 / 0x7FFF;
+    const orientation = {
+      x: r(data, 31) * QUAT_SCALE,
+      y: r(data, 33) * QUAT_SCALE,
+      z: r(data, 35) * QUAT_SCALE,
+      w: r(data, 37) * QUAT_SCALE,
+    };
+
 
     return {
       sticks,
@@ -385,6 +410,7 @@ export class SteamControllerDriver extends ControllerDriver {
       touchpadButton: false,
       gyro: null,
       accel: null,
+      orientation,
       gyroScale: 2000.0 / 32768.0,
       accelScale: 1.0 / 8192.0,
     };

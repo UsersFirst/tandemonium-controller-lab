@@ -169,8 +169,30 @@ function snapshotGamepad(vendorId, productId) {
  * @returns {Promise<Array<{ts:number, reportId:number, bytes:string, gamepad?:object}>>}
  */
 export async function recordStep(device, durationMs) {
+  if (!device) throw new Error('No HID device to capture from.');
+
+  // Multi-interface fan-out: pads like the Steam Controller Puck expose
+  // N sibling HID handles sharing the same vid:pid, and only ONE of
+  // them emits the STATE reports we want to capture. The picker hands
+  // back an arbitrary one (typically not the right one), so we attach
+  // the same onReport listener to every approved sibling. Single-
+  // interface pads (DualSense / Switch Pro filtered by usagePage in
+  // getHIDFilters) yield zero siblings here, making this a no-op for
+  // them. Done before the Promise so we can await getDevices/open.
+  const allDevices = [device];
+  try {
+    const approved = await navigator.hid.getDevices();
+    for (const d of approved) {
+      if (d === device) continue;
+      if (d.vendorId !== device.vendorId || d.productId !== device.productId) continue;
+      try {
+        if (!d.opened) await d.open();
+        allDevices.push(d);
+      } catch { /* sibling not openable; skip */ }
+    }
+  } catch { /* getDevices errored; we still have the primary handle */ }
+
   return new Promise((resolve, reject) => {
-    if (!device) return reject(new Error('No HID device to capture from.'));
     const reports = [];
     const t0 = performance.now();
     let lastGamepadSnapAt = 0;
@@ -192,10 +214,14 @@ export async function recordStep(device, durationMs) {
       reports.push(rec);
     };
 
-    device.addEventListener('inputreport', onReport);
+    for (const d of allDevices) d.addEventListener('inputreport', onReport);
+
+    const cleanup = () => {
+      for (const d of allDevices) d.removeEventListener('inputreport', onReport);
+    };
 
     const timer = setTimeout(() => {
-      device.removeEventListener('inputreport', onReport);
+      cleanup();
       resolve(reports);
     }, durationMs);
 
@@ -203,10 +229,10 @@ export async function recordStep(device, durationMs) {
     // UI can stop the wizard instead of waiting for a timeout that yields
     // empty data.
     const onDisconnect = (e) => {
-      if (e.device !== device) return;
+      if (!allDevices.includes(e.device)) return;
       clearTimeout(timer);
       navigator.hid.removeEventListener('disconnect', onDisconnect);
-      device.removeEventListener('inputreport', onReport);
+      cleanup();
       reject(new Error('Device disconnected during capture.'));
     };
     navigator.hid.addEventListener('disconnect', onDisconnect);
