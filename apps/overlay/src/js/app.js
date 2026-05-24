@@ -222,11 +222,18 @@ function applyHudLabels(profileKey) {
   if (window.electronAPI?.updateButtonHudProfile) {
     window.electronAPI.updateButtonHudProfile(profileKey);
   }
+  // Diagnostic — temporary while we chase why in-overlay HUD labels aren't
+  // updating in some cases. Tells us whether the function fires, whether
+  // the profile has hudLabels, and whether the DOM query found targets.
+  const btnEls = document.querySelectorAll('#button-hud [data-btn]');
+  console.log('[applyHudLabels]', profileKey,
+    'hasLabels=' + !!profile?.hudLabels,
+    'btnElementsFound=' + btnEls.length);
   if (!profile?.hudLabels) return;
   const labels = profile.hudLabels;
   // Buttons: data-btn elements get their textContent swapped to the
   // profile's label for that gamepad index.
-  document.querySelectorAll('#button-hud [data-btn]').forEach(el => {
+  btnEls.forEach(el => {
     const idx = Number(el.getAttribute('data-btn'));
     if (labels[idx] !== undefined) el.textContent = labels[idx];
   });
