@@ -22,6 +22,24 @@ npm --workspace @usersfirst/overlay run start:multi   # two-player slot/claim
 
 See [`apps/overlay/README.md`](./apps/overlay/README.md) for build/packaging.
 
+## Tests
+
+`@usersfirst/controller-core` is covered by the built-in `node:test` runner with
+no external dependencies — the suite imports only from `./src`, so it runs
+without `npm install`:
+
+```bash
+npm test                                  # all workspaces (currently just core)
+npm --workspace @usersfirst/controller-core test
+```
+
+Coverage focuses on the things most likely to regress silently: HID
+parse-offset correctness (`PlayStationDriver.parseReport`), the IMU-offset probe
+that disambiguates PlayStation-family clones, and the `DEVICES`/registry
+invariants. The probe test runs against a **real GameSir Super Nova capture**
+committed under [`packages/core/test/fixtures/`](./packages/core/test/fixtures/).
+CI runs the same suite on every PR via [`.github/workflows/ci.yml`](./.github/workflows/ci.yml).
+
 ## Asset attribution
 
 The GLB controller models in `packages/visualizer/assets/controllers/` derive from [larfingshnew/3d-controller-overlay](https://github.com/larfingshnew/3d-controller-overlay) (MIT). See [`packages/visualizer/ASSETS_ATTRIBUTION.md`](./packages/visualizer/ASSETS_ATTRIBUTION.md) for the upstream license text.
