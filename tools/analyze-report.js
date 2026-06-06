@@ -31,8 +31,8 @@
 //     switch-pro, xbox, steam-controller). New protocols need a driver
 //     class before the analyzer's output can be applied.
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
 
 // ── CLI ────────────────────────────────────────────────────────
 const reportPath = process.argv[2];
@@ -213,7 +213,7 @@ function activeBytes(step, restStats, opts = {}) {
 }
 
 console.log('── Button & trigger byte detection ' + '─'.repeat(29));
-for (const id of ['face-buttons', 'system-buttons', 'triggers-shoulders', 'sticks-dpad']) {
+for (const id of ['face-buttons', 'system-buttons', 'triggers-shoulders', 'sticks', 'dpad', 'sticks-dpad']) {
   const s = getStep(id);
   if (!s) { console.log(`  ${id}: (skipped or empty)`); continue; }
   const active = activeBytes(s, restStats);

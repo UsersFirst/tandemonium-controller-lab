@@ -33,3 +33,5 @@ export { XboxDriver } from './drivers/xbox-driver.js';
 export { SteamControllerDriver } from './drivers/steam-controller-driver.js';
 
 export { DEVICES, PENDING_DEVICES, PROTOCOLS } from './devices.js';
+
+export { analyzeImuStep } from './imu-analysis.js';

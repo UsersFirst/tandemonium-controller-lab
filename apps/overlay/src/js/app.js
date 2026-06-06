@@ -12,8 +12,9 @@
 
 import * as THREE from 'three';
 import { ControllerOverlay, detectControllerType, PROFILES, GyroGimbal } from '@usersfirst/controller-visualizer';
-import { ControllerRegistry, SensorFusion } from '@usersfirst/controller-core';
-import { recordStep, buildReport, exportReport, stepsForEntry } from './test-report.js';
+import { ControllerRegistry, SensorFusion, analyzeImuStep } from '@usersfirst/controller-core';
+import { recordStep, buildReport, exportReport, stepsForEntry, parseImuSamples,
+  areasForSteps, filterStepsByAreas, AREA_LABELS, STEP_AREAS } from './test-report.js';
 
 // ── DOM refs ──
 const canvas = document.getElementById('canvas');
@@ -1842,8 +1843,46 @@ if (window.electronAPI) {
 
   function selectEntry(entry) {
     state.entry = entry;
-    state.activeSteps = entry ? stepsForEntry(entry) : stepsForEntry(null);
+    state.allSteps = entry ? stepsForEntry(entry) : stepsForEntry(null);
     primaryBtn.style.display = '';
+    showFeatureSelect();
+  }
+
+  // Feature-area checklist shown before capture so the user can test only
+  // specific features (e.g. just gyro, or just buttons) in a single run.
+  function showFeatureSelect() {
+    state.phase = 'select-features';
+    titleEl.textContent = 'Capture HID Report — choose what to test';
+    promptTitleEl.textContent = 'Select features to capture';
+    const areas = areasForSteps(state.allSteps);
+    let html = '<p style="color:#ccc;margin-bottom:10px;">Uncheck anything you don\'t want to capture this run.</p>';
+    for (const a of areas) {
+      const n = state.allSteps.filter((s) => (STEP_AREAS[s.id] || 'other') === a).length;
+      html += `<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:8px;background:rgba(255,255,255,0.05);border-radius:6px;cursor:pointer;color:#eee;font-size:13px;">
+        <input type="checkbox" class="tr-area-cb" value="${a}" checked style="width:16px;height:16px;flex:none;">
+        <span>${AREA_LABELS[a] || a} <span style="color:#888;">(${n} step${n > 1 ? 's' : ''})</span></span>
+      </label>`;
+    }
+    html += '<div style="margin-top:8px;font-size:11px;"><button id="tr-area-all" style="background:none;border:none;color:#9ad;cursor:pointer;text-decoration:underline;">select all</button> · <button id="tr-area-none" style="background:none;border:none;color:#9ad;cursor:pointer;text-decoration:underline;">select none</button></div>';
+    promptEl.innerHTML = html;
+    progressEl.style.width = '0%';
+    aliasRow.style.display = 'none';
+    skipBtn.style.display = 'none';
+    primaryBtn.style.display = '';
+    primaryBtn.textContent = 'Start testing';
+    primaryBtn.disabled = false;
+    const setAll = (v) => promptEl.querySelectorAll('.tr-area-cb').forEach((cb) => { cb.checked = v; });
+    promptEl.querySelector('#tr-area-all')?.addEventListener('click', () => setAll(true));
+    promptEl.querySelector('#tr-area-none')?.addEventListener('click', () => setAll(false));
+    setStatus('All areas selected by default.');
+  }
+
+  function applySelectionAndStart() {
+    const checked = Array.from(promptEl.querySelectorAll('.tr-area-cb:checked')).map((cb) => cb.value);
+    if (checked.length === 0) { setStatus('Select at least one area to test.', 'error'); return; }
+    state.activeSteps = filterStepsByAreas(state.allSteps, new Set(checked));
+    state.stepIndex = 0;
+    state.results = [];
     showStep(0);
   }
 
@@ -1856,6 +1895,7 @@ if (window.electronAPI) {
     progressEl.style.width = `${(idx / total) * 100}%`;
     aliasRow.style.display = 'none';
     skipBtn.style.display = step.optional ? '' : 'none';
+    skipBtn.textContent = 'Skip';
     primaryBtn.textContent = 'Start';
     primaryBtn.disabled = false;
     setStatus('');
@@ -1891,6 +1931,24 @@ if (window.electronAPI) {
     return true;
   }
 
+  function advanceAfterStep() {
+    state.stepIndex++;
+    if (state.cancelled) return; // user clicked Cancel during recording
+    if (state.stepIndex >= state.activeSteps.length) showNamingPrompt();
+    else showStep(state.stepIndex);
+  }
+
+  // An IMU step failed the quality gate — let the user redo it (recommended)
+  // or keep the sub-par data anyway.
+  function showRedo(verdict) {
+    state.phase = 'redo';
+    primaryBtn.textContent = 'Redo step';
+    primaryBtn.disabled = false;
+    skipBtn.style.display = '';
+    skipBtn.textContent = 'Keep anyway';
+    setStatus(`✗ ${verdict.message}`, 'error');
+  }
+
   async function runCurrentStep() {
     const step = state.activeSteps[state.stepIndex];
     primaryBtn.disabled = true;
@@ -1914,25 +1972,36 @@ if (window.electronAPI) {
       setStatus(`Recording… ${secsLeft}s left · ${liveCount} reports captured`, 'success');
     }, 100);
 
+    let reports = null;
     try {
-      const reports = await recordStep(hidDevice, step.durationMs);
-      state.results.push({ step, reports });
-      setStatus(`Captured ${reports.length} reports for "${step.id}". Click Start for the next step.`, 'success');
+      reports = await recordStep(hidDevice, step.durationMs);
     } catch (err) {
-      state.results.push({ step, reports: [], error: err.message });
+      state.results[state.stepIndex] = { step, reports: [], error: err.message };
       setStatus('Capture failed: ' + err.message, 'error');
     } finally {
       clearInterval(ticker);
       hidDevice.removeEventListener('inputreport', onLive);
     }
+    if (state.cancelled) return;
+    if (reports === null) { advanceAfterStep(); return; } // capture errored
 
-    state.stepIndex++;
-    if (state.cancelled) return; // user clicked Cancel during recording
-    if (state.stepIndex >= state.activeSteps.length) {
-      showNamingPrompt();
-    } else {
-      showStep(state.stepIndex);
+    // Quality gate: IMU steps (those requiring 'gyro') are validated at
+    // capture time so a weak/multi-axis/not-still capture is caught and
+    // re-done before saving. Non-IMU steps pass straight through.
+    const isImuStep = step.requires?.includes('gyro');
+    const quality = (isImuStep && controllerDriver)
+      ? analyzeImuStep(step.id, parseImuSamples(reports, controllerDriver))
+      : null;
+    state.results[state.stepIndex] = { step, reports, quality };
+
+    if (quality && !quality.ok) {
+      showRedo(quality); // stay on this step
+      return;
     }
+    setStatus(quality
+      ? `✓ ${quality.message}`
+      : `Captured ${reports.length} reports for "${step.id}". Click Start for the next step.`, 'success');
+    advanceAfterStep();
   }
 
   // After all steps captured, show a naming prompt so the user can label
@@ -2044,22 +2113,24 @@ if (window.electronAPI) {
   primaryBtn.addEventListener('click', () => {
     if (!state) { close(); return; }
     if (state.phase === 'pick-device') return;  // picker uses inline buttons
+    if (state.phase === 'select-features') { applySelectionAndStart(); return; }
     if (state.phase === 'naming') { finalizeAndExport(); return; }
     if (state.phase === 'done')   { close(); return; }
     if (state.stepIndex >= state.activeSteps.length) { close(); return; } // safety
-    runCurrentStep();
+    runCurrentStep();   // handles both 'step' and 'redo' (re-runs same index)
   });
 
   skipBtn.addEventListener('click', () => {
     if (!state) return;
-    const step = state.activeSteps[state.stepIndex];
-    state.results.push({ step, reports: [], skipped: true });
-    state.stepIndex++;
-    if (state.stepIndex >= state.activeSteps.length) {
-      showNamingPrompt();
-    } else {
-      showStep(state.stepIndex);
+    if (state.phase === 'redo') {
+      // Keep the just-captured (sub-par) data and advance.
+      skipBtn.textContent = 'Skip';
+      advanceAfterStep();
+      return;
     }
+    const step = state.activeSteps[state.stepIndex];
+    state.results[state.stepIndex] = { step, reports: [], skipped: true };
+    advanceAfterStep();
   });
 
   cancelBtn.addEventListener('click', () => {
