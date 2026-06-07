@@ -601,6 +601,24 @@ export class ControllerManager {
     return null;
   }
 
+  /**
+   * Find an already-claimed slot that this pool entry belongs to but isn't
+   * yet bound to — matched by the slot's gamepad vid:pid OR by productName
+   * substring (covers multi-interface pads like GameSir Super Nova where
+   * the Gamepad API and WebHID report different vid:pid for one physical
+   * device). Returns the slot or null. Binding-only: never creates a slot.
+   */
+  _findClaimedUnboundSlotForEntry(entry) {
+    return this.slots.find((s) => {
+      if (s.state !== 'claimed' || s._hidEntry) return false;
+      const vp = ControllerRegistry.parseGamepadVendorProduct(s.controllerLabel);
+      if (vp && vp.vendorId === entry.device.vendorId && vp.productId === entry.device.productId) return true;
+      const name = (entry.device.productName || '').trim().toLowerCase();
+      if (name && s.controllerLabel && s.controllerLabel.toLowerCase().includes(name)) return true;
+      return false;
+    }) || null;
+  }
+
   ingestFrame(pads, now) {
     const claimedThisFrame = [];
     const releasedThisFrame = [];
@@ -655,6 +673,22 @@ export class ControllerManager {
       empty._emit('claimed');
     }
 
+    // Reconcile late / reconnected HID entries with already-claimed slots.
+    // _attachMatchingPoolEntry only binds at claim time, and the HID-pool
+    // claim loop below is gated on a fresh button press — so a device whose
+    // WebHID handle arrives (or RE-arrives after a reconnect) AFTER the
+    // Gamepad-API claim, and that never emits buttons (IMU-only, e.g.
+    // GameSir-as-DS4), would otherwise be left with working buttons but a
+    // dead gyro toggle after a reconnect (GameSir Super Nova auto-re-pairs
+    // off its charger, so this path gets hit constantly). Binding-only — it
+    // never creates a
+    // slot — so it's safe to run every frame regardless of button activity.
+    // Snapshot the pool values: _attachEntryToSlot mutates the pool map.
+    for (const entry of [...this._hidPool.values()]) {
+      const slot = this._findClaimedUnboundSlotForEntry(entry);
+      if (slot) this._attachEntryToSlot(slot, entry);
+    }
+
     // Claim via WebHID synthetic activity (covers BT-silent DualSense):
     // iterate the HID pool, not slots. Any pool entry showing activity
     // promotes into an empty slot.
@@ -670,15 +704,10 @@ export class ControllerManager {
       // Gamepad API path (same vid:pid), attach the HID entry to that slot
       // for gyro/touchpad rather than spawning a second slot. Fixes pads
       // that expose both Gamepad API and WebHID interfaces (e.g. GameSir
-      // Super Nova presenting as DS4 + raw HID).
-      const existing = this.slots.find((s) => {
-        if (s.state !== 'claimed' || s._hidEntry) return false;
-        const vp = ControllerRegistry.parseGamepadVendorProduct(s.controllerLabel);
-        if (vp && vp.vendorId === entry.device.vendorId && vp.productId === entry.device.productId) return true;
-        const name = (entry.device.productName || '').trim().toLowerCase();
-        if (name && s.controllerLabel && s.controllerLabel.toLowerCase().includes(name)) return true;
-        return false;
-      });
+      // Super Nova presenting as DS4 + raw HID). (The reconciliation pass
+      // above already covers IMU-only devices; this catches a device that
+      // emits buttons AND matches an already-claimed slot.)
+      const existing = this._findClaimedUnboundSlotForEntry(entry);
       if (existing) {
         this._attachEntryToSlot(existing, entry);
         continue;
