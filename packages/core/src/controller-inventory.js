@@ -93,6 +93,36 @@ export function capabilitiesFor(entry) {
   };
 }
 
+/**
+ * If `serial` is a 12-hex-digit Bluetooth MAC, return its OUI — the first 3
+ * bytes (6 hex chars, lowercase), i.e. the vendor block. Else null (e.g. the
+ * Steam Controller's "FXB99…" product serial isn't a MAC). Lets the inventory
+ * flag a pad that claims one vendor's USB VID but carries another vendor's MAC
+ * OUI — the GameSir-Super-Nova-spoofing-a-DualShock case.
+ */
+function macHex(serial) {
+  if (!serial) return null;
+  const s = String(serial).trim();
+  // Accept ONLY a bare 12-hex string or a separated aa:bb:.. / aa-bb-.. form.
+  // Don't strip-then-measure: a product serial like "FXB9960202571" reduces to
+  // 12 hex chars by accident and must NOT be mistaken for a MAC.
+  if (/^[0-9a-fA-F]{12}$/.test(s)) return s.toLowerCase();
+  if (/^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$/.test(s)) return s.replace(/[:-]/g, '').toLowerCase();
+  return null;
+}
+
+export function macOui(serial) {
+  const hex = macHex(serial);
+  return hex ? hex.slice(0, 6) : null;
+}
+
+/** Format a Bluetooth MAC serial as aa:bb:cc:dd:ee:ff; pass non-MAC serials through. */
+export function formatSerial(serial) {
+  if (!serial) return null;
+  const hex = macHex(serial);
+  return hex ? hex.match(/../g).join(':') : String(serial);
+}
+
 export class ControllerInventory {
   /** @param {{now?: () => number}} [opts] inject a clock for deterministic tests */
   constructor({ now = () => Date.now() } = {}) {

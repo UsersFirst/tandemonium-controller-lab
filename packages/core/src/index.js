@@ -41,4 +41,6 @@ export {
   normalizeDescriptor,
   identityKey,
   capabilitiesFor,
+  macOui,
+  formatSerial,
 } from './controller-inventory.js';

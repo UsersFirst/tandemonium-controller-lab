@@ -13,6 +13,8 @@ import {
   normalizeDescriptor,
   identityKey,
   capabilitiesFor,
+  macOui,
+  formatSerial,
 } from '../src/controller-inventory.js';
 import { ControllerRegistry } from '../src/drivers/controller-registry.js';
 
@@ -157,6 +159,18 @@ test('persistence round-trips history; restored records start disconnected', () 
   assert.equal(back.firstSeen, 2000);
   assert.equal(back.connected, true);
   assert.equal(back.lastConnected, 9000);
+});
+
+test('macOui / formatSerial: MAC serials yield an OUI, product serials do not', () => {
+  // GameSir Super Nova's real captured MAC.
+  assert.equal(macOui('a05a5ef610cb'), 'a05a5e');
+  assert.equal(formatSerial('a05a5ef610cb'), 'a0:5a:5e:f6:10:cb');
+  // Steam Controller's product serial is not a MAC.
+  assert.equal(macOui('FXB9960202571'), null);
+  assert.equal(formatSerial('FXB9960202571'), 'FXB9960202571');
+  // Already-colon-formatted MACs work too.
+  assert.equal(macOui('A0:5A:5E:F6:10:CB'), 'a05a5e');
+  assert.equal(macOui(null), null);
 });
 
 test('Xbox (Gamepad-API only) is recorded with limited capabilities', () => {
