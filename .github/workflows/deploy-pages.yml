@@ -1,0 +1,49 @@
+name: Deploy web overlay (lab.usersfirst.games)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/overlay/src/**'
+      - 'packages/visualizer/**'
+      - 'packages/core/src/**'
+      - 'web/**'
+      - 'scripts/build-web.js'
+      - 'apps/overlay/scripts/copy-workspace.js'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:
+
+# Required for the GitHub Actions Pages deployment.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One in-flight deploy at a time; don't cancel a running publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # No `npm ci`: copy-workspace.js + build-web.js are pure fs copies
+      # (no dependencies), and `three` is loaded from a CDN in web mode.
+      - name: Vendor workspace packages into the overlay
+        run: node apps/overlay/scripts/copy-workspace.js
+      - name: Assemble _site (landing + /overlay + CNAME)
+        run: node scripts/build-web.js
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
