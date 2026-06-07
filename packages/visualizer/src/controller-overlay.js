@@ -137,7 +137,7 @@ export class ControllerOverlay {
     this._animate();
   }
 
-  async _loadModel() {
+  async _loadModel(token = this._loadSeq) {
     const profile = PROFILES[this.controllerType];
     if (!profile) {
       console.error(`Unknown controller type: ${this.controllerType}`);
@@ -153,12 +153,26 @@ export class ControllerOverlay {
       loader.load(
         profile.model,
         (gltf) => {
+          // A newer setControllerType() superseded this load — discard the
+          // freshly-parsed scene so it doesn't stack onto the current model.
+          if (token !== this._loadSeq) {
+            gltf.scene.traverse((c) => {
+              if (c.isMesh) {
+                c.geometry?.dispose();
+                const mats = Array.isArray(c.material) ? c.material : [c.material];
+                mats.forEach((m) => { if (m) { m.map?.dispose(); m.dispose(); } });
+              }
+            });
+            resolve();
+            return;
+          }
           this._setupModel(gltf.scene, profile);
           resolve();
         },
         undefined,
         (err) => {
           console.error(`Failed to load model ${profile.model}:`, err);
+          if (token !== this._loadSeq) { resolve(); return; }
           // Fall back to a placeholder
           this._createPlaceholder(profile);
           resolve();
@@ -737,6 +751,11 @@ export class ControllerOverlay {
   async setControllerType(type) {
     if (type === this.controllerType && this.model) return;
     this.controllerType = type;
+    // Serialize against overlapping loads: each call bumps a token; an async
+    // GLB load that finishes AFTER a newer call is discarded instead of being
+    // added. Without this, the initial model load racing an auto-route swap
+    // leaves two models in bodyGroup (the "ghost"/overlapping-controller bug).
+    const token = this._loadSeq = (this._loadSeq || 0) + 1;
 
     // Remove current model
     if (this.model) {
