@@ -109,3 +109,71 @@ test('reconnect: _findClaimedUnboundSlotForEntry matches by productName when vid
   const entry = fakeEntry(dev);
   assert.equal(m._findClaimedUnboundSlotForEntry(entry), p1, 'should match on productName substring');
 });
+
+// ── Orphan recovery (issue #30 State 2) ─────────────────────────
+// Drive a claimed slot to 'orphan' by dropping its pad, then verify the
+// SAME controller returning recovers the SAME slot (sticky reconnect).
+
+/** Claim P1 with a GameSir pad, then drop the pad so P1 orphans. */
+function claimThenOrphanP1(m) {
+  const p1 = m.getSlot('P1');
+  const pad = makePad(0, GAMESIR_ID, { buttons: { 0: true } });
+  m.ingestFrame([pad], 1000);
+  assert.equal(p1.state, 'claimed', 'precondition: P1 claimed');
+  // Pad vanishes (controller dropped); no HID bound → ingestFrame orphans.
+  m.ingestFrame([null], 1100);
+  assert.equal(p1.state, 'orphan', 'precondition: P1 orphaned after pad drop');
+  return p1;
+}
+
+test('orphan recovery: the same Gamepad pad returning re-claims the SAME slot', () => {
+  const m = new ControllerManager({ slotIds: ['P1', 'P2'] });
+  const p1 = claimThenOrphanP1(m);
+
+  // Same controller returns — possibly at a new index. Sticky id match
+  // must restore P1 (not spawn P2) even without a fresh button press.
+  const returned = makePad(2, GAMESIR_ID);
+  const res = m.ingestFrame([null, null, returned], 1200);
+  assert.equal(p1.state, 'claimed', 'orphan should recover to claimed');
+  assert.equal(p1.gamepadIndex, 2, 'slot should bind the returning pad index');
+  assert.equal(m.getSlot('P2').state, 'empty', 'must NOT spawn a second slot');
+  assert.ok(res.claimed.includes('P1'), 'recovery is reported as a claim');
+});
+
+test('orphan recovery: a returning Gamepad pad + pooled HID restores gyro in one frame', () => {
+  const m = new ControllerManager({ slotIds: ['P1', 'P2'] });
+  const p1 = claimThenOrphanP1(m);
+
+  // WebHID handle re-pooled while orphaned.
+  const dev = gamesirDevice(); // 054c:09cc — matches GAMESIR_ID's vid:pid
+  const entry = fakeEntry(dev);
+  m._hidPool.set(dev, entry);
+
+  const returned = makePad(0, GAMESIR_ID);
+  m.ingestFrame([returned], 1200);
+  assert.equal(p1.state, 'claimed');
+  assert.equal(p1._hidEntry, entry, 'gyro entry bound on recovery (via _attachMatchingPoolEntry)');
+  assert.equal(p1.fusion, entry.fusion);
+});
+
+test('orphan recovery: HID-only return restores gyro, then a returning pad is adopted (no split)', () => {
+  const m = new ControllerManager({ slotIds: ['P1', 'P2'] });
+  const p1 = claimThenOrphanP1(m);
+
+  // Only the WebHID handle comes back first (Gamepad pad still gone).
+  const dev = gamesirDevice();
+  const entry = fakeEntry(dev);
+  m._hidPool.set(dev, entry);
+
+  m.ingestFrame([null], 1200);
+  assert.equal(p1.state, 'claimed', 'HID-only return reclaims the orphan');
+  assert.equal(p1._hidEntry, entry, 'gyro restored immediately');
+  assert.equal(p1.gamepadIndex, null, 'no Gamepad pad yet');
+
+  // Now the Gamepad pad returns — it must be ADOPTED into P1, not P2.
+  const returned = makePad(0, GAMESIR_ID);
+  m.ingestFrame([returned], 1300);
+  assert.equal(p1.gamepadIndex, 0, 'returning pad adopted into the existing slot');
+  assert.equal(m.getSlot('P2').state, 'empty', 'must NOT spawn a second slot for the same controller');
+  assert.equal(p1._hidEntry, entry, 'HID stays bound through adoption');
+});

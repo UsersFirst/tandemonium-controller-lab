@@ -609,14 +609,38 @@ export class ControllerManager {
    * device). Returns the slot or null. Binding-only: never creates a slot.
    */
   _findClaimedUnboundSlotForEntry(entry) {
-    return this.slots.find((s) => {
-      if (s.state !== 'claimed' || s._hidEntry) return false;
-      const vp = ControllerRegistry.parseGamepadVendorProduct(s.controllerLabel);
-      if (vp && vp.vendorId === entry.device.vendorId && vp.productId === entry.device.productId) return true;
-      const name = (entry.device.productName || '').trim().toLowerCase();
-      if (name && s.controllerLabel && s.controllerLabel.toLowerCase().includes(name)) return true;
-      return false;
-    }) || null;
+    return this.slots.find((s) =>
+      s.state === 'claimed' && !s._hidEntry && this._entryMatchesSlot(entry, s)
+    ) || null;
+  }
+
+  /**
+   * Does this pool entry belong to `slot`'s controller? Matched by the
+   * slot's gamepad vid:pid OR by productName substring (covers multi-
+   * interface pads like GameSir Super Nova where the Gamepad API and
+   * WebHID report different vid:pid for one physical device). Works for
+   * orphaned slots too — orphan() keeps controllerLabel.
+   */
+  _entryMatchesSlot(entry, slot) {
+    const vp = ControllerRegistry.parseGamepadVendorProduct(slot.controllerLabel);
+    if (vp && vp.vendorId === entry.device.vendorId && vp.productId === entry.device.productId) return true;
+    const name = (entry.device.productName || '').trim().toLowerCase();
+    if (name && slot.controllerLabel && slot.controllerLabel.toLowerCase().includes(name)) return true;
+    return false;
+  }
+
+  /**
+   * A live Gamepad-API pad whose stable id matches `slot`'s remembered
+   * controller and that no OTHER slot already owns. Used for sticky
+   * reconnect (an orphaned slot recovering the SAME physical controller,
+   * keeping its player number).
+   */
+  _findReturningPadForSlot(slot, pads) {
+    if (!slot.controllerId) return null;
+    return pads.find((p) =>
+      p && stableIdFor(p) === slot.controllerId &&
+      !this.slots.some((o) => o !== slot && o.gamepadIndex === p.index)
+    ) || null;
   }
 
   ingestFrame(pads, now) {
@@ -640,6 +664,52 @@ export class ControllerManager {
       const gpActive = gamepadHasActivity(gp);
       const synthActive = s._hidEntry && gamepadHasActivity(s._hidEntry.synthetic);
       if (!gpActive && !synthActive) s._awaitingSilence = false;
+    }
+
+    // ── Reconnect recovery ──
+    // An orphaned slot — its controller dropped, e.g. the GameSir Super
+    // Nova docking on its charger — is reclaimed by the SAME controller
+    // when it returns, keeping its player number. Without this, orphan was
+    // a dead end: nothing ever transitioned a slot out of it, so a re-
+    // paired controller recovered neither buttons nor gyro (#30 State 2).
+    // Two signals can bring it back; take whichever lands first and the
+    // other half wires up afterward:
+    //   (1) its Gamepad-API pad re-enumerates (match by stable id), or
+    //   (2) its WebHID handle re-pools (match by vid:pid / productName) —
+    //       restores gyro immediately; the adopt pass below re-attaches
+    //       buttons if/when the Gamepad pad returns.
+    for (const s of this.slots) {
+      if (s.state !== 'orphan') continue;
+      const gp = this._findReturningPadForSlot(s, pads);
+      if (gp) {
+        s.claim(gp, { controllerTypeHint: s.controllerType, silent: true });
+        this._attachMatchingPoolEntry(s);
+        s._emit('claimed');
+        claimedThisFrame.push(s.id);
+        console.log(`[manager] ${s.id}: reconnected — re-claimed orphan via Gamepad API`);
+        continue;
+      }
+      const entry = [...this._hidPool.values()].find((e) => this._entryMatchesSlot(e, s));
+      if (entry) {
+        const pseudo = { index: -1, id: s.controllerLabel || `HID::${entry.device.productName || ''}`, mapping: 'standard' };
+        s.claim(pseudo, { controllerTypeHint: s.controllerType, silent: true });
+        this._attachEntryToSlot(s, entry);
+        s._emit('claimed');
+        claimedThisFrame.push(s.id);
+        console.log(`[manager] ${s.id}: reconnected — re-claimed orphan via WebHID (gyro restored, awaiting Gamepad pad)`);
+      }
+    }
+
+    // Adopt a returning Gamepad pad into a slot that recovered HID-first
+    // (gamepadIndex still null) so one physical controller isn't split
+    // across two slots. effectiveGamepad picks up the buttons next frame.
+    for (const s of this.slots) {
+      if (s.state !== 'claimed' || s.gamepadIndex != null) continue;
+      const gp = this._findReturningPadForSlot(s, pads);
+      if (gp) {
+        s.gamepadIndex = gp.index;
+        console.log(`[manager] ${s.id}: adopted returning Gamepad pad (buttons restored)`);
+      }
     }
 
     // Claim via Gamepad API activity. Uses gamepadHasFreshActivity
