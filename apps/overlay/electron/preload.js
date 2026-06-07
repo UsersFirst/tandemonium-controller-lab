@@ -30,4 +30,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('button-hud-state-update', (_, state) => callback(state)),
   // Used by the popout window's close button to close itself cleanly.
   closeWindow: () => ipcRenderer.send('close-this-window'),
+
+  // ── Controller inventory ──
+  // Open the inventory window (from the main overlay or tray).
+  openInventoryWindow: () => ipcRenderer.invoke('open-inventory-window'),
+  // One-shot current HID controller list (with serials, from node-hid in main).
+  listHidControllers: () => ipcRenderer.invoke('list-hid-controllers'),
+  // Periodic snapshot of currently-present HID controllers (with serials).
+  onHidControllersSnapshot: (callback) =>
+    ipcRenderer.on('hid-controllers-snapshot', (_, list) => callback(list)),
 });

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HID Fingerprint Probe</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    background: #14141f; color: #e6e6f0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 20px; color: #9a9ab0; font-size: 13px; }
+  button {
+    background: #2a2a3e; color: #fff; border: 1.5px solid #44445e;
+    border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 600;
+    cursor: pointer; margin: 0 8px 8px 0;
+  }
+  button:hover { background: #383852; border-color: #6a6a8e; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .row { margin-bottom: 12px; }
+  pre {
+    background: #0c0c14; border: 1px solid #2a2a3e; border-radius: 10px;
+    padding: 16px; overflow-x: auto; font-size: 12.5px;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    white-space: pre-wrap; word-break: break-word; min-height: 80px;
+  }
+  .mac { color: #8fffc1; font-weight: 700; }
+  .warn { color: #ffd27f; }
+  .err { color: #ff8f8f; }
+  .ok { color: #8fffc1; }
+  .dim { color: #7a7a92; }
+  code { background: #2a2a3e; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <h1>HID Fingerprint Probe</h1>
+  <p class="sub">
+    Dumps a controller's identity: VID:PID, product name, declared report IDs, and the raw bytes of every
+    readable <b>feature report</b> — including the ones that carry a Bluetooth MAC / serial (e.g. DualShock&nbsp;4
+    <code>0x12</code>, DualSense <code>0x09</code>). Use it to see whether a given pad exposes a stable per-unit
+    fingerprint. Nothing leaves this page.
+  </p>
+
+  <div class="row">
+    <button id="pickController">Pick controller…</button>
+    <button id="pickAny">Pick any HID device…</button>
+    <button id="copy">Copy results</button>
+  </div>
+
+  <pre id="out">No device selected. Click “Pick controller…”, choose your pad in the browser prompt, then read the dump below.
+WebHID needs a secure context — run via <b>npm run hid-probe</b> (localhost) or open in the Electron overlay.</pre>
+
+<script>
+const out = document.getElementById('out');
+let buffer = '';
+function log(html) { buffer += html + '\n'; out.innerHTML = buffer; }
+function clear() { buffer = ''; out.innerHTML = ''; }
+
+// VIDs of controllers we care about (Sony, Nintendo, Valve, Microsoft, GameSir,
+// 8BitDo, Hori). Microsoft/Xbox won't appear (no HID interface) — expected.
+const KNOWN_VIDS = [0x054c, 0x057e, 0x28de, 0x045e, 0x3537, 0x2dc8, 0x0f0d];
+
+// Feature reports worth probing beyond whatever the descriptor declares. These
+// are the "identity"/calibration reports across the protocols we support; most
+// devices ignore the ones that aren't theirs (the read just throws, caught).
+//   DS4:       0x12 (device+host BD_ADDR), 0xa3 (build date), 0x02 (calib), 0x81
+//   DualSense: 0x09 (pairing info / MAC),  0x20 (firmware),  0x05 (calib)
+//   Steam/etc: 0xae, 0x18 (vendor serial-ish)
+// NOTE: Chromium BLOCKLISTS the MAC-bearing reports (DS4 0x12, DualSense 0x09)
+// — they throw NotAllowedError on purpose (anti-fingerprinting), for real Sony
+// pads and clones alike. Reads that DO succeed on other ids are often stale
+// input buffers or uninitialized memory, not identity. Use node-hid for a real
+// per-unit serial.
+const PROBE_IDS = [0x12, 0x09, 0xa3, 0x20, 0x02, 0x05, 0x81, 0x18, 0xae];
+// Only these ids legitimately carry a BD_ADDR, so only annotate those — avoids
+// flagging garbage in unrelated reports as a "MAC".
+const MAC_REPORT_IDS = new Set([0x12, 0x09]);
+
+const hex = (u8) => Array.from(u8, (b) => b.toString(16).padStart(2, '0')).join(' ');
+const fmtMac = (u8) => Array.from(u8, (b) => b.toString(16).padStart(2, '0')).join(':');
+
+function dvToU8(dv) { return new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength); }
+
+/** Heuristic: first 6-byte run that isn't all-00 or all-FF — a plausible BD_ADDR. */
+function candidateMac(u8) {
+  for (let i = 0; i + 6 <= u8.length; i++) {
+    const slice = u8.slice(i, i + 6);
+    const allZero = slice.every((b) => b === 0x00);
+    const allFF = slice.every((b) => b === 0xff);
+    if (!allZero && !allFF) {
+      // Show both byte order conventions; DS4/DualSense store BD_ADDR little-endian.
+      const le = Uint8Array.from(slice).reverse();
+      return { offset: i, asStored: fmtMac(slice), reversed: fmtMac(le) };
+    }
+  }
+  return null;
+}
+
+async function probe(device) {
+  clear();
+  try {
+    if (!device.opened) await device.open();
+  } catch (e) {
+    log(`<span class="err">open() failed: ${e.message}</span>`);
+    return;
+  }
+
+  log(`<b>${device.productName || '(no name)'}</b>`);
+  log(`VID:PID = <span class="ok">${device.vendorId.toString(16).padStart(4,'0')}:${device.productId.toString(16).padStart(4,'0')}</span>`);
+
+  // Declared reports from the HID descriptor.
+  const declaredFeature = new Set();
+  const inputIds = new Set();
+  for (const col of device.collections || []) {
+    const up = (col.usagePage ?? 0).toString(16).padStart(4,'0');
+    const u = (col.usage ?? 0).toString(16).padStart(4,'0');
+    log(`<span class="dim">collection usagePage=0x${up} usage=0x${u}</span>`);
+    for (const r of col.featureReports || []) declaredFeature.add(r.reportId);
+    for (const r of col.inputReports || []) inputIds.add(r.reportId);
+  }
+  log(`declared input reports:   ${[...inputIds].map(x=>'0x'+x.toString(16)).join(', ') || '(none)'}`);
+  log(`declared feature reports: ${[...declaredFeature].map(x=>'0x'+x.toString(16)).join(', ') || '(none)'}`);
+  log('');
+
+  // Read every feature report we know to try (declared first, then the probe set).
+  const ids = [...new Set([...declaredFeature, ...PROBE_IDS])].sort((a,b)=>a-b);
+  log(`<b>Feature reports (reading ${ids.length}):</b>`);
+  let anyReadable = false;
+  for (const id of ids) {
+    try {
+      const dv = await device.receiveFeatureReport(id);
+      const u8 = dvToU8(dv);
+      // receiveFeatureReport returns the payload WITH the report id as byte 0 on
+      // some platforms and without on others — show the whole thing.
+      anyReadable = true;
+      log(`  <span class="ok">0x${id.toString(16).padStart(2,'0')}</span> (${u8.length}B): ${hex(u8)}`);
+      if (MAC_REPORT_IDS.has(id)) {
+        const mac = candidateMac(u8);
+        if (mac) log(`       <span class="mac">device address: ${mac.reversed}  (stored ${mac.asStored})</span>`);
+      }
+    } catch (e) {
+      log(`  <span class="dim">0x${id.toString(16).padStart(2,'0')}: ${e.name || 'not readable'}</span>`);
+    }
+  }
+  if (!anyReadable) log('  <span class="warn">No feature reports were readable on this device.</span>');
+  log('');
+
+  // Sample a few input reports so we can see what actually streams.
+  log('<b>Input report stream (3s sample):</b>');
+  const seen = new Map();
+  const onReport = (ev) => {
+    const k = ev.reportId;
+    if (!seen.has(k)) seen.set(k, { count: 0, len: ev.data.byteLength, first: hex(dvToU8(ev.data)).slice(0, 95) });
+    seen.get(k).count++;
+  };
+  device.addEventListener('inputreport', onReport);
+  await new Promise((r) => setTimeout(r, 3000));
+  device.removeEventListener('inputreport', onReport);
+  if (seen.size === 0) {
+    log('  <span class="warn">No input reports arrived (controller idle, or in compatibility mode).</span>');
+  } else {
+    for (const [id, info] of seen) {
+      log(`  reportId 0x${id.toString(16)} ×${info.count}  (${info.len}B)  first: ${info.first}…`);
+    }
+  }
+  log('\n<span class="dim">Done. Use “Copy results” and paste the whole dump back.</span>');
+}
+
+async function pick(filters) {
+  if (!('hid' in navigator)) { clear(); log('<span class="err">navigator.hid unavailable — use Chrome/Edge/Electron over localhost.</span>'); return; }
+  try {
+    const devices = await navigator.hid.requestDevice({ filters });
+    if (!devices.length) { clear(); log('<span class="warn">No device chosen.</span>'); return; }
+    await probe(devices[0]);
+  } catch (e) {
+    clear(); log(`<span class="err">requestDevice failed: ${e.message}</span>`);
+  }
+}
+
+document.getElementById('pickController').onclick = () => pick(KNOWN_VIDS.map((vendorId) => ({ vendorId })));
+document.getElementById('pickAny').onclick = () => pick([]);
+document.getElementById('copy').onclick = async () => {
+  try { await navigator.clipboard.writeText(out.innerText); } catch {}
+};
+</script>
+</body>
+</html>
