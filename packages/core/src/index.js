@@ -43,4 +43,5 @@ export {
   capabilitiesFor,
   macOui,
   formatSerial,
+  analyzeIdentity,
 } from './controller-inventory.js';

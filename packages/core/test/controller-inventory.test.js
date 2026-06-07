@@ -15,6 +15,7 @@ import {
   capabilitiesFor,
   macOui,
   formatSerial,
+  analyzeIdentity,
 } from '../src/controller-inventory.js';
 import { ControllerRegistry } from '../src/drivers/controller-registry.js';
 
@@ -171,6 +172,29 @@ test('macOui / formatSerial: MAC serials yield an OUI, product serials do not', 
   // Already-colon-formatted MACs work too.
   assert.equal(macOui('A0:5A:5E:F6:10:CB'), 'a05a5e');
   assert.equal(macOui(null), null);
+});
+
+test('analyzeIdentity: OUI distinguishes a real DS4 from a Super Nova (real captured MACs)', () => {
+  // Both advertise Sony VID 054c; their Bluetooth MAC OUI tells them apart.
+  const real = analyzeIdentity({ vendorId: 0x054c, serialNumber: '90fba6ba591c' });
+  assert.equal(real.ouiVendor, 'Sony');
+  assert.equal(real.verdict, 'genuine');
+
+  const clone = analyzeIdentity({ vendorId: 0x054c, serialNumber: 'a05a5ef610cb' });
+  assert.equal(clone.ouiVendor, 'GameSir');
+  assert.equal(clone.verdict, 'clone', 'GameSir OUI under a Sony VID = spoof');
+  assert.equal(clone.mac, 'a0:5a:5e:f6:10:cb');
+});
+
+test('analyzeIdentity: non-MAC and missing serials degrade honestly', () => {
+  // Steam product serial — not a MAC, can't OUI-check.
+  assert.equal(analyzeIdentity({ vendorId: 0x28de, serialNumber: 'FXB9960202571' }).verdict, 'no-mac');
+  // Xbox 360 reports the XInput slot ("01"/"02") as serial — not a MAC.
+  assert.equal(analyzeIdentity({ vendorId: 0x045e, serialNumber: '01' }).verdict, 'no-mac');
+  // USB DS4 / browser: no serial at all.
+  assert.equal(analyzeIdentity({ vendorId: 0x054c, serialNumber: null }).verdict, 'no-serial');
+  // A MAC whose OUI we haven't catalogued.
+  assert.equal(analyzeIdentity({ vendorId: 0x054c, serialNumber: '001122334455' }).verdict, 'unverified');
 });
 
 test('Xbox (Gamepad-API only) is recorded with limited capabilities', () => {
