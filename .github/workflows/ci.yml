@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: controller-core (lint + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # @usersfirst/controller-core has zero runtime/test dependencies — its
+      # tests import only from ./src and use the built-in node:test runner —
+      # so no `npm install` is needed. Keeps CI fast and immune to registry
+      # flakiness. Add an install step here if a test ever needs a dependency.
+
+      - name: Lint (syntax check)
+        run: |
+          status=0
+          while IFS= read -r f; do
+            node --check "$f" || { echo "::error file=$f::syntax error"; status=1; }
+          done < <(find packages/core/src packages/core/test -name '*.js')
+          exit $status
+
+      - name: Test
+        run: node --test
+        working-directory: packages/core

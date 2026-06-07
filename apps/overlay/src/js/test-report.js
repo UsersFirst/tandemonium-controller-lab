@@ -85,11 +85,18 @@ export const STEPS = [
     requires: ['triggers'],
   },
   {
-    id: 'sticks-dpad',
-    title: 'Sticks and D-pad',
-    prompt: 'Roll the LEFT stick in a slow full circle (one revolution), then the RIGHT stick in a circle. Then click each D-pad direction: up, right, down, left. Take a full beat between each.',
-    durationMs: 12000,
+    id: 'sticks',
+    title: 'Analog sticks',
+    prompt: 'Roll the LEFT stick in a slow full circle (one revolution), then the RIGHT stick in a circle. Then click each stick in (L3, R3).',
+    durationMs: 8000,
     requires: ['sticks'],
+  },
+  {
+    id: 'dpad',
+    title: 'D-pad',
+    prompt: 'Click each D-pad direction in turn: up, right, down, left. Take a full beat between each.',
+    durationMs: 6000,
+    requires: ['dpad'],
   },
   {
     id: 'touchpad',
@@ -129,6 +136,40 @@ export function stepsForEntry(entry) {
   });
 }
 
+// ── Feature areas — group steps so the wizard can offer a "test only
+// these" checklist before capture. Each step maps to exactly one area.
+export const STEP_AREAS = {
+  'at-rest': 'gyro', 'pitch': 'gyro', 'roll': 'gyro', 'yaw': 'gyro',
+  'face-buttons': 'face', 'system-buttons': 'system',
+  'triggers-shoulders': 'triggers', 'sticks': 'sticks', 'dpad': 'dpad',
+  'touchpad': 'touchpad', 'back-paddles': 'paddles',
+};
+export const AREA_LABELS = {
+  gyro: 'Gyro / motion (at-rest, pitch, roll, yaw)',
+  face: 'Face buttons',
+  system: 'System / nav buttons',
+  triggers: 'Triggers & shoulders',
+  sticks: 'Analog sticks',
+  dpad: 'D-pad',
+  touchpad: 'Touchpad',
+  paddles: 'Back paddles',
+};
+
+/** Ordered, de-duplicated list of areas present in `steps`. */
+export function areasForSteps(steps) {
+  const seen = [];
+  for (const s of steps) {
+    const a = STEP_AREAS[s.id] || 'other';
+    if (!seen.includes(a)) seen.push(a);
+  }
+  return seen;
+}
+
+/** Keep only steps whose area is in `areaSet` (a Set of area keys). */
+export function filterStepsByAreas(steps, areaSet) {
+  return steps.filter((s) => areaSet.has(STEP_AREAS[s.id] || 'other'));
+}
+
 // ── byte → hex helper ──
 function bytesToHex(dataView) {
   const out = [];
@@ -136,6 +177,33 @@ function bytesToHex(dataView) {
     out.push(dataView.getUint8(i).toString(16).padStart(2, '0'));
   }
   return out.join(' ');
+}
+
+// ── hex → DataView (inverse of bytesToHex) ──
+function hexToDataView(hex) {
+  const u8 = Uint8Array.from(hex.trim().split(/\s+/).map((b) => parseInt(b, 16)));
+  return new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+}
+
+/**
+ * Parse a step's recorded reports back through the connected driver into
+ * IMU samples for quality analysis. Returns only reports that yielded
+ * gyro+accel (driver.parseReport returns null for irrelevant report ids).
+ *
+ * @param {Array<{reportId:number, bytes:string}>} reports
+ * @param {import('@usersfirst/controller-core').ControllerDriver} driver
+ * @returns {Array<{gyro:{x,y,z}, accel:{x,y,z}}>}
+ */
+export function parseImuSamples(reports, driver) {
+  if (!driver) return [];
+  const out = [];
+  for (const r of reports) {
+    let parsed;
+    try { parsed = driver.parseReport(r.reportId, hexToDataView(r.bytes)); }
+    catch { parsed = null; }
+    if (parsed && parsed.gyro && parsed.accel) out.push({ gyro: parsed.gyro, accel: parsed.accel });
+  }
+  return out;
 }
 
 /**
@@ -281,13 +349,16 @@ export function buildReport({ device, gamepadId, connectionType, results, alias 
           capabilities: entry.capabilities }
       : null,
     gamepadIdMatch: idInfo,
-    steps: results.map(({ step, reports, skipped }) => ({
+    steps: results.map(({ step, reports, skipped, quality }) => ({
       id: step.id,
       title: step.title,
       prompt: step.prompt,
       durationMs: step.durationMs,
       skipped: !!skipped,
       reportCount: reports.length,
+      // Capture-time quality verdict for IMU steps (null for others/skipped),
+      // so a saved report is self-describing about how clean it is.
+      quality: quality || null,
       reports,
     })),
   };

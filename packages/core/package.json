@@ -1,12 +1,16 @@
 {
   "name": "@usersfirst/controller-core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "license": "MIT",
+  "scripts": {
+    "test": "node --test"
+  },
   "exports": {
     ".": "./src/index.js",
     "./manager": "./src/manager.js",
     "./sensor-fusion": "./src/sensor-fusion.js",
+    "./imu-analysis": "./src/imu-analysis.js",
     "./drivers/*": "./src/drivers/*.js"
   },
   "files": [

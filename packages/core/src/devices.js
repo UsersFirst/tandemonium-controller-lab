@@ -26,8 +26,12 @@
 //   imuSignature?:    string  — IMU layout family used by the driver's
 //                               runtime IMU probe to disambiguate clones
 //                               that share a vid:pid. PlayStation values:
-//                               'sony-ds5' (IMU at byte 15), 'sony-ds4'
-//                               (byte 13), 'gamesir-ds4' (byte 12).
+//                               'sony-ds5' (IMU at byte 15) and the DS4
+//                               layout at byte 12 ('gamesir-ds4'). NOTE: a
+//                               real Sony DS4 also measures byte 12 (capture-
+//                               confirmed), so 'sony-ds4' (byte 13) is a
+//                               retained-but-unconfirmed label no known
+//                               hardware actually uses.
 //   capabilities:     { gyro, accel, touchpad } — WebHID features
 //   features:         { faceButtons, systemButtons, triggers, shoulders,
 //                       sticks, dpad, gyro, accel, touchpad, backPaddles,
@@ -118,10 +122,14 @@ export const DEVICES = [
   { name: 'Sony DualSense Edge',    vendorId: 0x054c, productId: 0x0df2, protocol: 'dualsense', mode: 'ds5', imuSignature: 'sony-ds5', capabilities: PS_CAPS, features: PS_EDGE_FEATURES, gamepadIdPattern: PLAYSTATION_ID },
 
   // ── Sony DualShock 4 (PS4) ──
-  // Same protocol class as DualSense; mode='ds4' selects the DS4 input-
-  // report layout. imuSignature: 'sony-ds4' — IMU at byte 13 (Linux
-  // hid-sony layout). The IMU probe in PlayStationDriver.init detects
-  // this family at runtime and overrides any mode-based default.
+  // Same protocol class as DualSense; mode='ds4' selects the DS4 input-report
+  // layout. A Bluetooth capture of a real DS4 v1 (test/fixtures/
+  // sony-dualshock4-v1-bt_054c-05c4.json) confirmed its IMU sits at byte 12
+  // (USB) / 14 (BT) — the SAME layout as the GameSir clones, not the byte-13
+  // layout once assumed. PlayStationDriver.init defers to the documented
+  // default offset, overriding only when it scores implausibly. imuSignature
+  // 'sony-ds4' is retained but cannot distinguish a real DS4 from a GameSir at
+  // the same vid:pid (identical IMU layout).
   { name: 'Sony DualShock 4 v1',    vendorId: 0x054c, productId: 0x05c4, protocol: 'dualsense', mode: 'ds4', imuSignature: 'sony-ds4', capabilities: PS_CAPS, features: PS_FEATURES, gamepadIdPattern: PLAYSTATION_ID },
   { name: 'Sony DualShock 4 v2',    vendorId: 0x054c, productId: 0x09cc, protocol: 'dualsense', mode: 'ds4', imuSignature: 'sony-ds4', capabilities: PS_CAPS, features: PS_FEATURES, gamepadIdPattern: PLAYSTATION_ID },
 
