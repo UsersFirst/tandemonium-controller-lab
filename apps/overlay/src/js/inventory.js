@@ -1,9 +1,11 @@
 // Controller Inventory window (Electron). Drives ControllerInventory from two
-// sources: node-hid in the main process (HID devices WITH serials, pushed as
-// periodic snapshots over IPC) and the renderer's Gamepad API (covers pads
-// without HID serials, e.g. Xbox). Renders the table; persists to localStorage.
+// sources: the main process's HID device events (devices WITH serials, pushed
+// as snapshots over IPC) and the renderer's Gamepad API (covers pads without
+// HID serials, e.g. Xbox). Renders the table; persists to localStorage. The
+// MAC (when present, over Bluetooth) is the per-unit identity; we don't try to
+// classify genuine-vs-clone by OUI (unreliable — see controller-identity memo).
 
-import { ControllerInventory, analyzeIdentity, formatSerial } from '@usersfirst/controller-core/controller-inventory';
+import { ControllerInventory, formatSerial, isMacSerial } from '@usersfirst/controller-core/controller-inventory';
 
 const api = window.electronAPI;
 const LS_KEY = 'controller-inventory';
@@ -70,19 +72,10 @@ function pollGamepads() {
 setInterval(pollGamepads, 600);
 
 // ── Render ──
-const VERDICT = {
-  genuine:     { label: 'genuine',    cls: 'ok' },
-  clone:       { label: '⚠ clone',    cls: 'bad' },
-  unverified:  { label: 'unverified', cls: 'warn' },
-  'no-mac':    { label: '—',          cls: 'dim' },
-  'no-serial': { label: '—',          cls: 'dim' },
-};
-
 function transportOf(rec) {
   const list = rec.transports instanceof Set ? [...rec.transports] : (rec.transports || []);
   const hasHid = list.includes('hid');
-  const isMac = !!analyzeIdentity({ serialNumber: rec.serialNumber }).oui;
-  if (hasHid && isMac) return 'Bluetooth';
+  if (hasHid && isMacSerial(rec.serialNumber)) return 'Bluetooth';
   if (hasHid) return 'USB / HID';
   return 'Gamepad';
 }
@@ -94,17 +87,13 @@ function render() {
     wrap.innerHTML = '<div class="empty">No controllers seen yet. Connect a pad over Bluetooth or USB; press a button on a Gamepad-API-only pad (Xbox) to register it.</div>';
     return;
   }
-  const head = ['Name', 'Genuine?', 'Serial / MAC', 'OUI', 'Transport', 'Status', 'Gyro', 'Trackpads', 'Haptics', 'First seen', 'Last connected', 'Last disconnected', '#'];
+  const head = ['Name', 'Serial / MAC', 'Transport', 'Status', 'Gyro', 'Trackpads', 'Haptics', 'First seen', 'Last connected', 'Last disconnected', '#'];
   const row = (r) => {
     const c = r.capabilities;
-    const id = analyzeIdentity({ vendorId: r.vendorId, serialNumber: r.serialNumber });
-    const v = VERDICT[id.verdict] || VERDICT['no-serial'];
     const transports = (r.transports instanceof Set ? [...r.transports] : (r.transports || [])).map((t) => `<span class="tag">${t}</span>`).join(' ');
     return `<tr>
       <td>${r.name || '(unknown)'} <span class="dim">${r.vendorId != null ? r.vendorId.toString(16).padStart(4, '0') + ':' + r.productId.toString(16).padStart(4, '0') : ''}</span></td>
-      <td class="${v.cls}">${v.label}${id.ouiVendor ? ' <span class="dim">(' + id.ouiVendor + ')</span>' : ''}</td>
       <td class="dim">${r.serialNumber ? formatSerial(r.serialNumber) : '—'}</td>
-      <td class="dim">${id.oui || '—'}</td>
       <td>${transportOf(r)} <span class="dim">${transports}</span></td>
       <td><span class="pill ${r.connected ? 'on' : 'off'}">${r.connected ? 'connected' : 'offline'}</span></td>
       <td class="${c.gyro ? 'yes' : 'no'}">${c.gyro ? '✓' : '—'}</td>

@@ -33,9 +33,9 @@
   <h1>Controller Inventory</h1>
   <p class="sub">
     Every controller this machine has seen, with its connection lifecycle and capabilities. Bluetooth pads expose a
-    real per-unit serial (MAC) via the desktop's HID layer, so the <b>Genuine/Clone</b> column can tell a real
-    DualShock from a GameSir spoof by MAC OUI. USB-only pads and Gamepad-API-only pads (Xbox) have no serial and key
-    by VID:PID. History persists across launches.
+    real per-unit serial (MAC) via the desktop's HID layer — that's the stable per-unit id (it distinguishes even two
+    identical pads). USB-only pads and Gamepad-API-only pads (Xbox) have no serial and key by VID:PID. History
+    persists across launches.
   </p>
   <div>
     <button id="scan">Scan controllers</button>

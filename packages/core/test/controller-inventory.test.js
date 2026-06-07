@@ -15,7 +15,7 @@ import {
   capabilitiesFor,
   macOui,
   formatSerial,
-  analyzeIdentity,
+  isMacSerial,
 } from '../src/controller-inventory.js';
 import { ControllerRegistry } from '../src/drivers/controller-registry.js';
 
@@ -174,34 +174,12 @@ test('macOui / formatSerial: MAC serials yield an OUI, product serials do not', 
   assert.equal(macOui(null), null);
 });
 
-test('analyzeIdentity: OUI distinguishes a real DS4 from a Super Nova (real captured MACs)', () => {
-  // Both advertise Sony VID 054c; their Bluetooth MAC OUI tells them apart.
-  const real = analyzeIdentity({ vendorId: 0x054c, serialNumber: '90fba6ba591c' });
-  assert.equal(real.ouiVendor, 'Sony');
-  assert.equal(real.verdict, 'genuine');
-
-  const clone = analyzeIdentity({ vendorId: 0x054c, serialNumber: 'a05a5ef610cb' });
-  assert.equal(clone.ouiVendor, 'GameSir');
-  assert.equal(clone.verdict, 'clone', 'GameSir OUI under a Sony VID = spoof');
-  assert.equal(clone.mac, 'a0:5a:5e:f6:10:cb');
-
-  // GameSir Cyclone 2 (DS4 v2 / 09cc) uses a DIFFERENT GameSir OUI block;
-  // it still advertises Sony's VID 054c, so it's flagged too.
-  const cyclone = analyzeIdentity({ vendorId: 0x054c, serialNumber: 'd05680459747' });
-  assert.equal(cyclone.ouiVendor, 'GameSir');
-  assert.equal(cyclone.verdict, 'clone', 'second GameSir OUI block also flagged');
-  assert.equal(cyclone.mac, 'd0:56:80:45:97:47');
-});
-
-test('analyzeIdentity: non-MAC and missing serials degrade honestly', () => {
-  // Steam product serial — not a MAC, can't OUI-check.
-  assert.equal(analyzeIdentity({ vendorId: 0x28de, serialNumber: 'FXB9960202571' }).verdict, 'no-mac');
-  // Xbox 360 reports the XInput slot ("01"/"02") as serial — not a MAC.
-  assert.equal(analyzeIdentity({ vendorId: 0x045e, serialNumber: '01' }).verdict, 'no-mac');
-  // USB DS4 / browser: no serial at all.
-  assert.equal(analyzeIdentity({ vendorId: 0x054c, serialNumber: null }).verdict, 'no-serial');
-  // A MAC whose OUI we haven't catalogued.
-  assert.equal(analyzeIdentity({ vendorId: 0x054c, serialNumber: '001122334455' }).verdict, 'unverified');
+test('isMacSerial: a Bluetooth MAC is one; product serials and XInput slots are not', () => {
+  assert.equal(isMacSerial('a05a5ef610cb'), true);       // GameSir Super Nova MAC
+  assert.equal(isMacSerial('90:fb:a6:ba:59:1c'), true);  // colon-formatted
+  assert.equal(isMacSerial('FXB9960202571'), false);     // Steam product serial
+  assert.equal(isMacSerial('01'), false);                // Xbox 360 XInput slot
+  assert.equal(isMacSerial(null), false);
 });
 
 test('Xbox (Gamepad-API only) is recorded with limited capabilities', () => {

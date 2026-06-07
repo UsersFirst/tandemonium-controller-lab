@@ -95,10 +95,13 @@ export function capabilitiesFor(entry) {
 
 /**
  * If `serial` is a 12-hex-digit Bluetooth MAC, return its OUI — the first 3
- * bytes (6 hex chars, lowercase), i.e. the vendor block. Else null (e.g. the
- * Steam Controller's "FXB99…" product serial isn't a MAC). Lets the inventory
- * flag a pad that claims one vendor's USB VID but carries another vendor's MAC
- * OUI — the GameSir-Super-Nova-spoofing-a-DualShock case.
+ * bytes (6 hex chars, lowercase). Else null (e.g. the Steam Controller's
+ * "FXB99…" product serial isn't a MAC). Used to tell a Bluetooth pad (has a
+ * MAC) from a USB one (no serial) for the transport column — NOT for vendor
+ * lookup: genuine PlayStation pads carry a Foxconn OUI, not Sony's, and the
+ * GameSir clones' OUIs aren't in any registry, so OUI→vendor is unreliable
+ * (see [[controller-identity]] memory). Per-unit identity comes from the full
+ * MAC, which is solid.
  */
 function macHex(serial) {
   if (!serial) return null;
@@ -116,6 +119,11 @@ export function macOui(serial) {
   return hex ? hex.slice(0, 6) : null;
 }
 
+/** True if this serial is a Bluetooth MAC (vs a USB/product serial or none). */
+export function isMacSerial(serial) {
+  return macHex(serial) != null;
+}
+
 /** Format a Bluetooth MAC serial as aa:bb:cc:dd:ee:ff; pass non-MAC serials through. */
 export function formatSerial(serial) {
   if (!serial) return null;
@@ -123,50 +131,12 @@ export function formatSerial(serial) {
   return hex ? hex.match(/../g).join(':') : String(serial);
 }
 
-// ── Clone detection by MAC OUI (#12) ──
-// A controller's USB VID can be spoofed (the GameSir Super Nova advertises
-// Sony's 054c), but over Bluetooth its MAC's OUI (first 3 bytes = the IEEE
-// vendor block) reveals who actually made it. Seeded from confirmed hardware;
-// extend as new controllers are captured. Only used to LABEL, never to reject.
-//   90:fb:a6 — confirmed: a real Sony DualShock 4 v1 (BT)
-//   a0:5a:5e — confirmed: a GameSir Super Nova (BT) spoofing Sony DS4 (PID 05c4)
-//   d0:56:80 — confirmed: a GameSir Cyclone 2 (BT) spoofing Sony DS4 (PID 09cc)
-//   28:0d:fc — widely-documented Sony Interactive PS4/PS5 controller OUI
-// (GameSir ships under several OUI blocks — catalogue each as it's captured.)
-const OUI_VENDOR = {
-  '90fba6': 'Sony',     // confirmed: real DualShock 4 v1
-  '50ee32': 'Sony',     // confirmed: real DualSense (054c:0ce6)
-  '280dfc': 'Sony',     // widely-documented Sony Interactive PS controller OUI
-  'a05a5e': 'GameSir',  // confirmed: GameSir Super Nova (spoofs 054c:05c4)
-  'd05680': 'GameSir',  // confirmed: GameSir Cyclone 2 (spoofs 054c:09cc)
-};
-
-// USB VID → the vendor that registered it.
-const VID_VENDOR = {
-  0x054c: 'Sony', 0x057e: 'Nintendo', 0x045e: 'Microsoft', 0x28de: 'Valve', 0x3537: 'GameSir',
-};
-
-/**
- * Cross-check a controller's claimed USB vendor against the OUI of its
- * Bluetooth MAC. Returns { mac, oui, ouiVendor, vidVendor, verdict }:
- *   'genuine'    — OUI vendor matches the VID vendor (real article)
- *   'clone'      — OUI vendor is a known DIFFERENT vendor than the VID claims
- *                  (a spoof, e.g. VID Sony but MAC OUI GameSir)
- *   'unverified' — has a MAC but the OUI isn't catalogued yet
- *   'no-mac'     — a serial that isn't a MAC (USB feature serial / product serial)
- *   'no-serial'  — no serial at all (USB DS4, or any browser/blocklisted path)
- */
-export function analyzeIdentity({ vendorId = null, serialNumber = null } = {}) {
-  const oui = macOui(serialNumber);
-  const ouiVendor = oui ? (OUI_VENDOR[oui] || null) : null;
-  const vidVendor = (vendorId != null) ? (VID_VENDOR[vendorId] || null) : null;
-  let verdict;
-  if (!oui) verdict = serialNumber ? 'no-mac' : 'no-serial';
-  else if (!ouiVendor) verdict = 'unverified';
-  else if (vidVendor && ouiVendor !== vidVendor) verdict = 'clone';
-  else verdict = 'genuine';
-  return { mac: formatSerial(serialNumber), oui, ouiVendor, vidVendor, verdict };
-}
+// NOTE: OUI→vendor clone detection was evaluated and DROPPED — genuine
+// PlayStation controllers carry a Foxconn (Hon Hai) OUI, not Sony's, and the
+// GameSir clones' OUIs aren't in any public registry, so the heuristic isn't
+// worth its weight. The full MAC remains a solid per-unit identifier. If a
+// vendor lookup is ever wanted, inject one (see [[controller-identity]] for
+// the layered design + the parked "OUI web API" idea).
 
 export class ControllerInventory {
   /** @param {{now?: () => number}} [opts] inject a clock for deterministic tests */
