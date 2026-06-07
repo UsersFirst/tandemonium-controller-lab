@@ -1,0 +1,103 @@
+name: Build desktop overlay (WebHID Controller Overlay)
+
+# Builds the Electron app for macOS + Windows and publishes a GitHub Release
+# whose assets the landing page links to. Manual (workflow_dispatch) or by
+# pushing a `webhid-overlay-v*` tag — intentionally NOT on every main push.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['webhid-overlay-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build macOS (zip + dmg)
+        working-directory: apps/overlay
+        shell: bash
+        run: |
+          # `npx electron-forge` bypasses the npm premake hook, so vendor deps
+          # into src/ explicitly first.
+          node scripts/copy-three.js
+          node scripts/copy-workspace.js
+          npx electron-forge make --arch universal --targets @electron-forge/maker-zip
+          bash scripts/make-dmg.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          if-no-files-found: error
+          path: |
+            apps/overlay/out/WebHID-Controller-Overlay.dmg
+            apps/overlay/out/make/zip/darwin/**/*.zip
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build Windows (squirrel + zip)
+        working-directory: apps/overlay
+        shell: bash
+        run: |
+          node scripts/copy-three.js
+          node scripts/copy-workspace.js
+          npx electron-forge make --targets @electron-forge/maker-squirrel,@electron-forge/maker-zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          if-no-files-found: error
+          path: |
+            apps/overlay/out/make/squirrel.windows/**/*.exe
+            apps/overlay/out/make/zip/win32/**/*.zip
+
+  release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Gather release files
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' \) -exec cp {} release-assets/ \;
+          ls -lh release-assets
+      - id: meta
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            TAG="webhid-overlay-v0.1.0-$(git rev-parse --short HEAD)"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: "WebHID Controller Overlay — ${{ steps.meta.outputs.date }}"
+          make_latest: true
+          files: release-assets/*
+          body: |
+            Automated desktop build of the **WebHID Controller Overlay** from ${{ github.sha }}.
+
+            ### Downloads
+            - **Windows** — `WebHID-Controller-Overlay-Setup.exe` (installer) or `.zip` (portable)
+            - **macOS** — `WebHID-Controller-Overlay.dmg` (drag to Applications) or `.zip` (portable)
+
+            The macOS build is unsigned — first launch, right-click → Open to bypass Gatekeeper.
+
+            Prefer the browser? Run it at https://lab.usersfirst.games/overlay

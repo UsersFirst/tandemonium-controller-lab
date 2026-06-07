@@ -1,7 +1,7 @@
 module.exports = {
   packagerConfig: {
-    name: '3D Controller Overlay',
-    executableName: '3d-controller-overlay',
+    name: 'WebHID Controller Overlay',
+    executableName: 'webhid-controller-overlay',
     asar: true,
     icon: './src/assets/icon',
     extraResource: [],
@@ -11,11 +11,11 @@ module.exports = {
     {
       name: '@electron-forge/maker-squirrel',
       config: {
-        name: '3DControllerOverlay',
-        setupExe: '3D-Controller-Overlay-Setup.exe',
+        name: 'WebHIDControllerOverlay',
+        setupExe: 'WebHID-Controller-Overlay-Setup.exe',
         setupIcon: './src/assets/icon.ico',
-        iconUrl: 'https://raw.githubusercontent.com/petegordon/Tandemonium/main/controller-overlay/src/assets/icon.ico',
-        description: '3D controller overlay for streamers',
+        iconUrl: 'https://raw.githubusercontent.com/UsersFirst/tandemonium-controller-lab/main/apps/overlay/src/assets/icon.ico',
+        description: 'WebHID controller overlay for streamers',
       },
     },
     // ── Cross-platform: ZIP (portable — no install needed) ──

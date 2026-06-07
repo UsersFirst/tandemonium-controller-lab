@@ -6,8 +6,8 @@
 
 set -euo pipefail
 
-APP_NAME="3D Controller Overlay"
-DMG_NAME="3D-Controller-Overlay"
+APP_NAME="WebHID Controller Overlay"
+DMG_NAME="WebHID-Controller-Overlay"
 VOLUME_NAME="$APP_NAME"
 ICON_PATH="src/assets/icon.icns"
 SIZE="500m"
