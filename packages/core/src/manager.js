@@ -20,7 +20,12 @@
 // ============================================================
 
 import { ControllerRegistry } from './drivers/controller-registry.js';
-import { SensorFusion } from './sensor-fusion.js';
+// NOTE: SensorFusion (and its `three` dependency) is loaded lazily in
+// poolDevice — the only place a real fusion is constructed — so importing
+// this module for its slot/claim/reconnect logic doesn't drag in `three`.
+// That keeps the headless manager tests dependency-free (CI runs them with
+// no `npm install`) and matches core's package.json, which doesn't declare
+// `three` directly.
 
 const DEFAULTS = {
   releaseHoldMs: 2000,
@@ -157,10 +162,10 @@ const IMU_ZERO_TIMEOUT_MS = 500;
 const MAX_IMU_REINIT = 2;
 
 class HidEntry {
-  constructor(device, driver) {
+  constructor(device, driver, fusion) {
     this.device = device;
     this.driver = driver;
-    this.fusion = new SensorFusion();
+    this.fusion = fusion;
     this.fusion.startCalibration(driver?.connectionType);
     this.synthetic = makeSyntheticGamepad(device);
     this.hasButtons = false;
@@ -507,7 +512,10 @@ export class ControllerManager {
     if (this._isDeviceInPoolOrSlot(device)) return this._hidPool.get(device) || null;
     try {
       const driver = await ControllerRegistry.connect(device);
-      const entry = new HidEntry(device, driver);
+      // Lazy-load SensorFusion (pulls in `three`) only here, where a real
+      // fusion is actually needed — see the import note at the top.
+      const { SensorFusion } = await import('./sensor-fusion.js');
+      const entry = new HidEntry(device, driver, new SensorFusion());
       this._hidPool.set(device, entry);
       return entry;
     } catch (err) {
