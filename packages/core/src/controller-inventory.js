@@ -129,12 +129,15 @@ export function formatSerial(serial) {
 // vendor block) reveals who actually made it. Seeded from confirmed hardware;
 // extend as new controllers are captured. Only used to LABEL, never to reject.
 //   90:fb:a6 — confirmed: a real Sony DualShock 4 v1 (BT)
-//   a0:5a:5e — confirmed: a GameSir Super Nova (BT) spoofing Sony DS4
+//   a0:5a:5e — confirmed: a GameSir Super Nova (BT) spoofing Sony DS4 (PID 05c4)
+//   d0:56:80 — confirmed: a GameSir Cyclone 2 (BT) spoofing Sony DS4 (PID 09cc)
 //   28:0d:fc — widely-documented Sony Interactive PS4/PS5 controller OUI
+// (GameSir ships under several OUI blocks — catalogue each as it's captured.)
 const OUI_VENDOR = {
   '90fba6': 'Sony',
   '280dfc': 'Sony',
   'a05a5e': 'GameSir',
+  'd05680': 'GameSir',
 };
 
 // USB VID → the vendor that registered it.

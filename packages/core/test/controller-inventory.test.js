@@ -184,6 +184,13 @@ test('analyzeIdentity: OUI distinguishes a real DS4 from a Super Nova (real capt
   assert.equal(clone.ouiVendor, 'GameSir');
   assert.equal(clone.verdict, 'clone', 'GameSir OUI under a Sony VID = spoof');
   assert.equal(clone.mac, 'a0:5a:5e:f6:10:cb');
+
+  // GameSir Cyclone 2 (DS4 v2 / 09cc) uses a DIFFERENT GameSir OUI block;
+  // it still advertises Sony's VID 054c, so it's flagged too.
+  const cyclone = analyzeIdentity({ vendorId: 0x054c, serialNumber: 'd05680459747' });
+  assert.equal(cyclone.ouiVendor, 'GameSir');
+  assert.equal(cyclone.verdict, 'clone', 'second GameSir OUI block also flagged');
+  assert.equal(cyclone.mac, 'd0:56:80:45:97:47');
 });
 
 test('analyzeIdentity: non-MAC and missing serials degrade honestly', () => {
