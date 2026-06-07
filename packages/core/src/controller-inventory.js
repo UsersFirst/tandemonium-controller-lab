@@ -134,10 +134,11 @@ export function formatSerial(serial) {
 //   28:0d:fc — widely-documented Sony Interactive PS4/PS5 controller OUI
 // (GameSir ships under several OUI blocks — catalogue each as it's captured.)
 const OUI_VENDOR = {
-  '90fba6': 'Sony',
-  '280dfc': 'Sony',
-  'a05a5e': 'GameSir',
-  'd05680': 'GameSir',
+  '90fba6': 'Sony',     // confirmed: real DualShock 4 v1
+  '50ee32': 'Sony',     // confirmed: real DualSense (054c:0ce6)
+  '280dfc': 'Sony',     // widely-documented Sony Interactive PS controller OUI
+  'a05a5e': 'GameSir',  // confirmed: GameSir Super Nova (spoofs 054c:05c4)
+  'd05680': 'GameSir',  // confirmed: GameSir Cyclone 2 (spoofs 054c:09cc)
 };
 
 // USB VID → the vendor that registered it.
