@@ -113,3 +113,58 @@ test('probe returns null when no reports arrive before timeout', async () => {
   const d = new PlayStationDriver(new FakeHidDevice([]), 'usb', { mode: 'ds4' });
   assert.equal(await d._probeImuOffset(50), null);
 });
+
+// ── DS4/DS5-BT full-report activation retry (hot-plug) ───────────
+// On hot-plug the BT link is still negotiating when init() runs: the
+// feature read succeeds but the controller keeps streaming the short 0x01
+// report, so no gyro arrives. _activateFullReportMode must re-issue the
+// read until the full report stream (0x11) actually starts.
+
+/** A DS4-BT handle that only starts streaming 0x11 after N feature reads. */
+class DelayedActivationDs4 {
+  constructor(activateAfter) {
+    this.activateAfter = activateAfter;
+    this.featureReads = 0;
+    this._listeners = new Set();
+    this.opened = true;
+    this.collections = [];
+    this.vendorId = 0x054c;
+    this.productId = 0x05c4;
+    this.productName = 'Wireless Controller';
+  }
+  async open() { this.opened = true; }
+  async receiveFeatureReport() { this.featureReads++; return new DataView(new Uint8Array(8).buffer); }
+  addEventListener(type, fn) {
+    if (type !== 'inputreport') return;
+    this._listeners.add(fn);
+    if (this.featureReads >= this.activateAfter) {
+      const { data } = buildDs4BtReport({ gyro: { x: 0, y: 0, z: 0 }, accel: { x: 8192, y: 0, z: 0 } });
+      queueMicrotask(() => { if (this._listeners.has(fn)) fn({ reportId: 0x11, data }); });
+    }
+  }
+  removeEventListener(type, fn) { this._listeners.delete(fn); }
+}
+
+test('activation retries the feature read until the 0x11 stream starts (hot-plug)', async () => {
+  const fake = new DelayedActivationDs4(2); // flips to full mode on the 2nd read
+  const d = new PlayStationDriver(fake, 'bluetooth', { mode: 'ds4', name: 'Sony DualShock 4 v1' });
+  const ok = await d._activateFullReportMode(0x02, { attempts: 5, perAttemptMs: 25 });
+  assert.equal(ok, true, 'should confirm the full report stream');
+  assert.equal(fake.featureReads, 2, 'retried the feature read until 0x11 streamed');
+});
+
+test('activation succeeds on the first read when the link is already settled (cold-plug)', async () => {
+  const fake = new DelayedActivationDs4(1); // streams immediately
+  const d = new PlayStationDriver(fake, 'bluetooth', { mode: 'ds4' });
+  const ok = await d._activateFullReportMode(0x02, { attempts: 5, perAttemptMs: 25 });
+  assert.equal(ok, true);
+  assert.equal(fake.featureReads, 1, 'no extra reads when full mode starts at once');
+});
+
+test('activation gives up after N attempts when the stream never starts', async () => {
+  const fake = new DelayedActivationDs4(99); // never flips
+  const d = new PlayStationDriver(fake, 'bluetooth', { mode: 'ds4' });
+  const ok = await d._activateFullReportMode(0x02, { attempts: 3, perAttemptMs: 10 });
+  assert.equal(ok, false);
+  assert.equal(fake.featureReads, 3, 'bounded retries');
+});
