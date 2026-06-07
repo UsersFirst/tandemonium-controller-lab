@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controller Inventory — live preview</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: #14141f; color: #e6e6f0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 16px; color: #9a9ab0; font-size: 13px; max-width: 820px; line-height: 1.5; }
+  button { background: #2a2a3e; color: #fff; border: 1.5px solid #44445e; border-radius: 10px;
+    padding: 9px 15px; font-size: 14px; font-weight: 600; cursor: pointer; margin: 0 8px 12px 0; }
+  button:hover { background: #383852; border-color: #6a6a8e; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #2a2a3e; white-space: nowrap; }
+  th { color: #9a9ab0; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td.dim { color: #7a7a92; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .on  { background: #14432a; color: #8fffc1; }
+  .off { background: #3a1f1f; color: #ff9f9f; }
+  .yes { color: #8fffc1; } .no { color: #555; }
+  .tag { display:inline-block; background:#2a2a3e; color:#cfcfe6; border-radius:6px; padding:1px 6px; font-size:11px; margin-right:4px; }
+  code { background: #2a2a3e; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .empty { color:#7a7a92; padding: 24px 0; }
+</style>
+</head>
+<body>
+  <h1>Controller Inventory — live preview</h1>
+  <p class="sub">
+    Drives the real <code>ControllerInventory</code> from <code>@usersfirst/controller-core</code> off your browser's
+    live WebHID + Gamepad-API events. History persists in <code>localStorage</code>. <b>Browser limit:</b> no per-unit
+    serial (Chromium blocklist) — rows key by VID:PID and identical pads merge. The shipped desktop overlay adds the
+    Electron <code>serialNumber</code> bridge for true per-unit rows. Click <b>Pair HID device…</b> once per controller
+    to grant WebHID access; Gamepad-API pads appear after you press a button.
+  </p>
+  <div>
+    <button id="pair">Pair HID device…</button>
+    <button id="clear">Clear history</button>
+    <span id="status" class="dim" style="font-size:12px"></span>
+  </div>
+  <div id="tableWrap"></div>
+
+<script type="module">
+import { ControllerInventory } from '../../packages/core/src/controller-inventory.js';
+
+const LS_KEY = 'controller-inventory-preview';
+const inv = new ControllerInventory();
+try { const saved = localStorage.getItem(LS_KEY); if (saved) inv.loadJSON(JSON.parse(saved)); } catch {}
+const save = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(inv.toJSON())); } catch {} };
+
+const status = document.getElementById('status');
+const fmt = (t) => t ? new Date(t).toLocaleString() : '—';
+
+function render() {
+  const rows = inv.list();
+  const wrap = document.getElementById('tableWrap');
+  if (!rows.length) { wrap.innerHTML = '<div class="empty">No controllers seen yet. Pair one, or press a button on a connected pad.</div>'; return; }
+  const head = ['Name','Identity','Transport','Status','Gyro','Trackpads','Haptics','First seen','Last connected','Last disconnected','#'];
+  const cell = (r) => {
+    const c = r.capabilities;
+    const transports = [...r.transports].map((t) => `<span class="tag">${t}</span>`).join('');
+    return `<tr>
+      <td>${r.name || '(unknown)'}</td>
+      <td><code>${r.key}</code></td>
+      <td>${transports}</td>
+      <td><span class="pill ${r.connected ? 'on' : 'off'}">${r.connected ? 'connected' : 'offline'}</span></td>
+      <td class="${c.gyro ? 'yes' : 'no'}">${c.gyro ? '✓' : '—'}</td>
+      <td class="${c.trackpadCount ? 'yes' : 'no'}">${c.trackpadCount || '—'}</td>
+      <td>${c.haptics ? (c.haptics.count ?? '?') + ' <span class="dim">' + (c.haptics.type || '') + '</span>' : '<span class="no">—</span>'}</td>
+      <td class="dim">${fmt(r.firstSeen)}</td>
+      <td class="dim">${fmt(r.lastConnected)}</td>
+      <td class="dim">${fmt(r.lastDisconnected)}</td>
+      <td class="dim">${r.connectCount}</td>
+    </tr>`;
+  };
+  wrap.innerHTML = `<table><thead><tr>${head.map((h)=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(cell).join('')}</tbody></table>`;
+}
+
+// ── WebHID ──
+async function hidConnect(device) {
+  inv.observeConnect({ source: 'hid', vendorId: device.vendorId, productId: device.productId,
+    productName: device.productName, serialNumber: device.serialNumber || null });
+  save(); render();
+}
+async function refreshHid() {
+  if (!('hid' in navigator)) { status.textContent = 'WebHID unavailable (use Chrome/Edge).'; return; }
+  for (const d of await navigator.hid.getDevices()) hidConnect(d);
+}
+if ('hid' in navigator) {
+  navigator.hid.addEventListener('connect', (e) => hidConnect(e.device));
+  navigator.hid.addEventListener('disconnect', (e) => {
+    inv.observeDisconnect({ source: 'hid', vendorId: e.device.vendorId, productId: e.device.productId,
+      productName: e.device.productName, serialNumber: e.device.serialNumber || null });
+    save(); render();
+  });
+}
+document.getElementById('pair').onclick = async () => {
+  try { await navigator.hid.requestDevice({ filters: [] }); await refreshHid(); }
+  catch (err) { status.textContent = err.message; }
+};
+document.getElementById('clear').onclick = () => { inv.clear(); save(); render(); };
+
+// ── Gamepad API (covers Xbox & any pad without WebHID access) ──
+const seenPads = new Map(); // index -> id
+function pollGamepads() {
+  const pads = (navigator.getGamepads && navigator.getGamepads()) || [];
+  const live = new Set();
+  for (const gp of pads) {
+    if (!gp) continue;
+    live.add(gp.index);
+    if (!seenPads.has(gp.index)) {
+      seenPads.set(gp.index, gp.id);
+      inv.observeConnect({ source: 'gamepad', gamepadId: gp.id });
+      save(); render();
+    }
+  }
+  for (const [idx, id] of seenPads) {
+    if (!live.has(idx)) {
+      seenPads.delete(idx);
+      inv.observeDisconnect({ source: 'gamepad', gamepadId: id });
+      save(); render();
+    }
+  }
+}
+setInterval(pollGamepads, 500);
+
+refreshHid();
+render();
+setInterval(render, 1000); // keep timestamps fresh
+</script>
+</body>
+</html>
