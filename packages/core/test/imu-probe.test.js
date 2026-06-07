@@ -168,3 +168,57 @@ test('activation gives up after N attempts when the stream never starts', async 
   assert.equal(ok, false);
   assert.equal(fake.featureReads, 3, 'bounded retries');
 });
+
+// ── Background re-activation (slow re-pair off the charger) ──────
+// When the inline window expires before a slow-re-pairing controller starts
+// streaming, _startBackgroundReactivation keeps nudging the feature read on a
+// timer until the full report stream flips — or gives up after maxMs.
+
+/** A DS4-BT handle that emits a 0x11 frame on each feature read once active. */
+class BgActivationDs4 {
+  constructor(activateAfter) {
+    this.activateAfter = activateAfter;
+    this.featureReads = 0;
+    this._listeners = new Set();
+    this.opened = true;
+    this.collections = [];
+    this.vendorId = 0x054c;
+    this.productId = 0x05c4;
+    this.productName = 'Wireless Controller';
+  }
+  async receiveFeatureReport() {
+    this.featureReads++;
+    if (this.featureReads >= this.activateAfter) {
+      const { data } = buildDs4BtReport({ gyro: { x: 0, y: 0, z: 0 }, accel: { x: 8192, y: 0, z: 0 } });
+      for (const fn of this._listeners) queueMicrotask(() => { if (this._listeners.has(fn)) fn({ reportId: 0x11, data }); });
+    }
+    return new DataView(new Uint8Array(8).buffer);
+  }
+  addEventListener(type, fn) { if (type === 'inputreport') this._listeners.add(fn); }
+  removeEventListener(type, fn) { this._listeners.delete(fn); }
+}
+
+test('background re-activation flips the stream once the slow link is ready', async () => {
+  const fake = new BgActivationDs4(2); // full reports start on the 2nd read
+  const d = new PlayStationDriver(fake, 'bluetooth', { mode: 'ds4' });
+  const ok = await d._startBackgroundReactivation(0x02, { intervalMs: 10, maxMs: 1000 });
+  assert.equal(ok, true, 'should detect the full report stream');
+  assert.ok(fake.featureReads >= 2, 'kept nudging the feature read until it streamed');
+});
+
+test('background re-activation gives up after maxMs', async () => {
+  const fake = new BgActivationDs4(999); // never flips
+  const d = new PlayStationDriver(fake, 'bluetooth', { mode: 'ds4' });
+  const ok = await d._startBackgroundReactivation(0x02, { intervalMs: 10, maxMs: 50 });
+  assert.equal(ok, false);
+  assert.equal(d._reactivateTimer, null, 'timer cleaned up on give-up');
+});
+
+test('destroy() stops an in-flight background re-activation', async () => {
+  const fake = new BgActivationDs4(999); // never flips
+  const d = new PlayStationDriver(fake, 'bluetooth', { mode: 'ds4' });
+  const pending = d._startBackgroundReactivation(0x02, { intervalMs: 10, maxMs: 5000 });
+  d.destroy();
+  assert.equal(await pending, false, 'destroy resolves the loop as given-up');
+  assert.equal(d._reactivateTimer, null, 'timer cleared by destroy');
+});
