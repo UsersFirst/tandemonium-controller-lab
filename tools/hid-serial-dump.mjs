@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-// hid-serial-dump.cjs — list every HID device + its serialNumber
+// hid-serial-dump.mjs — list every HID device + its serialNumber
 // ============================================================
 //
 // The browser (WebHID / Gamepad API) deliberately hides controller serial
@@ -11,21 +11,23 @@
 //
 // Run:
 //   npm i node-hid        # ships prebuilt binaries for Win/macOS/Linux
-//   node tools/hid-serial-dump.cjs            # game controllers only
-//   node tools/hid-serial-dump.cjs --all      # every HID interface
+//   node tools/hid-serial-dump.mjs            # game controllers only
+//   node tools/hid-serial-dump.mjs --all      # every HID interface
 //
-// .cjs so it uses require() regardless of the repo's "type": "module".
+// ESM (.mjs) to match the rest of the codebase. node-hid is a CommonJS
+// native module, so it's pulled in via a dynamic import + default interop —
+// which also lets us fail gracefully when it isn't installed.
 
 let HID;
 try {
-  HID = require('node-hid');
-} catch (e) {
+  HID = (await import('node-hid')).default;
+} catch {
   console.error(
     'node-hid is not installed.\n\n' +
     'Install it (prebuilt binaries — no compiler needed on Win/macOS/Linux):\n' +
     '  npm i node-hid\n\n' +
     'then re-run:\n' +
-    '  node tools/hid-serial-dump.cjs\n'
+    '  node tools/hid-serial-dump.mjs\n',
   );
   process.exit(1);
 }
@@ -76,5 +78,5 @@ if (showAll) {
 console.log(
   '\nKey field: serialNumber. For Bluetooth controllers it is usually the MAC address\n' +
   '(a stable per-unit id that distinguishes even two identical pads). "(none)" means\n' +
-  'this device/transport exposes no per-unit id — fall back to VID:PID.\n'
+  'this device/transport exposes no per-unit id — fall back to VID:PID.\n',
 );
