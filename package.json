@@ -8,7 +8,9 @@
   "scripts": {
     "test": "npm run test --workspaces --if-present",
     "face-painter": "npx -y serve tools/face-painter",
-    "split-glb": "node tools/split-glb.js"
+    "split-glb": "node tools/split-glb.js",
+    "hid-probe": "npx -y serve tools/hid-probe",
+    "hid-dump": "node tools/hid-serial-dump.cjs"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.1.0",
