@@ -18,6 +18,67 @@ let clickThrough = false;
 // main renderer can forward profile-change events to it via IPC without
 // re-opening or duplicating.
 let buttonHudWindow = null;
+let inventoryWindow = null;
+
+// ── Controller inventory: HID serial source (main process) ──
+// The renderer's WebHID can't read serial numbers (Chromium blocklists the
+// MAC/serial feature reports), but the MAIN process's HID device events DO
+// carry `serialNumber` — over Bluetooth that's the controller's MAC, a stable
+// per-unit id (and its OUI reveals a spoofed clone). We capture those events
+// into a map and push it to the inventory window. No native module needed
+// (avoids the node-hid/Electron-ABI rebuild); inventory degrades to the
+// Gamepad API if serials don't come through.
+const INVENTORY_VIDS = new Set([0x054c, 0x057e, 0x28de, 0x045e, 0x3537, 0x2dc8, 0x0f0d]);
+const hidControllers = new Map(); // key -> { vendorId, productId, name, serialNumber, connected }
+
+// Drop XInput slot indices ("01"/"02") and other too-short non-serials so they
+// aren't mistaken for a per-unit id.
+function sanitizeSerial(s) {
+  const t = s ? String(s).trim() : '';
+  return t.length >= 6 ? t : null;
+}
+function hidKey(d) { return d.guid || d.deviceId || `${d.vendorId}:${d.productId}`; }
+
+function upsertHidController(d, connected) {
+  if (!d || !INVENTORY_VIDS.has(d.vendorId)) return;
+  const key = hidKey(d);
+  const prev = hidControllers.get(key) || {};
+  hidControllers.set(key, {
+    vendorId: d.vendorId,
+    productId: d.productId,
+    name: d.name || d.productName || prev.name || null,
+    // Keep a serial once we've seen one for this device, even if a later event omits it.
+    serialNumber: sanitizeSerial(d.serialNumber) || prev.serialNumber || null,
+    connected,
+  });
+  console.log('[inventory] HID', connected ? 'present' : 'gone', '-',
+    (d.name || d.productId), 'serial=', d.serialNumber || '(none)');
+}
+
+function hidControllerList() { return [...hidControllers.values()]; }
+
+function broadcastHidControllers() {
+  if (inventoryWindow && !inventoryWindow.isDestroyed()) {
+    inventoryWindow.webContents.send('hid-controllers-snapshot', hidControllerList());
+  }
+}
+
+function openInventoryWindow() {
+  if (inventoryWindow && !inventoryWindow.isDestroyed()) { inventoryWindow.focus(); return; }
+  inventoryWindow = new BrowserWindow({
+    width: 1040, height: 640,
+    title: 'Controller Inventory',
+    backgroundColor: '#14141f',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  });
+  inventoryWindow.loadFile(path.join(__dirname, '..', 'src', 'inventory.html'));
+  inventoryWindow.webContents.once('did-finish-load', () => broadcastHidControllers());
+  inventoryWindow.on('closed', () => { inventoryWindow = null; });
+}
 
 function createWindow() {
   const useMulti = process.env.OVERLAY_MULTI === '1' || process.argv.includes('--multi');
@@ -101,6 +162,8 @@ function updateTrayMenu() {
       },
     },
     { type: 'separator' },
+    { label: 'Controller Inventory…', click: openInventoryWindow },
+    { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]);
   tray.setContextMenu(menu);
@@ -121,6 +184,10 @@ app.whenReady().then(() => {
 
   // Handle quit from renderer
   ipcMain.on('quit-app', () => app.quit());
+
+  // Controller inventory window + its HID serial source (node-hid in main).
+  ipcMain.handle('open-inventory-window', () => { openInventoryWindow(); return { opened: true }; });
+  ipcMain.handle('list-hid-controllers', () => hidControllerList());
 
   // Open the Button HUD popout window — spawns a small frameless,
   // transparent, always-on-top BrowserWindow that loads
@@ -240,6 +307,10 @@ app.on('web-contents-created', (_, contents) => {
   contents.session.on('select-hid-device', (event, details, callback) => {
     event.preventDefault();
     console.log('select-hid-device: deviceList length =', details.deviceList?.length || 0);
+    // Capture every candidate's serial for the inventory (this list carries
+    // serialNumber even though the renderer's WebHID objects don't).
+    for (const d of details.deviceList || []) upsertHidController(d, true);
+    broadcastHidControllers();
     if (details.deviceList && details.deviceList.length > 0) {
       if (selectTimeout) { clearTimeout(selectTimeout); selectTimeout = null; }
       // Prefer a device we haven't picked yet in this session. Falls back to
@@ -266,9 +337,13 @@ app.on('web-contents-created', (_, contents) => {
   // This fires when a device matching an active requestDevice() filter appears.
   contents.session.on('hid-device-added', (event, device) => {
     console.log('hid-device-added:', device.name || device.productId);
+    upsertHidController(device, true);
+    broadcastHidControllers();
   });
 
   contents.session.on('hid-device-removed', (event, device) => {
     console.log('hid-device-removed:', device.name || device.productId);
+    upsertHidController(device, false);
+    broadcastHidControllers();
   });
 });
