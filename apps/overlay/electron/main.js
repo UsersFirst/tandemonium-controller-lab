@@ -307,9 +307,17 @@ app.on('web-contents-created', (_, contents) => {
   contents.session.on('select-hid-device', (event, details, callback) => {
     event.preventDefault();
     console.log('select-hid-device: deviceList length =', details.deviceList?.length || 0);
-    // Capture every candidate's serial for the inventory (this list carries
-    // serialNumber even though the renderer's WebHID objects don't).
-    for (const d of details.deviceList || []) upsertHidController(d, true);
+    // This deviceList IS the set of currently-present HID devices, so a Scan
+    // doubles as an authoritative refresh: capture each present device's serial,
+    // then mark anything we knew about that ISN'T present now as disconnected.
+    // (hid-device-removed is unreliable over Bluetooth / for ungranted Puck
+    // interfaces, so this manual reconcile is how the inventory's connected
+    // state stays honest without a native module.)
+    const present = new Set();
+    for (const d of details.deviceList || []) { upsertHidController(d, true); present.add(hidKey(d)); }
+    for (const [key, c] of hidControllers) {
+      if (!present.has(key) && c.connected) hidControllers.set(key, { ...c, connected: false });
+    }
     broadcastHidControllers();
     if (details.deviceList && details.deviceList.length > 0) {
       if (selectTimeout) { clearTimeout(selectTimeout); selectTimeout = null; }
