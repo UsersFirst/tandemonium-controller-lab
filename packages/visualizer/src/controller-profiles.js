@@ -290,9 +290,11 @@ export const PROFILES = {
       left:  { meshes: ['left_stick_base', 'left_stick_ring', 'left_stick_cap'], axisX: 0, axisY: 1 },
       right: { meshes: ['right_stick_base', 'right_stick_ring', 'right_stick_cap'], axisX: 2, axisY: 3 },
     },
-    pressDepth: 0.002,
-    triggerMaxAngle: 0.21,   // Steam triggers have an open back; keep rotation modest.
-    stickMaxTilt: 0.26,
+    // ceski's Steam parts have travel=0 (buttons highlight, don't sink), and
+    // they're flush/thin — so a small dip + glow, not a deep press.
+    pressDepth: 0.0005,
+    triggerMaxAngle: 0.349,  // = info.txt trigger_max (~20°)
+    stickMaxTilt: 0.436,     // = info.txt stick_max (~25°)
     hasGyro: true,
     // Axis remap is applied inside the driver (Y↔Z swap on gyro+accel —
     // see steam-controller-driver.js parseReport).

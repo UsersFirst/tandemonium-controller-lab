@@ -36,8 +36,35 @@ const argVal = (name, def) => { const i = args.indexOf(name); return i >= 0 ? ar
 const SCALE = parseFloat(argVal('--scale', '0.073'));
 const OUT = argVal('--out', path.join(REPO, 'packages/visualizer/assets/controllers/steam-controller-split.glb'));
 
+/**
+ * Parse info.txt → { 'left_trigger.obj': [px,py,pz], … }. ceski's renderer
+ * translates each part by these `position` offsets (first 3 of 18 floats per
+ * part, in mesh_idx order), so parts whose OBJ geometry isn't pre-placed
+ * (triggers, sticks, touch points) need them baked in or they collapse to the
+ * model centre. We only consume `position` here; `travel`/`trigger_max`/
+ * `stick_max` (the animation rig) are reflected in the visualizer profile.
+ */
+function parseInfo(text) {
+  const lines = text.split(/\r?\n/);
+  const out = {};
+  let i = 0;
+  while (i < lines.length) {
+    const name = lines[i++].trim();
+    if (!name.endsWith('.obj')) continue;
+    const nums = [];
+    while (nums.length < 18 && i < lines.length) {
+      const t = lines[i++].trim();
+      if (t === '') continue;
+      const f = parseFloat(t);
+      nums.push(Number.isNaN(f) ? 0 : f);
+    }
+    out[name] = [nums[0] || 0, nums[1] || 0, nums[2] || 0];
+  }
+  return out;
+}
+
 /** Parse a Wavefront OBJ → { positions:Float32Array, normals:Float32Array, indices:Uint32Array }. */
-function parseObj(text, scale) {
+function parseObj(text, scale, offset = [0, 0, 0]) {
   const v = [], vn = [];
   const keyToIdx = new Map();
   const positions = [], normals = [], indices = [];
@@ -47,7 +74,7 @@ function parseObj(text, scale) {
     if (idx === undefined) {
       idx = positions.length / 3;
       const p = v[vi]; // [x,y,z]
-      positions.push(p[0] * scale, p[1] * scale, p[2] * scale);
+      positions.push((p[0] + offset[0]) * scale, (p[1] + offset[1]) * scale, (p[2] + offset[2]) * scale);
       const n = ni >= 0 && vn[ni] ? vn[ni] : [0, 0, 1];
       normals.push(n[0], n[1], n[2]);
       keyToIdx.set(key, idx);
@@ -77,6 +104,7 @@ function parseObj(text, scale) {
 }
 
 // ── Build glTF document ──
+const INFO = parseInfo(readFileSync(path.join(SRC, 'info.txt'), 'utf8'));
 const parts = readdirSync(SRC).filter((f) => f.endsWith('.obj')).sort();
 console.log(`Merging ${parts.length} parts at scale ${SCALE} → ${path.relative(REPO, OUT)}`);
 
@@ -100,7 +128,8 @@ function addBufferView(typedArray) {
 
 for (const file of parts) {
   const name = path.basename(file, '.obj');
-  const { positions, normals, indices } = parseObj(readFileSync(path.join(SRC, file), 'utf8'), SCALE);
+  const offset = INFO[file] || [0, 0, 0];
+  const { positions, normals, indices } = parseObj(readFileSync(path.join(SRC, file), 'utf8'), SCALE, offset);
   if (positions.length === 0) { console.warn(`  ${name}: no geometry, skipped`); continue; }
 
   // POSITION accessor (needs min/max).
