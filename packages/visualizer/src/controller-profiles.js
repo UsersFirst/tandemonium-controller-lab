@@ -253,104 +253,72 @@ export const PROFILES = {
   // NOTE on licensing: this single asset is CC BY-NC-SA 4.0 — see the
   // attribution file. The rest of the visualizer is MIT.
   'steam-controller': {
-    // Split GLB derived from Valve's monolithic STL via tools/face-painter
-    // + tools/split-glb.js. Each named mesh below corresponds to a
-    // region the user painted on the source surface. The remaining
-    // unpainted faces form a "body" mesh used for the gyro rotation.
-    // Region source-of-truth lives alongside the GLB at
-    // `assets/controllers/steam-controller.regions.json` — see
-    // STEAM_CONTROLLER_ATTRIBUTION.md for the regenerate pipeline.
+    // GLB built from ceski-1/3d-controller-overlay's per-component Steam
+    // Controller parts (Valve CC BY-NC-SA geometry, cleanly separated +
+    // poly-reduced) via tools/build-steam-controller-glb.mjs. Each glTF node
+    // is named by its source part filename (top_shell, left_trigger,
+    // south_button, …). See STEAM_CONTROLLER_ATTRIBUTION.md.
     model: 'assets/controllers/steam-controller-split.glb',
     name: 'Steam Controller (2026)',
-    // Standard Gamepad-API button index → mesh name in the split GLB.
-    // Mesh names match the region names the user typed in the painter
-    // (verbatim — spaces and all). Labels like "Trigger L1" / "Bumper
-    // L2" are the user's chosen labels; semantic gamepad index is what
-    // controls animation, not the name.
+    // Standard Gamepad-API button index → part node name.
     buttonMap: {
-      0:  'A',
-      1:  'B',
-      2:  'X',
-      3:  'Y',
-      4:  'Bumper L2',                // LB / left shoulder
-      5:  'Bumper R2',                // RB / right shoulder
-      8:  'view',
-      9:  'menu',
-      10: 'joystick Left top button', // L3 / left stick click
-      11: 'joystick Right Top Button',// R3 / right stick click
-      // Dpad: original single `dpad` region was split into four
-      // cardinal wedges by tools/split-dpad.js (PCA on the dpad face
-      // centroids → in-plane axes → angle-bucket each face into the
-      // nearest cardinal). Each direction is now its own mesh and
-      // animates independently.
+      0:  'south_button',    // A
+      1:  'east_button',     // B
+      2:  'west_button',     // X
+      3:  'north_button',    // Y
+      4:  'left_shoulder',   // LB
+      5:  'right_shoulder',  // RB
+      8:  'back_button',     // View
+      9:  'start_button',    // Menu
+      10: 'left_stick_cap',  // L3 — stick click (also tilts with the stick group)
+      11: 'right_stick_cap', // R3
       12: 'dpad_up',
       13: 'dpad_down',
       14: 'dpad_left',
       15: 'dpad_right',
-      16: 'steam',
-      // QAM "..." button position is painted but the driver doesn't
-      // parse a button bit for it yet. Leave commented until the bit
-      // is identified.
-      // 17: 'qucick access',
+      16: 'guide_button',    // Steam
+      // 17: quick-access "…" — driver doesn't parse a bit for it yet.
     },
     triggerMap: {
-      6: 'Trigger L1',                // LT / left analog trigger
-      7: 'Trigger R1',                // RT / right analog trigger
+      6: 'left_trigger',     // LT
+      7: 'right_trigger',    // RT
     },
-    // Stick assemblies — each tilts as a group when the analog stick
-    // moves. The "top button" mesh is also referenced by buttonMap[10]
-    // / [11] so it gets BOTH a tilt (from stick analog) and a press-
-    // down (from stick click). Visualizer handles the dual role.
+    // Each stick tilts as a group; the cap is also a buttonMap target
+    // (L3/R3 click) so it gets both a tilt and a press — the visualizer
+    // handles that dual role.
     stickMap: {
-      left:  {
-        meshes: ['joystick Left', 'joystick Left cap', 'joystick Left top button'],
-        axisX: 0, axisY: 1,
-      },
-      right: {
-        meshes: ['joystick Right', 'joystick Right cap', 'joystick Right Top Button'],
-        axisX: 2, axisY: 3,
-      },
+      left:  { meshes: ['left_stick_base', 'left_stick_ring', 'left_stick_cap'], axisX: 0, axisY: 1 },
+      right: { meshes: ['right_stick_base', 'right_stick_ring', 'right_stick_cap'], axisX: 2, axisY: 3 },
     },
-    pressDepth: 0.002,
-    // Triggers rotate inward (toward the user) when pulled. 30° looks
-    // fine on DualSense where the trigger paddle has a closed back
-    // panel, but on the Steam Controller's split GLB the back of the
-    // trigger is open — large rotations reveal the body cavity behind.
-    // ~12° gives a clear motion signal without a distracting gap. Add
-    // a back panel mesh later if photorealistic motion matters.
-    triggerMaxAngle: 0.21,
-    stickMaxTilt: 0.26,
+    // ceski's Steam parts have travel=0 (buttons highlight, don't sink), and
+    // they're flush/thin — so a small dip + glow, not a deep press.
+    pressDepth: 0.0005,
+    triggerMaxAngle: 0.349,  // = info.txt trigger_max (~20°)
+    stickMaxTilt: 0.436,     // = info.txt stick_max (~25°)
     hasGyro: true,
-    // Axis remap is applied inside the driver itself (Y↔Z swap on both
-    // gyro and accel — see steam-controller-driver.js parseReport).
+    // Axis remap is applied inside the driver (Y↔Z swap on gyro+accel —
+    // see steam-controller-driver.js parseReport).
     gyroTransform: (gx, gy, gz) => [gx, gy, gz],
-    hasTouchpad: false,     // two separate trackpads — no single touchpad mesh
-    // bodyMeshes is what the gyro rotation target group includes. Use
-    // 'body' (the residual mesh after all regions are extracted) so
-    // pressing a button doesn't drag the whole controller along.
-    bodyMeshes: ['body'],
-    // Every painted region (buttons, sticks, triggers, dpad, trackpads,
-    // back paddles, system buttons) PLUS the residual shell — the
-    // Steam Controller is single-color, so all 29 split meshes share
-    // the body theme color. Per-press emissive glow still animates on
-    // top because the visualizer drives glow via material.emissive,
-    // not material.color. Move any name to accentColorMeshes later to
-    // give that region a distinct theme color.
+    hasTouchpad: false,      // two trackpads (touchpad + misc2); touch-point anim TBD
+    // gyro rotates the whole model (bodyGroup); bodyMeshes is informational.
+    bodyMeshes: ['top_shell', 'bottom_shell', 'misc1', 'left_gripsense', 'right_gripsense'],
+    // Single-color controller — every part shares the body theme color.
+    // Back paddles (paddle1-4) and trackpads are static (no standard
+    // gamepad index) but still themed.
     bodyColorMeshes: [
-      'body',
-      'A', 'B', 'X', 'Y',
-      'Bumper L2', 'Bumper R2',
-      'Trigger L1', 'Trigger R1',
-      'view', 'menu', 'steam', 'qucick access',
-      'joystick Left', 'joystick Left cap', 'joystick Left top button',
-      'joystick Right', 'joystick Right cap', 'joystick Right Top Button',
+      'top_shell', 'bottom_shell', 'misc1', 'misc2', 'left_gripsense', 'right_gripsense',
+      'south_button', 'east_button', 'west_button', 'north_button',
+      'left_shoulder', 'right_shoulder', 'left_trigger', 'right_trigger',
+      'back_button', 'start_button', 'guide_button',
+      'left_stick_base', 'left_stick_ring', 'left_stick_cap',
+      'right_stick_base', 'right_stick_ring', 'right_stick_cap',
       'dpad_up', 'dpad_down', 'dpad_left', 'dpad_right',
-      'trackpad left', 'trackpad right',
-      'L4', 'L5', 'R4', 'R5',
+      'touchpad', 'touch_point1', 'touch_point2',
+      'paddle1', 'paddle2', 'paddle3', 'paddle4',
     ],
     accentColorMeshes: [],
-    defaultBodyColor: '#ffffff',
-    defaultAccentColor: '#ffffff',
+    defaultBodyColor: '#2a2a2e',
+    defaultAccentColor: '#2a2a2e',
     hudLabels: {
       0: 'A',  1: 'B',  2: 'X',  3: 'Y',
       4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT',
