@@ -37,9 +37,24 @@ tests.
   is identical to the GameSir capture, so the shared steering pipeline needs no
   DS4-specific axis/sign/scale handling.
 
+## `steam-controller-puck_28de-1304.json`
+
+- **Source:** the `Capture HID Report` wizard in `apps/overlay`, captured
+  2026-06-11 from a **Steam Controller 2026 via the wireless Puck**
+  (`28de:1304`), USB connection. STATE reports are id `0x45`, 53 bytes.
+- **Trimmed:** only the `at-rest` and `touchpad` steps are kept (the two the
+  trackpad test needs), downsampled (every 16th at-rest, every 4th touchpad).
+  Non-STATE 53-byte reports (`0x7b`/`0x43`) are left in and exercise the #28
+  report-id guard.
+- **What it proves:** both trackpads decode from the 0x45 STATE report at
+  **left X@17 Y@19 area@21, right X@23 Y@25 area@27** (int16 LE) — pads read
+  active with real coordinate sweeps during the touchpad step and inactive at
+  rest (no phantom touches from a wrong offset). Independently corroborated the
+  driver's existing offsets when investigating trackpad support (#43).
+
 The `bytes` field of each report is the WebHID input-report payload **with the
 report ID already stripped** (as `HIDInputReportEvent.data` delivers it), so byte
-indices map directly onto `PlayStationDriver.parseReport`'s `DataView` offsets.
+indices map directly onto the driver's `parseReport` `DataView` offsets.
 
 > No genuine DualSense (DS5) capture exists in this repo yet — the DS5 parse path
 > is covered by synthesized frames in `playstation-driver.test.js`. Drop a real
