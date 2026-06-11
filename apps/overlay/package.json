@@ -17,7 +17,6 @@
   "dependencies": {
     "@usersfirst/controller-core": "*",
     "@usersfirst/controller-visualizer": "*",
-    "electron-squirrel-startup": "^1.0.1",
     "three": "0.161.0"
   },
   "devDependencies": {
