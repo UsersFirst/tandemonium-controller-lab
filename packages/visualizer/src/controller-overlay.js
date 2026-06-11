@@ -441,6 +441,10 @@ export class ControllerOverlay {
     //    per-pad indicator path: each driver touch-point moves a pre-modeled
     //    indicator dot across its pad surface.
     //  - Single-pad controllers (DualSense) use the two-finger path below.
+    // Reset prior-model touchpad state so a controller switch can't leave the
+    // multi-pad path active with stale (disposed) mesh refs.
+    this._trackpads = null;
+    this._touchpadBounds = null;
     if (profile.trackpads && profile.hasTouchpad) {
       this._setupTrackpads(profile, meshByName);
     } else {
