@@ -58,6 +58,10 @@ export class ControllerOverlay {
     this._touchIndicators = [null, null]; // per-finger { sphere, ring, glow }
     this._touchStrokes = { group: null, active: [null, null], prevActive: [false, false], prevId: [-1, -1] };
     this._touchColors = [0x44aaff, 0xff4444]; // blue, red
+
+    // Emissive "press" glow color for digital buttons, stick clicks, and
+    // triggers (pre-bottom). Defaults to yellow; override via setPressColor.
+    this._pressColor = 0xffcc00;
     this._touchpadBounds = null; // { minX, maxX, minZ, maxZ, topY, mesh }
     this._touchpadClickState = false;
     this._glowTexture = null;
@@ -607,14 +611,13 @@ export class ControllerOverlay {
         const targetY = orig.posY - (btn.pressed ? profile.pressDepth : 0);
         mesh.position.y = THREE.MathUtils.lerp(mesh.position.y, targetY, LERP_SPEED);
 
-        // Yellow emissive glow on press
+        // Emissive glow on press (color configurable via setPressColor).
+        // Set every frame so a runtime color change takes effect immediately;
+        // intensity lerps to 0 when not pressed, so the color is invisible then.
         const mat = mesh.isMesh ? mesh.material :
                     (mesh.children?.[0]?.isMesh ? mesh.children[0].material : null);
         if (mat && 'emissive' in mat) {
-          if (!mat._btnEmissiveSet) {
-            mat._btnEmissiveSet = true;
-            mat.emissive.set(0xffcc00);
-          }
+          mat.emissive.set(this._pressColor);
           const targetIntensity = btn.pressed ? 3.0 : 0;
           mat.emissiveIntensity = THREE.MathUtils.lerp(
             mat.emissiveIntensity, targetIntensity, LERP_SPEED
@@ -658,13 +661,13 @@ export class ControllerOverlay {
             trigMat._trigEmissiveSet = true;
             trigMat.side = THREE.DoubleSide;
             trigMat.needsUpdate = true;
-            trigMat.emissive.set(0xffcc00);
+            trigMat.emissive.set(this._pressColor);
           }
-          // Two-tone behavior: yellow up to 95% pull, snap to red when
-          // fully pressed (bottomed out). The intensity scales with
+          // Two-tone behavior: highlight color up to 95% pull, snap to red
+          // when fully pressed (bottomed out). The intensity scales with
           // analog value in both phases.
           const fullyPressed = btn.value >= 0.95;
-          const targetColor = fullyPressed ? 0xff3322 : 0xffcc00;
+          const targetColor = fullyPressed ? 0xff3322 : this._pressColor;
           trigMat.emissive.set(targetColor);
           const targetGlow = btn.value > 0.05 ? btn.value * 3.0 : 0;
           trigMat.emissiveIntensity = THREE.MathUtils.lerp(
@@ -702,7 +705,7 @@ export class ControllerOverlay {
         // Colors: blue gradient for tilt, yellow for click
         const tiltColors = [0x00ddff, 0x3388ff, 0x2244cc]; // cap, ring, base
         const tiltPeaks  = [4.0,     2.5,     1.2];
-        const pressColor = 0xffcc00;
+        const pressColor = this._pressColor;
         const pressPeak  = 3.0;
 
         for (let si = 0; si < stickMeshes.length; si++) {
@@ -910,11 +913,11 @@ export class ControllerOverlay {
     const profile = PROFILES[this.controllerType];
     if (!profile?.hasTouchpad) return;
 
-    // Touchpad click → yellow glow on touchpad mesh
+    // Touchpad click → press-highlight glow on touchpad mesh
     const tpMesh = this._touchpadBounds.mesh;
     if (tpMesh?.material && 'emissive' in tpMesh.material) {
       if (touchpadButton && !this._touchpadClickState) {
-        tpMesh.material.emissive.set(0xffcc00);
+        tpMesh.material.emissive.set(this._pressColor);
         tpMesh.material.emissiveIntensity = 2.0;
       } else if (!touchpadButton && this._touchpadClickState) {
         tpMesh.material.emissive.set(0x000000);
@@ -1075,6 +1078,16 @@ export class ControllerOverlay {
    */
   setAccentColor(hexColor) {
     this._setColorGroup('accentColorMeshes', hexColor);
+  }
+
+  /**
+   * Set the emissive "press" highlight color used for digital button,
+   * stick-click, and trigger (pre-bottom) glow. The fully-pressed trigger
+   * still snaps to red as a distinct bottoming-out cue.
+   * @param {string} hexColor — CSS hex color e.g. '#ff3344'
+   */
+  setPressColor(hexColor) {
+    this._pressColor = new THREE.Color(hexColor).getHex();
   }
 
   _setColorGroup(groupKey, hexColor) {
