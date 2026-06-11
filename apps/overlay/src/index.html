@@ -21,14 +21,22 @@
     height: 100%;
   }
 
-  /* ── Drag region (top bar + splash) ── */
+  /* ── Title bar region ──
+     Cosmetic only (shown when "Show Title Bar" is on). Window dragging is
+     handled in JS (see wireWindowDrag in app.js): the user can grab any
+     non-interactive part of the window, not just this strip — so the overlay
+     is always repositionable regardless of this toggle. */
   #drag-bar {
     position: fixed;
     top: 0; left: 0; right: 80px;
     height: 40px;
-    -webkit-app-region: drag;
+    cursor: grab;
     z-index: 100;
   }
+
+  /* While a drag is in progress, show the "grabbing" cursor everywhere so the
+     feedback is consistent no matter where the user grabbed the window. */
+  html.is-dragging, html.is-dragging * { cursor: grabbing !important; }
 
   /* ── Settings gear ── */
   #settings-toggle {

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, globalShortcut, Tray, Menu, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -21,6 +21,14 @@ let clickThrough = false;
 // re-opening or duplicating.
 let buttonHudWindow = null;
 let inventoryWindow = null;
+
+// ── Frameless window dragging ──
+// Per-window grab offset (cursor → window origin), captured at drag start.
+// Driving the move from the main process with screen.getCursorScreenPoint()
+// keeps repositioning DPI-correct and smooth, and avoids the cross-platform
+// quirks of CSS -webkit-app-region: drag on a transparent frameless window
+// (hijacked child clicks, double-click-to-maximize, flaky canvas hit-testing).
+const dragOffsets = new Map(); // BrowserWindow.id -> { dx, dy }
 
 // ── Controller inventory: HID serial source (main process) ──
 // The renderer's WebHID can't read serial numbers (Chromium blocklists the
@@ -186,6 +194,31 @@ app.whenReady().then(() => {
 
   // Handle quit from renderer
   ipcMain.on('quit-app', () => app.quit());
+
+  // ── Frameless window drag (renderer grabs a non-interactive area) ──
+  // Renderer signals start/move/end; we compute position from the live
+  // cursor so the grab point stays pinned under the pointer regardless of
+  // DPI scaling or how fast the mouse moves. fromWebContents makes this work
+  // for any frameless window (main overlay, button-HUD popout) that opts in.
+  ipcMain.on('window-drag-start', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    const cursor = screen.getCursorScreenPoint();
+    const bounds = win.getBounds();
+    dragOffsets.set(win.id, { dx: cursor.x - bounds.x, dy: cursor.y - bounds.y });
+  });
+  ipcMain.on('window-drag-move', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    const off = dragOffsets.get(win.id);
+    if (!off) return;
+    const cursor = screen.getCursorScreenPoint();
+    win.setPosition(Math.round(cursor.x - off.dx), Math.round(cursor.y - off.dy));
+  });
+  ipcMain.on('window-drag-end', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) dragOffsets.delete(win.id);
+  });
 
   // Controller inventory window + its HID serial source (node-hid in main).
   ipcMain.handle('open-inventory-window', () => { openInventoryWindow(); return { opened: true }; });
