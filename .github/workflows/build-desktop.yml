@@ -1,12 +1,32 @@
 name: Build desktop overlay (WebHID Controller Overlay)
 
-# Builds the Electron app for macOS + Windows and publishes a GitHub Release
-# whose assets the landing page links to. Manual (workflow_dispatch) or by
-# pushing a `webhid-overlay-v*` tag — intentionally NOT on every main push.
+# Builds the Electron app for macOS + Windows.
+#
+# Triggers:
+#   • push to main touching overlay/visualizer/core sources — builds and
+#     uploads the installers as run artifacts (CI validation; no Release).
+#   • workflow_dispatch or a `webhid-overlay-v*` tag — same build, and also
+#     publishes a GitHub Release whose assets the landing page links to.
+# Path filters are ignored for tag pushes (GitHub evaluates them only for
+# branch pushes), so tagged releases always build regardless of paths.
 on:
   workflow_dispatch:
   push:
     tags: ['webhid-overlay-v*']
+    branches: [main]
+    paths:
+      - 'apps/overlay/**'
+      - 'packages/core/src/**'
+      - 'packages/visualizer/**'
+      - 'package-lock.json'
+      - '.github/workflows/build-desktop.yml'
+
+# Avoid piling up duplicate builds on rapid pushes. Tag/release builds are
+# never cancelled (each tag is its own ref); event types stay in separate
+# groups so a manual release run can't be cancelled by a main push.
+concurrency:
+  group: build-desktop-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: write
@@ -65,6 +85,9 @@ jobs:
 
   release:
     needs: [build-macos, build-windows]
+    # Only publish a Release for tag pushes or manual runs. Plain pushes to
+    # main just build + upload artifacts (downloadable from the run page).
+    if: ${{ github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
