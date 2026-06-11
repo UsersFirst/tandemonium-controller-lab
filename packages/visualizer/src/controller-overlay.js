@@ -16,6 +16,12 @@ import { PROFILES } from './controller-profiles.js';
 
 const DEADZONE = 0.08;
 const LERP_SPEED = 0.25; // Smoothing factor for animations
+// Peak emissive intensity for the press/tilt glow. Kept modest on purpose:
+// the renderer uses ACES filmic tone mapping, which desaturates very bright
+// emissive — at the old 3.0 a saturated color (e.g. pure red) blew out toward
+// orange/yellow. ~1.5 keeps the chosen hue faithful while still glowing. Nudge
+// up for a punchier glow if you don't mind some hue shift on saturated colors.
+const PRESS_GLOW = 1.5;
 
 export class ControllerOverlay {
   /**
@@ -618,7 +624,7 @@ export class ControllerOverlay {
                     (mesh.children?.[0]?.isMesh ? mesh.children[0].material : null);
         if (mat && 'emissive' in mat) {
           mat.emissive.set(this._pressColor);
-          const targetIntensity = btn.pressed ? 3.0 : 0;
+          const targetIntensity = btn.pressed ? PRESS_GLOW : 0;
           mat.emissiveIntensity = THREE.MathUtils.lerp(
             mat.emissiveIntensity, targetIntensity, LERP_SPEED
           );
@@ -669,7 +675,7 @@ export class ControllerOverlay {
           const fullyPressed = btn.value >= 0.95;
           const targetColor = fullyPressed ? 0xff3322 : this._pressColor;
           trigMat.emissive.set(targetColor);
-          const targetGlow = btn.value > 0.05 ? btn.value * 3.0 : 0;
+          const targetGlow = btn.value > 0.05 ? btn.value * PRESS_GLOW : 0;
           trigMat.emissiveIntensity = THREE.MathUtils.lerp(
             trigMat.emissiveIntensity, targetGlow, LERP_SPEED
           );
@@ -695,18 +701,17 @@ export class ControllerOverlay {
         pivot.rotation.x = THREE.MathUtils.lerp(pivot.rotation.x, targetTiltX, LERP_SPEED);
         pivot.rotation.z = THREE.MathUtils.lerp(pivot.rotation.z, targetTiltZ, LERP_SPEED);
 
-        // Stick glow: blue gradient on tilt, yellow on L3/R3 press
+        // Stick glow: the highlight color for both tilt and L3/R3 click.
+        // Hue stays constant; only intensity varies — a gradient that's
+        // brightest at the cap on tilt, and full strength on click.
         const magnitude = Math.min(1, Math.sqrt(axisX * axisX + axisY * axisY));
         const stickMeshes = stick.meshes || [];
         // L3 = button 10, R3 = button 11
         const pressBtn = gamepad?.buttons?.[key === 'left' ? 10 : 11];
         const isPressed = pressBtn?.pressed || false;
 
-        // Colors: blue gradient for tilt, yellow for click
-        const tiltColors = [0x00ddff, 0x3388ff, 0x2244cc]; // cap, ring, base
-        const tiltPeaks  = [4.0,     2.5,     1.2];
-        const pressColor = this._pressColor;
-        const pressPeak  = 3.0;
+        // Per-layer tilt brightness (cap, ring, base), scaled off PRESS_GLOW.
+        const tiltPeaks = [PRESS_GLOW, PRESS_GLOW * 0.65, PRESS_GLOW * 0.35];
 
         for (let si = 0; si < stickMeshes.length; si++) {
           const part = this.meshes[stickMeshes[si]];
@@ -714,20 +719,13 @@ export class ControllerOverlay {
           const partMat = part.material;
           if (!partMat || !('emissive' in partMat)) continue;
 
-          // Switch emissive color between yellow (press) and blue (tilt)
-          if (isPressed) {
-            partMat.emissive.set(pressColor);
-            const targetGlow = pressPeak;
-            partMat.emissiveIntensity = THREE.MathUtils.lerp(
-              partMat.emissiveIntensity, targetGlow, LERP_SPEED
-            );
-          } else {
-            partMat.emissive.set(tiltColors[si] || 0x3388ff);
-            const targetGlow = magnitude > 0 ? magnitude * (tiltPeaks[si] || 2.0) : 0;
-            partMat.emissiveIntensity = THREE.MathUtils.lerp(
-              partMat.emissiveIntensity, targetGlow, LERP_SPEED
-            );
-          }
+          partMat.emissive.set(this._pressColor);
+          const targetGlow = isPressed
+            ? PRESS_GLOW
+            : (magnitude > 0 ? magnitude * (tiltPeaks[si] ?? PRESS_GLOW * 0.5) : 0);
+          partMat.emissiveIntensity = THREE.MathUtils.lerp(
+            partMat.emissiveIntensity, targetGlow, LERP_SPEED
+          );
         }
       }
     }
@@ -918,7 +916,7 @@ export class ControllerOverlay {
     if (tpMesh?.material && 'emissive' in tpMesh.material) {
       if (touchpadButton && !this._touchpadClickState) {
         tpMesh.material.emissive.set(this._pressColor);
-        tpMesh.material.emissiveIntensity = 2.0;
+        tpMesh.material.emissiveIntensity = PRESS_GLOW;
       } else if (!touchpadButton && this._touchpadClickState) {
         tpMesh.material.emissive.set(0x000000);
         tpMesh.material.emissiveIntensity = 0;
