@@ -5,6 +5,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onToggleSettings: (callback) => ipcRenderer.on('toggle-settings', () => callback()),
   quit: () => ipcRenderer.send('quit-app'),
 
+  // ── Frameless window drag ──
+  // The renderer detects a grab on a non-interactive area and drives the
+  // window move through the main process (which reads the live cursor for
+  // DPI-correct positioning). start once on pointerdown, move per frame,
+  // end on pointerup.
+  windowDragStart: () => ipcRenderer.send('window-drag-start'),
+  windowDragMove: () => ipcRenderer.send('window-drag-move'),
+  windowDragEnd: () => ipcRenderer.send('window-drag-end'),
+
   // Test Report export — writes JSON to a user-chosen path via native save dialog.
   // Returns { saved: true, path } or { saved: false, reason: 'cancelled' | 'error: ...' }.
   saveTestReport: (json, suggestedName) =>

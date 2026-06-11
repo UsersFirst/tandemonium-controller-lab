@@ -1758,6 +1758,73 @@ if (window.electronAPI) {
   });
 }
 
+// ── Window dragging (frameless overlay) ──────────────────────────────────
+// Grabbing any non-interactive part of the window — the 3D view, the
+// background, the no-controller splash, or the title bar — repositions the
+// whole window. The move itself runs in the main process (preload exposes
+// windowDrag*), which reads the live cursor for DPI-correct, smooth tracking.
+//
+// We deliberately avoid CSS -webkit-app-region: drag: on a transparent
+// frameless window it's inconsistent across platforms, swallows clicks on
+// child elements, and double-click maximizes the overlay. Doing it manually
+// also lets us exclude interactive controls so dragging never competes with
+// using them — in particular the gear button and settings panel always
+// respond to clicks normally.
+(function wireWindowDrag() {
+  const api = window.electronAPI;
+  if (!api?.windowDragStart) return; // web build: there's no window to move
+
+  // A pointerdown on any of these (or their descendants) is a real click,
+  // not a drag — let it through untouched.
+  const INTERACTIVE_SELECTOR = [
+    '#settings-toggle', '#settings-panel', '#gyro-toggle',
+    '#puck-status-banner', '#exit-confirm', '#test-report-modal',
+    'button', 'input', 'select', 'textarea', 'a', 'label',
+  ].join(',');
+
+  // Track click-through so we never try to drag while the window is set to
+  // ignore mouse events. (pointerdown wouldn't fire then anyway, but be safe.)
+  let clickThrough = false;
+  api.onClickThroughChanged?.((val) => { clickThrough = val; });
+
+  let dragging = false;
+  let movePending = false;
+
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    document.documentElement.classList.remove('is-dragging');
+    api.windowDragEnd();
+  }
+
+  window.addEventListener('pointerdown', (e) => {
+    // Left button only — right-click still opens settings (contextmenu).
+    if (e.button !== 0 || clickThrough) return;
+    if (e.target instanceof Element && e.target.closest(INTERACTIVE_SELECTOR)) return;
+
+    dragging = true;
+    document.documentElement.classList.add('is-dragging');
+    api.windowDragStart();
+    // Keep receiving pointermove even if the cursor briefly outruns the window.
+    if (e.target instanceof Element) {
+      try { e.target.setPointerCapture(e.pointerId); } catch (_) { /* not capturable */ }
+    }
+  });
+
+  // Coalesce moves to one IPC per frame; main reads the cursor each time.
+  window.addEventListener('pointermove', () => {
+    if (!dragging || movePending) return;
+    movePending = true;
+    requestAnimationFrame(() => {
+      movePending = false;
+      if (dragging) api.windowDragMove();
+    });
+  });
+
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+})();
+
 // ────────────────────────────────────────────────────────────
 // TEST REPORT — guided HID capture wizard
 // ────────────────────────────────────────────────────────────
