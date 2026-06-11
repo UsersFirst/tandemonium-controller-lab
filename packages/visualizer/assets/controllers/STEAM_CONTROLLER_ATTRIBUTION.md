@@ -11,6 +11,7 @@ Controller**, by way of the cleanly-componentized parts in
   model carried by ceski-1/3d-controller-overlay was created by ivaniovine.
   - X/Twitter: <https://x.com/ivaniovine>
   - Reddit: <https://www.reddit.com/u/ivanim13>
+  - Reddit post (r/GyroGaming): <https://www.reddit.com/r/GyroGaming/s/PuEIf6zxhR>
 - **Original CAD**: <https://gitlab.steamos.cloud/SteamHardware/SteamController>
 - **Copyright**: © 2026 Valve Corporation
 - **License**: **Creative Commons Attribution-NonCommercial-ShareAlike 4.0
