@@ -15,11 +15,11 @@ jobs:
     name: controller-core (lint + test)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
 
       # @usersfirst/controller-core has zero runtime/test dependencies — its
       # tests import only from ./src and use the built-in node:test runner —
