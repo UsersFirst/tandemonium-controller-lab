@@ -6,7 +6,9 @@ const fs = require('fs');
 // installer launches the app with --squirrel-install / --squirrel-updated /
 // --squirrel-uninstall / --squirrel-obsolete, this quits immediately so the
 // user doesn't see a flash of the UI followed by a relaunch on first run.
-if (require('electron-squirrel-startup')) {
+// Vendored locally (see electron/squirrel-startup.js) instead of the npm
+// package, which gets workspace-hoisted out of app.asar and breaks the .exe.
+if (require('./squirrel-startup')) {
   app.quit();
   return;
 }
