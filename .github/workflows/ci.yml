@@ -37,3 +37,10 @@ jobs:
       - name: Test
         run: node --test
         working-directory: packages/core
+
+      # Visualizer has a small suite of dependency-free unit tests (e.g. the
+      # trackpad coordinate math). They import only pure ./src modules — no
+      # three — so they run without an install.
+      - name: Visualizer unit tests
+        run: node --test
+        working-directory: packages/visualizer
