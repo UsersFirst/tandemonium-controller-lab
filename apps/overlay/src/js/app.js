@@ -459,6 +459,11 @@ async function init() {
   });
   await overlay.init();
 
+  // Apply the saved "pop-out controls" preference to the freshly-loaded model.
+  if (overlay.setFloatParts) {
+    overlay.setFloatParts(localStorage.getItem('overlay:floatParts') === '1');
+  }
+
   if (hasGamepad) {
     currentControllerType = initialType;
     modelReady = true;
@@ -1614,6 +1619,17 @@ connectGyroBtn.addEventListener('click', async () => {
 });
 
 document.getElementById('hud-position').addEventListener('change', () => applyHudPosition());
+
+// Pop-out controls — float triggers/bumpers/paddles clear of the body. The
+// overlay eases them in/out; we just persist + forward the toggle.
+const floatPartsCheck = document.getElementById('float-parts');
+if (floatPartsCheck) {
+  floatPartsCheck.checked = localStorage.getItem('overlay:floatParts') === '1';
+  floatPartsCheck.addEventListener('change', (e) => {
+    localStorage.setItem('overlay:floatParts', e.target.checked ? '1' : '0');
+    if (overlay?.setFloatParts) overlay.setFloatParts(e.target.checked);
+  });
+}
 
 driftModeSelect.addEventListener('change', (e) => {
   gravityMode = e.target.value;

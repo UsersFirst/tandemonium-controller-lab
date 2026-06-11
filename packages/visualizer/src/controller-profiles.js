@@ -66,6 +66,12 @@ export const PROFILES = {
     touchPoint2Mesh: 'touch_point2',
     bodyMeshes: ['body_top', 'body_bottom', 'body_extra'],  // gyro applied to bodyGroup parent
 
+    // "Pop-off" parts: float clear of the body (toggle in settings) so they're
+    // visible at any camera angle. Direction/magnitude are auto-derived from
+    // geometry; tune the spread via floatFactor.
+    floatParts: ['trigger_l2', 'trigger_r2', 'bumper_l1', 'bumper_r1'],
+    floatFactor: 0.35,
+
     // Color groups for user-customizable body/accent colors
     bodyColorMeshes: [
       'body_top', 'face_cross', 'face_circle', 'face_square', 'face_triangle',
@@ -302,6 +308,14 @@ export const PROFILES = {
     hasTouchpad: false,      // two trackpads (touchpad + misc2); touch-point anim TBD
     // gyro rotates the whole model (bodyGroup); bodyMeshes is informational.
     bodyMeshes: ['top_shell', 'bottom_shell', 'misc1', 'left_gripsense', 'right_gripsense'],
+    // "Pop-off" parts: triggers, bumpers, and the four back paddles float clear
+    // of the body (toggle in settings). Auto-positioned radially; tune spread
+    // via floatFactor.
+    floatParts: [
+      'left_trigger', 'right_trigger', 'left_shoulder', 'right_shoulder',
+      'paddle1', 'paddle2', 'paddle3', 'paddle4',
+    ],
+    floatFactor: 0.35,
     // Single-color controller — every part shares the body theme color.
     // Back paddles (paddle1-4) and trackpads are static (no standard
     // gamepad index) but still themed.

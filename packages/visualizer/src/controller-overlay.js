@@ -16,6 +16,7 @@ import { PROFILES } from './controller-profiles.js';
 
 const DEADZONE = 0.08;
 const LERP_SPEED = 0.25; // Smoothing factor for animations
+const FLOAT_ZERO = new THREE.Vector3(); // shared read-only lerp target (parts seated)
 
 export class ControllerOverlay {
   /**
@@ -62,6 +63,14 @@ export class ControllerOverlay {
     this._touchpadClickState = false;
     this._glowTexture = null;
     this._touchRaycaster = new THREE.Raycaster();
+
+    // "Pop-off" floating parts: each floatable mesh is wrapped in an identity
+    // Group whose position lerps to a radial-outward offset when active (so
+    // triggers/bumpers/paddles float clear of the body, visible at any angle)
+    // and back to zero when not — zero offset is a no-op, so the seated look
+    // is byte-identical to before.
+    this._floatWrappers = []; // [{ group, offset:Vector3 }]
+    this._floatActive = false;
   }
 
   async init() {
@@ -465,6 +474,10 @@ export class ControllerOverlay {
       }
     }
 
+    // Wrap floatable parts for the "pop-off" feature (after aliasing so every
+    // profile name resolves in this.meshes).
+    this._setupFloatParts(profile);
+
     // Diagnostic: per-mapping check at load time so we can tell whether
     // each gamepad-index → mesh path will animate at runtime. The press
     // / tilt / trigger loops all early-return on missing mesh OR missing
@@ -580,6 +593,60 @@ export class ControllerOverlay {
     });
 
     console.log('Placeholder controller model created');
+  }
+
+  // ── "Pop-off" floating parts ──
+  // Wrap each profile.floatParts mesh in an identity Group and precompute a
+  // radial-outward offset (auto-derived from geometry: direction = part center
+  // → model center, magnitude = model radius × floatFactor). Floating just
+  // lerps each wrapper between 0 (seated) and its offset (popped) — the seated
+  // state is a no-op, and the part's own press/rotation animation runs inside
+  // the wrapper untouched.
+  _setupFloatParts(profile) {
+    this._floatWrappers = [];
+    const names = profile.floatParts;
+    if (!names || !names.length) return;
+
+    this.model.updateWorldMatrix(true, true);
+    const modelBox = new THREE.Box3().setFromObject(this.model);
+    const modelCenter = modelBox.getCenter(new THREE.Vector3());
+    const worldRadius = modelBox.getSize(new THREE.Vector3()).length() * 0.5;
+    const scale = this.model.scale.x || 1; // uniform scale applied in _setupModel
+    const factor = profile.floatFactor ?? 0.35;
+
+    const seen = new Set();
+    for (const name of names) {
+      const obj = this.meshes[name];
+      if (!obj || seen.has(obj)) continue; // skip missing / duplicate (alias) refs
+      seen.add(obj);
+
+      // World-space radial direction from model center to the part's center.
+      const partCenter = new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3());
+      const dir = partCenter.sub(modelCenter);
+      if (dir.lengthSq() < 1e-12) dir.set(0, 1, 0); // dead-center part → push up
+      dir.normalize();
+      // Convert the world displacement to the wrapper's parent-local space. At
+      // setup the model isn't gyro-rotated yet (rotation identity), so for a
+      // uniformly-scaled parent this is just divide-by-scale.
+      const offset = dir.multiplyScalar((worldRadius * factor) / scale);
+
+      const parent = obj.parent;
+      const g = new THREE.Group(); // identity → preserves obj's world transform
+      parent.add(g);
+      g.add(obj);
+      this._floatWrappers.push({ group: g, offset });
+    }
+  }
+
+  /** Toggle the pop-off float (parts ease in/out via the render loop). */
+  setFloatParts(enabled) {
+    this._floatActive = !!enabled;
+  }
+
+  _updateFloat() {
+    for (const w of this._floatWrappers) {
+      w.group.position.lerp(this._floatActive ? w.offset : FLOAT_ZERO, LERP_SPEED);
+    }
   }
 
   /**
@@ -740,6 +807,7 @@ export class ControllerOverlay {
     if (this._disposed) return;
     this._animationId = requestAnimationFrame(() => this._animate());
 
+    this._updateFloat();
     this.controls?.update();
     this.renderer.render(this.scene, this.camera);
   }
