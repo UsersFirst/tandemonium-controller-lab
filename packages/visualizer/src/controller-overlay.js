@@ -930,9 +930,22 @@ export class ControllerOverlay {
       const bb = padMesh.geometry.boundingBox;
       const dot = meshByName[cfg.indicator] || null;
       let restPos = null;
+      let dotLiftY = 0;
       if (dot) {
         restPos = dot.position.clone();
         dot.visible = false; // shown only while a finger is on the pad
+        // dot.position is an OFFSET from the dot's baked geometry (already at
+        // the pad surface), so the lift must be a small DELTA: raise the dot
+        // from its modeled height just past the raised pad edge, plus a small
+        // margin. (Using an absolute Y double-counts the baked height and
+        // floats the dot way off the pad.) Margin scales with pad thickness so
+        // it survives the body-resize on the float branch; tune trackpadDotLift.
+        dot.geometry?.computeBoundingBox?.();
+        const dotCenterY = dot.geometry
+          ? (dot.geometry.boundingBox.min.y + dot.geometry.boundingBox.max.y) / 2
+          : bb.max.y;
+        const margin = (bb.max.y - bb.min.y) * (profile.trackpadDotLift ?? 0.05);
+        dotLiftY = Math.max(0, bb.max.y - dotCenterY) + margin;
       } else {
         console.warn(`Trackpad indicator '${cfg.indicator}' not found in model`);
       }
@@ -940,11 +953,7 @@ export class ControllerOverlay {
         point: cfg.point,
         width: bb.max.x - bb.min.x,
         depth: bb.max.z - bb.min.z,
-        // Sit the dot just above the pad's top surface so it clears the raised
-        // edge without floating off. Lift is a fraction of pad thickness so it
-        // scales with the model (incl. the body-resize on the float branch);
-        // tune via trackpadDotLift.
-        topY: bb.max.y + (bb.max.y - bb.min.y) * (profile.trackpadDotLift ?? 0.1),
+        dotLiftY,
         dot,
         restPos,
         color: this._touchColors[idx % this._touchColors.length],
@@ -969,7 +978,7 @@ export class ControllerOverlay {
         // fractional touch position across the pad's local XZ extent.
         pad.dot.position.set(
           pad.restPos.x + (fx - 0.5) * pad.width,
-          pad.topY, // floats above the pad surface so it never clips the edge
+          pad.restPos.y + pad.dotLiftY, // small lift above the modeled surface
           pad.restPos.z + (fy - 0.5) * pad.depth,
         );
         pad.dot.visible = true;
