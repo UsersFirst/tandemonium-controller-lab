@@ -961,6 +961,11 @@ export class ControllerOverlay {
     });
   }
 
+  // TODO(trackpad contour): the dot rides a single flat plane (pad top + lift),
+  // so on a curved/dished pad it doesn't hug the surface precisely. The
+  // single-pad DualSense path solves this in `_touchToLocal` by raycasting
+  // straight down onto the pad mesh to find the exact surface point + normal;
+  // adopt that here per-pad when we revisit. Good enough for now.
   _updateTrackpads(touchPoints) {
     const profile = PROFILES[this.controllerType];
     const range = profile.trackpadRange || 32768;
