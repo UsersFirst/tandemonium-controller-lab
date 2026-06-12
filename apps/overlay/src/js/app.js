@@ -1427,7 +1427,7 @@ function updateSyntheticFromParsed(parsed) {
     set(14, b.dpadLeft);
     set(15, b.dpadRight);
     set(16, b.ps);
-    set(17, b.mic);
+    set(17, b.mic || b.quickAccess); // DualSense mic / Steam Controller "…" share slot 17
   }
 
   // Back paddles (L4/L5/R4/R5) — no Standard-Gamepad index, so park them in

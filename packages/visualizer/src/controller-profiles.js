@@ -283,7 +283,7 @@ export const PROFILES = {
       14: 'dpad_left',
       15: 'dpad_right',
       16: 'guide_button',    // Steam
-      // 17: quick-access "…" — driver doesn't parse a bit for it yet.
+      17: 'misc1',           // "…" quick-access button (central, between the trackpads)
       // Back paddles: no Standard-Gamepad index, so the overlay synthesizes
       // them at slots 18-21 from the driver's WebHID paddle bits (L4/L5/R4/R5).
       // Right = paddle1/3, left = paddle2/4 (verified from GLB X-centers);
@@ -348,7 +348,7 @@ export const PROFILES = {
     hudLabels: {
       0: 'A',  1: 'B',  2: 'X',  3: 'Y',
       4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT',
-      8: 'Vw', 9: 'Mn', 16: 'St', 17: '',
+      8: 'Vw', 9: 'Mn', 16: 'St', 17: '…',
     },
   },
 };

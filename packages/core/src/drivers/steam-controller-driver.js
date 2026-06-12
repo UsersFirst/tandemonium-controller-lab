@@ -338,6 +338,7 @@ export class SteamControllerDriver extends ControllerDriver {
       create:   !!(btn1 & 0x40), // View
       options:  !!(btn0 & 0x40), // Menu
       ps:       !!(btn2 & 0x01), // Steam (PS-equivalent)
+      quickAccess: !!(btn0 & 0x10), // "…" quick-access button (between trackpads)
       // Stick clicks
       l3:       !!(btn1 & 0x80),
       r3:       !!(btn0 & 0x20),
