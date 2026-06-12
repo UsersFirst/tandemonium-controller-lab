@@ -62,6 +62,10 @@ export class ControllerOverlay {
     this._touchpadClickState = false;
     this._glowTexture = null;
     this._touchRaycaster = new THREE.Raycaster();
+
+    // Grip-sense highlighting (Steam Controller capacitive grips)
+    this._gripMarkers = null;  // { left, right } billboard sprites, on top
+    this._gripEnabled = true;  // toggled from settings
   }
 
   async init() {
@@ -464,6 +468,9 @@ export class ControllerOverlay {
         }
       }
     }
+
+    // Grip-sense on-top markers (after aliasing so grip meshes resolve).
+    this._setupGripMarkers(profile);
 
     // Diagnostic: per-mapping check at load time so we can tell whether
     // each gamepad-index → mesh path will animate at runtime. The press
@@ -1078,24 +1085,76 @@ export class ControllerOverlay {
   }
 
   /**
-   * Highlight the capacitive grip sensors. Glows the profile's grip meshes
-   * while a grip is held (digital on/off from the driver). Emissive only — the
-   * body color (albedo) is untouched. Called per HID report; intensity lerps.
+   * Highlight the capacitive grip sensors while held (digital on/off). Two
+   * visuals: (1) emissive glow on the grip meshes — only seen when the back of
+   * the controller faces the camera; and (2) a billboard glow marker per grip
+   * rendered ON TOP (depthTest off, at the top of the controller) so grip state
+   * reads at ANY angle. Toggle both via setGripVisible. Intensity lerps.
    * @param {{left:boolean, right:boolean}} grips
    */
   setGripState(grips) {
     const map = PROFILES[this.controllerType]?.gripMeshes;
     if (!map || !grips) return;
     for (const side of ['left', 'right']) {
+      const on = this._gripEnabled && !!grips[side];
+      // (1) mesh emissive glow
       const obj = this.meshes[map[side]];
-      if (!obj) continue;
-      const mesh = obj.isMesh ? obj : obj.children?.find((c) => c.isMesh);
+      const mesh = obj && (obj.isMesh ? obj : obj.children?.find((c) => c.isMesh));
       const mat = mesh?.material;
-      if (!mat || !('emissive' in mat)) continue;
-      if (!mat._gripEmissiveSet) { mat._gripEmissiveSet = true; mat.emissive.set(0x33ddaa); }
-      const target = grips[side] ? 0.9 : 0;
-      mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, target, LERP_SPEED);
+      if (mat && 'emissive' in mat) {
+        if (!mat._gripEmissiveSet) { mat._gripEmissiveSet = true; mat.emissive.set(0x33ddaa); }
+        mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, on ? 0.9 : 0, LERP_SPEED);
+      }
+      // (2) always-on-top billboard marker
+      const marker = this._gripMarkers?.[side];
+      if (marker) marker.material.opacity = THREE.MathUtils.lerp(marker.material.opacity, on ? 0.95 : 0, LERP_SPEED);
     }
+  }
+
+  /** Toggle all grip-sense highlighting (mesh glow + on-top markers). */
+  setGripVisible(enabled) {
+    this._gripEnabled = !!enabled;
+  }
+
+  // Create an always-on-top billboard glow marker above each grip so grip state
+  // is visible from any camera angle (the grip meshes are on the back/bottom
+  // and usually occluded). Markers live under bodyGroup so they rotate with the
+  // controller; depthTest off so they never hide behind the body.
+  _setupGripMarkers(profile) {
+    this._gripMarkers = null;
+    const map = profile.gripMeshes;
+    if (!map) return;
+    if (!this._glowTexture) {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const ctx = c.getContext('2d');
+      const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, 'rgba(255,255,255,0.95)');
+      g.addColorStop(0.4, 'rgba(255,255,255,0.35)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+      this._glowTexture = new THREE.CanvasTexture(c);
+    }
+    const modelBox = new THREE.Box3().setFromObject(this.model);
+    const markers = {};
+    for (const side of ['left', 'right']) {
+      const mesh = this.meshes[map[side]];
+      if (!mesh) continue;
+      const gb = new THREE.Box3().setFromObject(mesh);
+      const pos = gb.getCenter(new THREE.Vector3());
+      pos.y = modelBox.max.y; // lift onto the top of the controller, above the grip
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: this._glowTexture, color: 0x33ddaa, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
+      }));
+      sprite.renderOrder = 10; // draw after the model so it sits on top
+      const s = Math.max(gb.max.x - gb.min.x, gb.max.z - gb.min.z) * 1.3;
+      sprite.scale.set(s, s, 1);
+      // world == bodyGroup-local at setup (no gyro yet, bodyGroup unscaled)
+      sprite.position.copy(pos);
+      this.bodyGroup.add(sprite);
+      markers[side] = sprite;
+    }
+    this._gripMarkers = markers;
   }
 
   _setColorGroup(groupKey, hexColor) {

@@ -459,6 +459,8 @@ async function init() {
   });
   await overlay.init();
 
+  if (overlay.setGripVisible) overlay.setGripVisible(gripVizEnabled); // apply saved grip-display pref
+
   if (hasGamepad) {
     currentControllerType = initialType;
     modelReady = true;
@@ -1420,6 +1422,7 @@ function updateSyntheticFromParsed(parsed) {
 // 2D grip-sense indicator — readable at any 3D camera angle (the grip meshes
 // are on the back of the controller and usually occluded). Lazily revealed the
 // first time grip data arrives, then tracks left/right state.
+let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // default on
 let _gripRefs = null;
 function updateGripIndicator(grips) {
   if (!_gripRefs) {
@@ -1427,9 +1430,23 @@ function updateGripIndicator(grips) {
     if (!root) return;
     _gripRefs = { root, l: root.querySelector('.grip-l'), r: root.querySelector('.grip-r') };
   }
+  if (!gripVizEnabled) { _gripRefs.root.setAttribute('hidden', ''); return; }
   if (_gripRefs.root.hasAttribute('hidden')) _gripRefs.root.removeAttribute('hidden');
   _gripRefs.l.classList.toggle('active', !!grips.left);
   _gripRefs.r.classList.toggle('active', !!grips.right);
+}
+
+// Grip-sense display toggle — gates both the 2D edge indicator and the 3D
+// markers/glow (overlay.setGripVisible).
+const gripToggle = document.getElementById('grip-viz-toggle');
+if (gripToggle) {
+  gripToggle.checked = gripVizEnabled;
+  gripToggle.addEventListener('change', (e) => {
+    gripVizEnabled = e.target.checked;
+    localStorage.setItem('overlay:gripViz', gripVizEnabled ? '1' : '0');
+    if (overlay?.setGripVisible) overlay.setGripVisible(gripVizEnabled);
+    if (!gripVizEnabled) document.getElementById('grip-indicator')?.setAttribute('hidden', '');
+  });
 }
 
 let _firstReportLogged = false;
