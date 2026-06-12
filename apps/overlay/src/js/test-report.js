@@ -114,6 +114,14 @@ export const STEPS = [
     requires: ['backPaddles'],
     optional: true,
   },
+  {
+    id: 'grip-sense',
+    title: 'Grip sensors',
+    prompt: 'If your controller has capacitive grip sensors: firmly SQUEEZE the LEFT grip and hold ~1s, then release; then the RIGHT grip ~1s and release. Repeat a couple of times, one grip at a time so each is easy to tell apart. Skip if it has no grip sensors.',
+    durationMs: 8000,
+    requires: ['gripSense'],
+    optional: true,
+  },
 ];
 
 /**
@@ -142,7 +150,7 @@ export const STEP_AREAS = {
   'at-rest': 'gyro', 'pitch': 'gyro', 'roll': 'gyro', 'yaw': 'gyro',
   'face-buttons': 'face', 'system-buttons': 'system',
   'triggers-shoulders': 'triggers', 'sticks': 'sticks', 'dpad': 'dpad',
-  'touchpad': 'touchpad', 'back-paddles': 'paddles',
+  'touchpad': 'touchpad', 'back-paddles': 'paddles', 'grip-sense': 'grip',
 };
 export const AREA_LABELS = {
   gyro: 'Gyro / motion (at-rest, pitch, roll, yaw)',
@@ -153,6 +161,7 @@ export const AREA_LABELS = {
   dpad: 'D-pad',
   touchpad: 'Touchpad',
   paddles: 'Back paddles',
+  grip: 'Grip sensors',
 };
 
 /** Ordered, de-duplicated list of areas present in `steps`. */
