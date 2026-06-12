@@ -711,8 +711,17 @@ export class ControllerOverlay {
       // Tuned parts (triggers/bumpers) are deliberately placed relative to the
       // body, so they should rotate WITH the body (no camera-facing counter-
       // rotation) — otherwise they appear to spin independently as the gyro
-      // moves and swing out of place at steep angles.
-      if (tuning) wrapper.stayWithBody = true;
+      // moves and swing out of place at steep angles. An optional `tiltUp`
+      // (degrees) pivots the part about its own center toward the top, so it
+      // flips up rather than just translating.
+      if (tuning) {
+        wrapper.stayWithBody = true;
+        if (tuning.tiltUp) {
+          wrapper.tiltQuat = new THREE.Quaternion().setFromAxisAngle(
+            new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(tuning.tiltUp)
+          );
+        }
+      }
       if (faceCamSet.has(name)) {
         const normal = this._partSurfaceNormal(obj);
         if (normal) {
@@ -788,9 +797,10 @@ export class ControllerOverlay {
     for (const w of this._floatWrappers) {
       let target = counter;
       if (w.stayWithBody) {
-        // Identity local rotation → the wrapper inherits the body's gyro
-        // rotation, so the part stays rigidly attached at its popped offset.
-        target = idn;
+        // Inherit the body's gyro rotation (so the part rides with the
+        // controller), optionally tilted up toward the top while popped. Eases
+        // back to identity (natural orientation) when seated.
+        target = (this._floatActive && w.tiltQuat) ? w.tiltQuat : idn;
       } else if (w.faceCamera && this._floatActive && this.camera) {
         // Rotate the part's rest surface-normal to point at the camera so its
         // flat face shows (composed onto the counter-rotation).

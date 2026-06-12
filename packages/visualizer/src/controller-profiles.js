@@ -74,10 +74,10 @@ export const PROFILES = {
     floatParts: ['trigger_l2', 'trigger_r2', 'bumper_l1', 'bumper_r1'],
     floatFactor: 0.6,
     floatTuning: {
-      bumper_l1:  { back: 0.40, up: 0.30 },
-      bumper_r1:  { back: 0.40, up: 0.30 },
-      trigger_l2: { back: 0.70, up: 0.46 },
-      trigger_r2: { back: 0.70, up: 0.46 },
+      bumper_l1:  { back: 0.20, up: 0.20, tiltUp: 40 },
+      bumper_r1:  { back: 0.20, up: 0.20, tiltUp: 40 },
+      trigger_l2: { back: 0.38, up: 0.30, tiltUp: 40 },
+      trigger_r2: { back: 0.38, up: 0.30, tiltUp: 40 },
     },
 
     // Color groups for user-customizable body/accent colors
@@ -361,13 +361,14 @@ export const PROFILES = {
     // reaching further out). The trigger starts lower than the bumper, so it
     // gets more `up` to reach the same top level, and more `back` to sit beyond
     // the bumper. Knobs are in model-radius units:
-    //   back — extend out the back, along the edge the parts sit on (−Z)
-    //   up   — flip up toward the top (+Y)
+    //   back   — extend out the back, along the edge the parts sit on (−Z)
+    //   up     — flip up toward the top (+Y)
+    //   tiltUp — rotate the part about its own center toward the top (degrees)
     floatTuning: {
-      left_shoulder:  { back: 0.40, up: 0.30 },
-      right_shoulder: { back: 0.40, up: 0.30 },
-      left_trigger:   { back: 0.70, up: 0.46 },
-      right_trigger:  { back: 0.70, up: 0.46 },
+      left_shoulder:  { back: 0.20, up: 0.20, tiltUp: 40 },
+      right_shoulder: { back: 0.20, up: 0.20, tiltUp: 40 },
+      left_trigger:   { back: 0.38, up: 0.30, tiltUp: 40 },
+      right_trigger:  { back: 0.38, up: 0.30, tiltUp: 40 },
     },
     // Capacitive grip sensors (digital): glow these meshes while the grip is
     // held (driver parsed.grips). Highlighted via overlay.setGripState.
