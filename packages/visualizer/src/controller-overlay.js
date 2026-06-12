@@ -751,12 +751,8 @@ export class ControllerOverlay {
             trigMat.needsUpdate = true;
             trigMat.emissive.set(0xffcc00);
           }
-          // Two-tone behavior: yellow up to 95% pull, snap to red when
-          // fully pressed (bottomed out). The intensity scales with
-          // analog value in both phases.
-          const fullyPressed = btn.value >= 0.95;
-          const targetColor = fullyPressed ? 0xff3322 : 0xffcc00;
-          trigMat.emissive.set(targetColor);
+          // Single glow color; intensity scales with how far the trigger is
+          // pulled (no separate bottoming-out color).
           const targetGlow = btn.value > 0.05 ? btn.value * 3.0 : 0;
           trigMat.emissiveIntensity = THREE.MathUtils.lerp(
             trigMat.emissiveIntensity, targetGlow, LERP_SPEED

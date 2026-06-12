@@ -600,7 +600,7 @@ async function bootstrapFromHID() {
       id: d.productName || entry.name,
       index: -1,
       axes: [0, 0, 0, 0],
-      buttons: Array.from({ length: 18 }, () => ({ pressed: false, value: 0 })),
+      buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })), // 0-17 standard + 18-21 back paddles (L4/L5/R4/R5)
     };
     await switchController(stub);
     // switchController() calls disconnectGyro() which nulls syntheticGamepad,
@@ -1373,7 +1373,7 @@ function createSyntheticGamepad(id) {
     id: id || 'HID Controller',
     index: -1,
     axes: [0, 0, 0, 0],
-    buttons: Array.from({ length: 18 }, () => ({ pressed: false, value: 0 })),
+    buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })), // 0-17 standard + 18-21 back paddles (L4/L5/R4/R5)
     _synthetic: true,
   };
 }
@@ -1419,6 +1419,21 @@ function updateSyntheticFromParsed(parsed) {
     set(15, b.dpadRight);
     set(16, b.ps);
     set(17, b.mic);
+  }
+
+  // Back paddles (L4/L5/R4/R5) — no Standard-Gamepad index, so park them in
+  // synthetic slots 18-21. The profile buttonMap points those at the paddle
+  // meshes, so the normal press/glow path lights them up.
+  if (parsed.paddles) {
+    const p = parsed.paddles;
+    const pset = (i, pressed) => {
+      const slot = g.buttons[i];
+      if (slot) { slot.pressed = !!pressed; slot.value = pressed ? 1 : 0; }
+    };
+    pset(18, p.l4);
+    pset(19, p.l5);
+    pset(20, p.r4);
+    pset(21, p.r5);
   }
 }
 

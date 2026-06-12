@@ -69,10 +69,7 @@ export const PROFILES = {
     // "Pop-off" parts: float clear of the body (toggle in settings) so they're
     // visible at any camera angle. Direction/magnitude are auto-derived from
     // geometry; tune the spread via floatFactor.
-    floatParts: [
-      'trigger_l2', 'trigger_r2', 'bumper_l1', 'bumper_r1',
-      'face_cross', 'face_circle', 'face_square', 'face_triangle',
-    ],
+    floatParts: ['trigger_l2', 'trigger_r2', 'bumper_l1', 'bumper_r1'],
     floatFactor: 0.6,
 
     // Color groups for user-customizable body/accent colors
@@ -287,6 +284,15 @@ export const PROFILES = {
       15: 'dpad_right',
       16: 'guide_button',    // Steam
       // 17: quick-access "…" — driver doesn't parse a bit for it yet.
+      // Back paddles: no Standard-Gamepad index, so the overlay synthesizes
+      // them at slots 18-21 from the driver's WebHID paddle bits (L4/L5/R4/R5).
+      // Right = paddle1/3, left = paddle2/4 (verified from GLB X-centers);
+      // upper/lower within a side (the 4-vs-5 split) is a best guess — swap the
+      // two on a side if a press lights the wrong paddle.
+      18: 'paddle2',  // L4 (left)
+      19: 'paddle4',  // L5 (left)
+      20: 'paddle1',  // R4 (right)
+      21: 'paddle3',  // R5 (right)
     },
     triggerMap: {
       6: 'left_trigger',     // LT
@@ -316,7 +322,6 @@ export const PROFILES = {
     // via floatFactor.
     floatParts: [
       'left_trigger', 'right_trigger', 'left_shoulder', 'right_shoulder',
-      'south_button', 'east_button', 'west_button', 'north_button',
       'paddle1', 'paddle2', 'paddle3', 'paddle4',
     ],
     floatFactor: 0.6,
