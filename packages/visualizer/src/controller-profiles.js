@@ -67,10 +67,18 @@ export const PROFILES = {
     bodyMeshes: ['body_top', 'body_bottom', 'body_extra'],  // gyro applied to bodyGroup parent
 
     // "Pop-off" parts: float clear of the body (toggle in settings) so they're
-    // visible at any camera angle. Direction/magnitude are auto-derived from
-    // geometry; tune the spread via floatFactor.
+    // visible at any camera angle. Triggers + bumpers stack out the top via
+    // floatTuning (same scheme as the Steam Controller — see that profile for
+    // the lateral/depth/lift meaning): each side rises straight out of the top
+    // with the trigger above its bumper, flattened onto the body plane.
     floatParts: ['trigger_l2', 'trigger_r2', 'bumper_l1', 'bumper_r1'],
     floatFactor: 0.6,
+    floatTuning: {
+      bumper_l1:  { lateral: 0.55, depth: 0, lift: 0.30 },
+      bumper_r1:  { lateral: 0.55, depth: 0, lift: 0.30 },
+      trigger_l2: { lateral: 0.55, depth: 0, lift: 0.62 },
+      trigger_r2: { lateral: 0.55, depth: 0, lift: 0.62 },
+    },
 
     // Color groups for user-customizable body/accent colors
     bodyColorMeshes: [
