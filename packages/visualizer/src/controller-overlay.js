@@ -673,8 +673,24 @@ export class ControllerOverlay {
       // Convert the world displacement to the wrapper's parent-local space. At
       // setup the model isn't gyro-rotated yet (rotation identity), so for a
       // uniformly-scaled parent this is just divide-by-scale.
-      const offset = dir.multiplyScalar((worldRadius * factor) / scale);
-      offset.x *= lateralBias; // bias the pop outward to the sides
+      //
+      // Per-part tuning (profile.floatTuning[name]) overrides the default radial
+      // fan-out so a part can rise toward the top and cluster instead of flying
+      // to a corner — e.g. the Steam Controller triggers/bumpers:
+      //   lateral — multiplier on the sideways/depth spread (<1 = closer together)
+      //   lift    — extra upward push, as a fraction of model radius
+      //   factor  — overrides floatFactor (radial magnitude) for this part
+      const tuning = profile.floatTuning?.[name];
+      const radialMag = (worldRadius * (tuning?.factor ?? factor)) / scale;
+      const offset = dir.clone().multiplyScalar(radialMag);
+      if (tuning) {
+        const lateral = tuning.lateral ?? 1;
+        offset.x *= lateral;
+        offset.z *= lateral;
+        offset.y += (worldRadius * (tuning.lift ?? 0)) / scale; // lift toward the top
+      } else {
+        offset.x *= lateralBias; // bias the pop outward to the sides
+      }
 
       // Rotation pivot = the part's own center (parent-local), captured before
       // wrapping reparents obj. Rotating about this point (not the model origin)

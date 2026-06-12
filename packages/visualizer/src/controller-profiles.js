@@ -337,7 +337,7 @@ export const PROFILES = {
     bodyMeshes: ['top_shell', 'bottom_shell', 'misc1', 'left_gripsense', 'right_gripsense'],
     // "Pop-off" parts: triggers, bumpers, and the four back paddles float clear
     // of the body (toggle in settings). Auto-positioned radially; tune spread
-    // via floatFactor.
+    // via floatFactor / floatLateralBias, and per part via floatTuning.
     floatParts: [
       'left_trigger', 'right_trigger', 'left_shoulder', 'right_shoulder',
       'paddle1', 'paddle2', 'paddle3', 'paddle4',
@@ -345,7 +345,21 @@ export const PROFILES = {
     // Paddles sit edge-on at rest; turn their flat face to the camera when
     // popped so a press/highlight is obvious.
     floatFaceCamera: ['paddle1', 'paddle2', 'paddle3', 'paddle4'],
-    floatFactor: 0.6,
+    floatFactor: 0.45,        // tighter overall spread (was 0.6 — parts flew too far)
+    floatLateralBias: 1.15,   // less sideways fan-out for the paddles (default 1.6)
+    floatShrink: 0.85,        // shrink the model only a little while popped, so the
+                              // floated parts stay big (auto would over-shrink to ~0.65)
+    // Per-part pop-off tuning. The triggers + bumpers sit close together at the
+    // top in the real CAD (like the Larf/ceski overlays), so instead of fanning
+    // them out to the corners we keep them near the centerline (low `lateral`)
+    // and lift them just above the top edge (`lift`), with the triggers riding a
+    // touch higher than the bumpers so they stack the way the reference shows.
+    floatTuning: {
+      left_shoulder:  { lateral: 0.25, lift: 0.18, factor: 0.4 },
+      right_shoulder: { lateral: 0.25, lift: 0.18, factor: 0.4 },
+      left_trigger:   { lateral: 0.25, lift: 0.34, factor: 0.4 },
+      right_trigger:  { lateral: 0.25, lift: 0.34, factor: 0.4 },
+    },
     // Capacitive grip sensors (digital): glow these meshes while the grip is
     // held (driver parsed.grips). Highlighted via overlay.setGripState.
     gripMeshes: { left: 'left_gripsense', right: 'right_gripsense' },
