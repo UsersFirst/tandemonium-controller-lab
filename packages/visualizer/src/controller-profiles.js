@@ -69,8 +69,11 @@ export const PROFILES = {
     // "Pop-off" parts: float clear of the body (toggle in settings) so they're
     // visible at any camera angle. Direction/magnitude are auto-derived from
     // geometry; tune the spread via floatFactor.
-    floatParts: ['trigger_l2', 'trigger_r2', 'bumper_l1', 'bumper_r1'],
-    floatFactor: 0.35,
+    floatParts: [
+      'trigger_l2', 'trigger_r2', 'bumper_l1', 'bumper_r1',
+      'face_cross', 'face_circle', 'face_square', 'face_triangle',
+    ],
+    floatFactor: 0.6,
 
     // Color groups for user-customizable body/accent colors
     bodyColorMeshes: [
@@ -313,9 +316,10 @@ export const PROFILES = {
     // via floatFactor.
     floatParts: [
       'left_trigger', 'right_trigger', 'left_shoulder', 'right_shoulder',
+      'south_button', 'east_button', 'west_button', 'north_button',
       'paddle1', 'paddle2', 'paddle3', 'paddle4',
     ],
-    floatFactor: 0.35,
+    floatFactor: 0.6,
     // Single-color controller — every part shares the body theme color.
     // Back paddles (paddle1-4) and trackpads are static (no standard
     // gamepad index) but still themed.

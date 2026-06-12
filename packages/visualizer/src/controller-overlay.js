@@ -71,6 +71,7 @@ export class ControllerOverlay {
     // is byte-identical to before.
     this._floatWrappers = []; // [{ group, offset:Vector3 }]
     this._floatActive = false;
+    this._floatShrink = 1; // model scale while popped (computed per profile)
   }
 
   async init() {
@@ -612,7 +613,13 @@ export class ControllerOverlay {
     const modelCenter = modelBox.getCenter(new THREE.Vector3());
     const worldRadius = modelBox.getSize(new THREE.Vector3()).length() * 0.5;
     const scale = this.model.scale.x || 1; // uniform scale applied in _setupModel
-    const factor = profile.floatFactor ?? 0.35;
+    const factor = profile.floatFactor ?? 0.6;
+    // Extra sideways push so parts clear the body's width, not just radially.
+    const lateralBias = profile.floatLateralBias ?? 1.6;
+    // Shrink the whole model while popped so the spread-out layout still fits
+    // the window. Auto-derived from the spread (a wider pop → smaller body),
+    // with a margin; override via profile.floatShrink.
+    this._floatShrink = profile.floatShrink ?? (1 / (1 + factor * 0.9));
 
     const seen = new Set();
     for (const name of names) {
@@ -629,13 +636,18 @@ export class ControllerOverlay {
       // setup the model isn't gyro-rotated yet (rotation identity), so for a
       // uniformly-scaled parent this is just divide-by-scale.
       const offset = dir.multiplyScalar((worldRadius * factor) / scale);
-
-      const parent = obj.parent;
-      const g = new THREE.Group(); // identity → preserves obj's world transform
-      parent.add(g);
-      g.add(obj);
-      this._floatWrappers.push({ group: g, offset });
+      offset.x *= lateralBias; // bias the pop outward to the sides
+      this._floatWrappers.push({ group: this._wrapForFloat(obj), offset });
     }
+  }
+
+  // Wrap an animated part in an identity Group so floating (group position)
+  // is decoupled from the part's own press/rotation animation (mesh transform).
+  _wrapForFloat(obj) {
+    const g = new THREE.Group(); // identity → preserves obj's world transform
+    obj.parent.add(g);
+    g.add(obj);
+    return g;
   }
 
   /** Toggle the pop-off float (parts ease in/out via the render loop). */
@@ -644,6 +656,15 @@ export class ControllerOverlay {
   }
 
   _updateFloat() {
+    if (!this._floatWrappers.length) return;
+    // Shrink the whole model while popped so the spread-out parts fit the
+    // window; ease back to full size when seated. (bodyGroup also carries the
+    // gyro rotation — scale and rotation compose fine.)
+    if (this.bodyGroup) {
+      const target = this._floatActive ? this._floatShrink : 1;
+      const s = THREE.MathUtils.lerp(this.bodyGroup.scale.x, target, LERP_SPEED);
+      this.bodyGroup.scale.setScalar(s);
+    }
     for (const w of this._floatWrappers) {
       w.group.position.lerp(this._floatActive ? w.offset : FLOAT_ZERO, LERP_SPEED);
     }
@@ -674,13 +695,16 @@ export class ControllerOverlay {
         const targetY = orig.posY - (btn.pressed ? profile.pressDepth : 0);
         mesh.position.y = THREE.MathUtils.lerp(mesh.position.y, targetY, LERP_SPEED);
 
-        // Yellow emissive glow on press
+        // Yellow emissive glow on press. DoubleSide so the highlight is
+        // visible from front AND back once the part is popped out.
         const mat = mesh.isMesh ? mesh.material :
                     (mesh.children?.[0]?.isMesh ? mesh.children[0].material : null);
         if (mat && 'emissive' in mat) {
           if (!mat._btnEmissiveSet) {
             mat._btnEmissiveSet = true;
             mat.emissive.set(0xffcc00);
+            mat.side = THREE.DoubleSide;
+            mat.needsUpdate = true;
           }
           const targetIntensity = btn.pressed ? 3.0 : 0;
           mat.emissiveIntensity = THREE.MathUtils.lerp(
