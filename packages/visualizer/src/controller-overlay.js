@@ -665,30 +665,39 @@ export class ControllerOverlay {
       if (!obj || seen.has(obj)) continue; // skip missing / duplicate (alias) refs
       seen.add(obj);
 
-      // World-space radial direction from model center to the part's center.
+      // The part's center relative to the model center (world space). `dir` is
+      // the normalized version used for the default radial fan-out.
       const partCenter = new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3());
-      const dir = partCenter.clone().sub(modelCenter);
+      const rel = partCenter.clone().sub(modelCenter);
+      const dir = rel.clone();
       if (dir.lengthSq() < 1e-12) dir.set(0, 1, 0); // dead-center part → push up
       dir.normalize();
       // Convert the world displacement to the wrapper's parent-local space. At
       // setup the model isn't gyro-rotated yet (rotation identity), so for a
       // uniformly-scaled parent this is just divide-by-scale.
       //
-      // Per-part tuning (profile.floatTuning[name]) overrides the default radial
-      // fan-out so a part can rise toward the top and cluster instead of flying
-      // to a corner — e.g. the Steam Controller triggers/bumpers:
-      //   lateral — multiplier on the sideways/depth spread (<1 = closer together)
-      //   lift    — extra upward push, as a fraction of model radius
-      //   factor  — overrides floatFactor (radial magnitude) for this part
+      // Per-part tuning (profile.floatTuning[name]) replaces the radial fan-out
+      // with deliberate target placement, so e.g. the Steam Controller
+      // triggers/bumpers rise straight out of the top, stacked and flattened
+      // onto the body plane, instead of flying to the corners. Each axis is set
+      // relative to the part's natural position (which keeps left on the left):
+      //   lateral — scale on the natural X spread (1 = keep, 0 = centerline)
+      //   depth   — scale on the natural Z spread (1 = keep, 0 = body plane)
+      //   lift    — upward push out the top, in model-radius units
+      //   factor  — magnitude override for the default radial pop (untuned parts)
       const tuning = profile.floatTuning?.[name];
-      const radialMag = (worldRadius * (tuning?.factor ?? factor)) / scale;
-      const offset = dir.clone().multiplyScalar(radialMag);
+      let offset;
       if (tuning) {
         const lateral = tuning.lateral ?? 1;
-        offset.x *= lateral;
-        offset.z *= lateral;
-        offset.y += (worldRadius * (tuning.lift ?? 0)) / scale; // lift toward the top
+        const depth = tuning.depth ?? 1;
+        const lift = tuning.lift ?? 0;
+        offset = new THREE.Vector3(
+          rel.x * (lateral - 1),     // move toward the centerline (keeps its side)
+          worldRadius * lift,        // lift straight up, out of the top
+          rel.z * (depth - 1)        // flatten toward the body plane
+        ).divideScalar(scale);
       } else {
+        offset = dir.clone().multiplyScalar((worldRadius * factor) / scale);
         offset.x *= lateralBias; // bias the pop outward to the sides
       }
 
