@@ -748,10 +748,10 @@
     transition: background 0.1s, border-color 0.1s, box-shadow 0.1s, color 0.1s;
   }
   #grip-indicator .grip-pad.active {
-    border-color: #33ddaa;
-    background: rgba(51,221,170,0.35);
-    color: #eafff7;
-    box-shadow: 0 0 14px rgba(51,221,170,0.7);
+    border-color: var(--hl-color, #3388ff);
+    background: var(--hl-color, #3388ff);
+    color: #fff;
+    box-shadow: 0 0 14px var(--hl-color, #3388ff);
   }
 </style>
 </head>
@@ -810,6 +810,14 @@
   <div class="setting-row">
     <label>Accent Color</label>
     <input type="color" id="accent-color" value="#1a1a1e">
+  </div>
+
+  <!-- Highlight color — shared with PR #45 (same id / key / --hl-color var).
+       Drives the grip-sense highlight here; on #45 it drives the button-press
+       glow. At merge: keep one picker, have applyHighlightColor call both. -->
+  <div class="setting-row">
+    <label>Highlight Color</label>
+    <input type="color" id="highlight-color" value="#3388ff">
   </div>
 
   <div class="setting-row">
@@ -871,6 +879,10 @@
   <div class="setting-row">
     <label title="Grip-sensor highlight: edge indicators + on-top markers (Steam Controller)">Show Grip Sense</label>
     <input type="checkbox" id="grip-viz-toggle" checked>
+  </div>
+  <div class="setting-row">
+    <label>Grip Brightness</label>
+    <input type="range" id="grip-brightness" min="10" max="100" value="95" style="width:90px;accent-color:#33ddaa;">
   </div>
   <div class="setting-row">
     <label>Button HUD position</label>

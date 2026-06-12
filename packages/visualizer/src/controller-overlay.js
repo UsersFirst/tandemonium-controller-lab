@@ -64,8 +64,12 @@ export class ControllerOverlay {
     this._touchRaycaster = new THREE.Raycaster();
 
     // Grip-sense highlighting (Steam Controller capacitive grips)
-    this._gripMarkers = null;  // { left, right } billboard sprites, on top
-    this._gripEnabled = true;  // toggled from settings
+    this._gripMarkers = null;   // { left, right } billboard sprites, on top
+    this._gripEnabled = true;   // toggled from settings
+    this._gripBrightness = 0.95; // on-top marker peak opacity (settings slider)
+    // Grip highlight color — shares the global highlight color (#45's
+    // overlay:highlightColor / --hl-color). Default matches that picker.
+    this._gripColor = 0x3388ff;
   }
 
   async init() {
@@ -1102,18 +1106,31 @@ export class ControllerOverlay {
       const mesh = obj && (obj.isMesh ? obj : obj.children?.find((c) => c.isMesh));
       const mat = mesh?.material;
       if (mat && 'emissive' in mat) {
-        if (!mat._gripEmissiveSet) { mat._gripEmissiveSet = true; mat.emissive.set(0x33ddaa); }
+        mat.emissive.set(this._gripColor); // set each frame so a color change applies live
         mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, on ? 0.9 : 0, LERP_SPEED);
       }
-      // (2) always-on-top billboard marker
+      // (2) always-on-top billboard marker (brightness = peak opacity)
       const marker = this._gripMarkers?.[side];
-      if (marker) marker.material.opacity = THREE.MathUtils.lerp(marker.material.opacity, on ? 0.95 : 0, LERP_SPEED);
+      if (marker) marker.material.opacity = THREE.MathUtils.lerp(marker.material.opacity, on ? this._gripBrightness : 0, LERP_SPEED);
     }
   }
 
   /** Toggle all grip-sense highlighting (mesh glow + on-top markers). */
   setGripVisible(enabled) {
     this._gripEnabled = !!enabled;
+  }
+
+  /** On-top grip marker peak brightness (0–1). */
+  setGripBrightness(value) {
+    this._gripBrightness = Math.max(0, Math.min(1, value));
+  }
+
+  /** Grip highlight color (markers + mesh glow); CSS hex e.g. '#3388ff'. */
+  setGripColor(hexColor) {
+    this._gripColor = new THREE.Color(hexColor).getHex();
+    if (this._gripMarkers) {
+      for (const side of ['left', 'right']) this._gripMarkers[side]?.material.color.setHex(this._gripColor);
+    }
   }
 
   // Create an always-on-top billboard glow marker above each grip so grip state
@@ -1141,9 +1158,12 @@ export class ControllerOverlay {
       if (!mesh) continue;
       const gb = new THREE.Box3().setFromObject(mesh);
       const pos = gb.getCenter(new THREE.Vector3());
-      pos.y = modelBox.max.y; // lift onto the top of the controller, above the grip
+      // Lift toward the top but keep it down on the handle (not the mid/top).
+      // gripMarkerHeight: 0 = grip center, 1 = controller top.
+      const h = profile.gripMarkerHeight ?? 0.5;
+      pos.y = pos.y + (modelBox.max.y - pos.y) * h;
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: this._glowTexture, color: 0x33ddaa, transparent: true, opacity: 0,
+        map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
       }));
       sprite.renderOrder = 10; // draw after the model so it sits on top

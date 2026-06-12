@@ -460,6 +460,10 @@ async function init() {
   await overlay.init();
 
   if (overlay.setGripVisible) overlay.setGripVisible(gripVizEnabled); // apply saved grip-display pref
+  const _gripB = localStorage.getItem('overlay:gripBrightness');
+  if (_gripB !== null && overlay.setGripBrightness) overlay.setGripBrightness(parseInt(_gripB, 10) / 100);
+  const _hl = localStorage.getItem('overlay:highlightColor');
+  if (_hl && overlay.setGripColor) overlay.setGripColor(_hl); // shared highlight color (#45)
 
   if (hasGamepad) {
     currentControllerType = initialType;
@@ -1446,6 +1450,37 @@ if (gripToggle) {
     localStorage.setItem('overlay:gripViz', gripVizEnabled ? '1' : '0');
     if (overlay?.setGripVisible) overlay.setGripVisible(gripVizEnabled);
     if (!gripVizEnabled) document.getElementById('grip-indicator')?.setAttribute('hidden', '');
+  });
+}
+
+// Grip marker brightness (on-top 3D indicator).
+const gripBrightnessSlider = document.getElementById('grip-brightness');
+if (gripBrightnessSlider) {
+  const saved = localStorage.getItem('overlay:gripBrightness');
+  if (saved !== null) gripBrightnessSlider.value = saved;
+  gripBrightnessSlider.addEventListener('input', (e) => {
+    localStorage.setItem('overlay:gripBrightness', e.target.value);
+    if (overlay?.setGripBrightness) overlay.setGripBrightness(parseInt(e.target.value, 10) / 100);
+  });
+}
+
+// Highlight color — SHARED with PR #45 (same picker id `highlight-color`, key
+// `overlay:highlightColor`, CSS var `--hl-color`). Here it drives the grip-sense
+// color (3D markers + glow via setGripColor, and the 2D edge indicator via the
+// CSS var). On #45 the same picker drives the button-press glow (setPressColor).
+// MERGE NOTE: keep one picker; combine the handlers so applyHighlightColor calls
+// both setGripColor and setPressColor.
+const highlightColorInput = document.getElementById('highlight-color');
+function applyHighlightColor(hex) {
+  document.documentElement.style.setProperty('--hl-color', hex);
+  if (overlay?.setGripColor) overlay.setGripColor(hex);
+}
+if (highlightColorInput) {
+  const savedHl = localStorage.getItem('overlay:highlightColor');
+  if (savedHl) { highlightColorInput.value = savedHl; applyHighlightColor(savedHl); }
+  highlightColorInput.addEventListener('input', (e) => {
+    localStorage.setItem('overlay:highlightColor', e.target.value);
+    applyHighlightColor(e.target.value);
   });
 }
 
