@@ -721,6 +721,38 @@
     border-radius: 4px;
   }
   #click-through-indicator.active { display: block; }
+
+  /* ── Grip-sense indicator ──
+     Capacitive grip state, pinned to the window edges (left grip on the left,
+     right on the right) so it reads at any 3D camera angle — the grip meshes
+     themselves are on the back of the controller and usually occluded. */
+  #grip-indicator {
+    position: fixed;
+    top: 50%; left: 0; right: 0;
+    transform: translateY(-50%);
+    display: flex;
+    justify-content: space-between;
+    padding: 0 10px;
+    pointer-events: none;
+    z-index: 60;
+  }
+  #grip-indicator[hidden] { display: none; }
+  #grip-indicator .grip-pad {
+    width: 26px; height: 60px;
+    border-radius: 13px;
+    border: 1.5px solid rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.35);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+    transition: background 0.1s, border-color 0.1s, box-shadow 0.1s, color 0.1s;
+  }
+  #grip-indicator .grip-pad.active {
+    border-color: #33ddaa;
+    background: rgba(51,221,170,0.35);
+    color: #eafff7;
+    box-shadow: 0 0 14px rgba(51,221,170,0.7);
+  }
 </style>
 </head>
 <body>
@@ -1025,6 +1057,12 @@
 
 <!-- Click-through mode indicator -->
 <div id="click-through-indicator"></div>
+
+<!-- Grip-sense indicator (shown when a controller reports capacitive grips) -->
+<div id="grip-indicator" hidden>
+  <div class="grip-pad grip-l">L</div>
+  <div class="grip-pad grip-r">R</div>
+</div>
 
 <!-- WebGL canvas -->
 <canvas id="canvas"></canvas>

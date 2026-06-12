@@ -1417,6 +1417,21 @@ function updateSyntheticFromParsed(parsed) {
   }
 }
 
+// 2D grip-sense indicator — readable at any 3D camera angle (the grip meshes
+// are on the back of the controller and usually occluded). Lazily revealed the
+// first time grip data arrives, then tracks left/right state.
+let _gripRefs = null;
+function updateGripIndicator(grips) {
+  if (!_gripRefs) {
+    const root = document.getElementById('grip-indicator');
+    if (!root) return;
+    _gripRefs = { root, l: root.querySelector('.grip-l'), r: root.querySelector('.grip-r') };
+  }
+  if (_gripRefs.root.hasAttribute('hidden')) _gripRefs.root.removeAttribute('hidden');
+  _gripRefs.l.classList.toggle('active', !!grips.left);
+  _gripRefs.r.classList.toggle('active', !!grips.right);
+}
+
 let _firstReportLogged = false;
 function handleInputReport(event) {
   if (!controllerDriver) return;
@@ -1443,8 +1458,9 @@ function handleInputReport(event) {
     overlay.updateTouchpad(parsed.touchpad, parsed.touchpadButton);
   }
 
-  if (parsed.grips && overlay.setGripState) {
-    overlay.setGripState(parsed.grips);
+  if (parsed.grips) {
+    if (overlay.setGripState) overlay.setGripState(parsed.grips); // 3D mesh glow (when visible)
+    updateGripIndicator(parsed.grips);                            // 2D edge indicator (any angle)
   }
 
   if (!gyroActive || !parsed.gyro) return;
