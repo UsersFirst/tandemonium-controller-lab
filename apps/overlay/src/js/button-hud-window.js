@@ -77,12 +77,22 @@ if (window.electronAPI?.onPopoutProfileChange) {
 }
 
 // ── HUD state update (driven by IPC frames from main) ────────────────
+const gripEls = {
+  l: document.querySelector('#button-hud [data-grip="l"]'),
+  r: document.querySelector('#button-hud [data-grip="r"]'),
+};
 function applyState(state) {
   if (!state) return;
   const buttons = state.buttons || [];
   for (const [idx, el] of Object.entries(refs.buttons)) {
     const pressed = !!buttons[idx]?.pressed;
     if (el.classList.contains('pressed') !== pressed) el.classList.toggle('pressed', pressed);
+  }
+  // Capacitive grips (forwarded from main; not in the gamepad).
+  if (state.grips) {
+    document.body.classList.add('has-grips');
+    gripEls.l?.classList.toggle('active', !!state.grips.left);
+    gripEls.r?.classList.toggle('active', !!state.grips.right);
   }
   const l2v = buttons[6]?.value || 0;
   const r2v = buttons[7]?.value || 0;

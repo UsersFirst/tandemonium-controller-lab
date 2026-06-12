@@ -346,6 +346,9 @@ export const PROFILES = {
     // popped so a press/highlight is obvious.
     floatFaceCamera: ['paddle1', 'paddle2', 'paddle3', 'paddle4'],
     floatFactor: 0.6,
+    // Capacitive grip sensors (digital): glow these meshes while the grip is
+    // held (driver parsed.grips). Highlighted via overlay.setGripState.
+    gripMeshes: { left: 'left_gripsense', right: 'right_gripsense' },
     // Single-color controller — every part shares the body theme color.
     // Back paddles (paddle1-4) and trackpads are static (no standard
     // gamepad index) but still themed.

@@ -468,15 +468,25 @@ async function init() {
   });
   await overlay.init();
 
-  // Re-apply a saved highlight color to the freshly-created 3D overlay.
-  // (The 2D HUD picks it up from the CSS var set during settings wiring.)
+  // Re-apply a saved highlight color to the freshly-created 3D overlay. The
+  // one picker drives BOTH the press/tilt glow (#45) and the grip-sense glow
+  // (#49) so they stay in sync. (The 2D HUD picks the color up from the CSS
+  // var set during settings wiring.)
   const savedHighlight = localStorage.getItem('overlay:highlightColor');
-  if (savedHighlight) overlay.setPressColor(savedHighlight);
+  if (savedHighlight) {
+    if (overlay.setPressColor) overlay.setPressColor(savedHighlight);
+    if (overlay.setGripColor) overlay.setGripColor(savedHighlight);
+  }
 
   // Apply the saved "pop-out controls" preference to the freshly-loaded model.
   if (overlay.setFloatParts) {
     overlay.setFloatParts(localStorage.getItem('overlay:floatParts') === '1');
   }
+
+  // Apply saved grip-sense display preferences.
+  if (overlay.setGripVisible) overlay.setGripVisible(gripVizEnabled);
+  const _gripB = localStorage.getItem('overlay:gripBrightness');
+  if (_gripB !== null && overlay.setGripBrightness) overlay.setGripBrightness(parseInt(_gripB, 10) / 100);
 
   if (hasGamepad) {
     currentControllerType = initialType;
@@ -1028,6 +1038,7 @@ function loop() {
     window.electronAPI.sendButtonHudState({
       buttons: gamepad.buttons.map(b => ({ pressed: !!b.pressed, value: b.value || 0 })),
       axes: Array.from(gamepad.axes || []),
+      grips: _lastGrips || undefined,
     });
   }
 
@@ -1451,6 +1462,72 @@ function updateSyntheticFromParsed(parsed) {
   }
 }
 
+// 2D grip-sense indicator — readable at any 3D camera angle (the grip meshes
+// are on the back of the controller and usually occluded). Lazily revealed the
+// first time grip data arrives, then tracks left/right state.
+let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // 3D handle glow on/off
+// Grip-sense HUD row — toggles the LG/RG cells in the Button HUD from
+// parsed.grips (dedicated path; grips aren't in the gamepad). Revealed via
+// body.has-grips the first time a controller reports grips.
+let _gripHudRefs = null;
+let _lastGrips = null; // latest grip state, forwarded to the popout HUD
+function updateGripHud(grips) {
+  if (!_gripHudRefs) {
+    const l = document.querySelector('#button-hud [data-grip="l"]');
+    const r = document.querySelector('#button-hud [data-grip="r"]');
+    if (!l || !r) return;
+    _gripHudRefs = { l, r };
+  }
+  document.body.classList.add('has-grips');
+  _gripHudRefs.l.classList.toggle('active', !!grips.left);
+  _gripHudRefs.r.classList.toggle('active', !!grips.right);
+}
+
+// Grip-sense display toggle — gates both the 2D edge indicator and the 3D
+// markers/glow (overlay.setGripVisible).
+const gripToggle = document.getElementById('grip-viz-toggle');
+if (gripToggle) {
+  gripToggle.checked = gripVizEnabled;
+  gripToggle.addEventListener('change', (e) => {
+    gripVizEnabled = e.target.checked;
+    localStorage.setItem('overlay:gripViz', gripVizEnabled ? '1' : '0');
+    if (overlay?.setGripVisible) overlay.setGripVisible(gripVizEnabled); // 3D handle glow only
+  });
+}
+
+// Grip marker brightness (on-top 3D indicator).
+const gripBrightnessSlider = document.getElementById('grip-brightness');
+if (gripBrightnessSlider) {
+  const saved = localStorage.getItem('overlay:gripBrightness');
+  if (saved !== null) gripBrightnessSlider.value = saved;
+  gripBrightnessSlider.addEventListener('input', (e) => {
+    localStorage.setItem('overlay:gripBrightness', e.target.value);
+    if (overlay?.setGripBrightness) overlay.setGripBrightness(parseInt(e.target.value, 10) / 100);
+  });
+}
+
+// ── Highlight color (single shared picker) ─────────────────────────────────
+// One `highlight-color` picker drives everything tinted by the highlight:
+//   • the 2D Button HUD .pressed states, via the `--hl-color` CSS var
+//   • the 3D model's button/trigger press glow, via overlay.setPressColor (#45)
+//   • the 3D grip-sense markers + glow, via overlay.setGripColor (#49)
+// Persisted (key `overlay:highlightColor`) only once the user changes it, so the
+// defaults (blue HUD / yellow press / blue grip) are preserved until they opt in.
+const highlightColorInput = document.getElementById('highlight-color');
+function applyHighlightColor(hex) {
+  document.documentElement.style.setProperty('--hl-color', hex);
+  if (overlay?.setPressColor) overlay.setPressColor(hex); // 3D overlay may not exist yet on load
+  if (overlay?.setGripColor) overlay.setGripColor(hex);
+}
+if (highlightColorInput) {
+  const savedHl = localStorage.getItem('overlay:highlightColor');
+  if (savedHl) { highlightColorInput.value = savedHl; applyHighlightColor(savedHl); }
+  highlightColorInput.addEventListener('input', (e) => {
+    localStorage.setItem('overlay:highlightColor', e.target.value);
+    applyHighlightColor(e.target.value);
+  });
+}
+
 let _firstReportLogged = false;
 function handleInputReport(event) {
   if (!controllerDriver) return;
@@ -1475,6 +1552,12 @@ function handleInputReport(event) {
 
   if (parsed.touchpad) {
     overlay.updateTouchpad(parsed.touchpad, parsed.touchpadButton);
+  }
+
+  if (parsed.grips) {
+    _lastGrips = parsed.grips;                                    // forwarded to the popout HUD
+    if (overlay.setGripState) overlay.setGripState(parsed.grips); // 3D handle glow (toggleable)
+    updateGripHud(parsed.grips);                                  // grip cells in the Button HUD
   }
 
   if (!gyroActive || !parsed.gyro) return;
@@ -1677,25 +1760,6 @@ const bodyColorInput = document.getElementById('body-color');
 const accentColorInput = document.getElementById('accent-color');
 bodyColorInput.addEventListener('input', (e) => overlay.setBodyColor(e.target.value));
 accentColorInput.addEventListener('input', (e) => overlay.setAccentColor(e.target.value));
-
-// ── Highlight (pressed-button) color ──────────────────────────────────────
-// Drives both the 2D Button HUD .pressed states (via the --hl-color CSS var)
-// and the 3D model's press glow (via overlay.setPressColor). It's persisted
-// only once the user changes it, so the defaults (blue HUD / yellow 3D) are
-// preserved until they opt in. Face buttons keep their iconic A/B/X/Y colors.
-const highlightColorInput = document.getElementById('highlight-color');
-function applyHighlightColor(hex) {
-  document.documentElement.style.setProperty('--hl-color', hex);
-  if (overlay) overlay.setPressColor(hex); // 3D overlay may not exist yet on load
-}
-{
-  const savedHl = localStorage.getItem('overlay:highlightColor');
-  if (savedHl) { highlightColorInput.value = savedHl; applyHighlightColor(savedHl); }
-}
-highlightColorInput.addEventListener('input', (e) => {
-  localStorage.setItem('overlay:highlightColor', e.target.value);
-  applyHighlightColor(e.target.value);
-});
 
 // ── Green-screen background ────────────────────────────────────────────────
 // Paints a solid keyable color behind the (otherwise transparent) overlay so

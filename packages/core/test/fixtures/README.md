@@ -68,6 +68,16 @@ tests.
   quickAccess is **btn0 bit 0x10** — the one unused face-byte bit, identified
   from this capture (it was silent in the general capture above).
 
+## `steam-controller-puck-grip_28de-1304.json`
+
+- **Source:** the `Capture HID Report` wizard's grip step, captured 2026-06-12
+  from a **Steam Controller 2026 via Puck** (`28de:1304`) — squeeze left grip,
+  then right — downsampled to ~120 reports.
+- **What it proves** (`steam-controller-grip.test.js`): both capacitive grip
+  sensors register. Grip flags are **byte 4: `0x20` = left, `0x10` = right**
+  (digital, no pressure), identified by correlating each bit against which grip
+  was squeezed.
+
 The `bytes` field of each report is the WebHID input-report payload **with the
 report ID already stripped** (as `HIDInputReportEvent.data` delivers it), so byte
 indices map directly onto the driver's `parseReport` `DataView` offsets.

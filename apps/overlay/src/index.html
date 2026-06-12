@@ -738,6 +738,18 @@
     border-radius: 4px;
   }
   #click-through-indicator.active { display: block; }
+
+  /* ── Grip-sense row in the Button HUD ──
+     Shown only for controllers that report capacitive grips (body.has-grips).
+     Glows with the shared highlight color when a grip is held. */
+  #button-hud .bh-grips { display: none; }
+  body.has-grips #button-hud .bh-grips { display: flex; }
+  #button-hud .bh-grip.active {
+    background: var(--hl-color, #3388ff);
+    border-color: var(--hl-color, #3388ff);
+    color: #fff;
+    box-shadow: 0 0 6px var(--hl-color, #3388ff);
+  }
 </style>
 </head>
 <body>
@@ -797,6 +809,9 @@
     <input type="color" id="accent-color" value="#1a1a1e">
   </div>
 
+  <!-- Single shared highlight-color picker. Drives the 2D HUD .pressed states
+       (--hl-color), the 3D button/trigger press glow (setPressColor, #45), and
+       the 3D grip-sense markers/glow (setGripColor, #49) — see applyHighlightColor. -->
   <div class="setting-row">
     <label>Highlight Color</label>
     <input type="color" id="highlight-color" value="#3388ff">
@@ -862,6 +877,14 @@
   <div class="setting-row">
     <label>Show Button HUD</label>
     <input type="checkbox" id="show-button-hud">
+  </div>
+  <div class="setting-row">
+    <label title="3D grip-sensor glow on the controller handles (Steam Controller). Grip state also shows in the Button HUD.">Show Grip Sense</label>
+    <input type="checkbox" id="grip-viz-toggle" checked>
+  </div>
+  <div class="setting-row">
+    <label>Grip Brightness</label>
+    <input type="range" id="grip-brightness" min="10" max="100" value="95" style="width:90px;accent-color:#33ddaa;">
   </div>
   <div class="setting-row">
     <label>Button HUD position</label>
@@ -1029,6 +1052,11 @@
     <div class="bh-btn bh-sm" data-btn="19">L5</div>
     <div class="bh-btn bh-sm" data-btn="20">R4</div>
     <div class="bh-btn bh-sm" data-btn="21">R5</div>
+  </div>
+  <!-- Capacitive grips (Steam Controller) — shown via body.has-grips -->
+  <div class="bh-section bh-grips">
+    <div class="bh-btn bh-sm bh-grip" data-grip="l">LG</div>
+    <div class="bh-btn bh-sm bh-grip" data-grip="r">RG</div>
   </div>
 </div>
 

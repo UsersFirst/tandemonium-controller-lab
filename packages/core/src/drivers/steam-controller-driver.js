@@ -303,7 +303,12 @@ export class SteamControllerDriver extends ControllerDriver {
     const btn0 = data.getUint8(1);
     const btn1 = data.getUint8(2);
     const btn2 = data.getUint8(3);
-    // byte 4 = flags (touch/click state) — not surfaced in Phase 1
+    // byte 4 = touch/grip flags. Capacitive GRIP sensors live here (digital,
+    // no pressure): 0x20 = left grip held, 0x10 = right grip held — verified by
+    // squeeze-correlation against a real capture. (Stick-touch / touchpad-touch
+    // flags are in btn2, not here.)
+    const flags = data.getUint8(4);
+    const grips = { left: !!(flags & 0x20), right: !!(flags & 0x10) };
 
     // Sticks: int16 LE centered at 0, range ±0x7FFF → normalize to [-1, 1].
     // Y axes are inverted relative to the Gamepad-API "up = -1" convention,
@@ -430,6 +435,7 @@ export class SteamControllerDriver extends ControllerDriver {
       triggers,
       buttons,
       paddles,
+      grips,
       touchpad,
       touchpadButton: false,
       gyro,
