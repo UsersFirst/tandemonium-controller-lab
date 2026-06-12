@@ -67,17 +67,17 @@ export const PROFILES = {
     bodyMeshes: ['body_top', 'body_bottom', 'body_extra'],  // gyro applied to bodyGroup parent
 
     // "Pop-off" parts: float clear of the body (toggle in settings) so they're
-    // visible at any camera angle. Triggers + bumpers stack out the top via
-    // floatTuning (same scheme as the Steam Controller — see that profile for
-    // the lateral/depth/lift meaning): each side rises straight out of the top
-    // with the trigger above its bumper, flattened onto the body plane.
+    // visible at any camera angle. Triggers + bumpers lift off the BACK surface
+    // via floatTuning (same scheme as the Steam Controller — see that profile
+    // for the back/up meaning): each part lifts off the rear (−Z) with a slight
+    // rise (+Y), away from the body but close, keeping its natural position.
     floatParts: ['trigger_l2', 'trigger_r2', 'bumper_l1', 'bumper_r1'],
     floatFactor: 0.6,
     floatTuning: {
-      bumper_l1:  { lateral: 0.55, depth: 0, lift: 0.30 },
-      bumper_r1:  { lateral: 0.55, depth: 0, lift: 0.30 },
-      trigger_l2: { lateral: 0.55, depth: 0, lift: 0.62 },
-      trigger_r2: { lateral: 0.55, depth: 0, lift: 0.62 },
+      bumper_l1:  { back: 0.40, up: 0.15 },
+      bumper_r1:  { back: 0.40, up: 0.15 },
+      trigger_l2: { back: 0.40, up: 0.15 },
+      trigger_r2: { back: 0.40, up: 0.15 },
     },
 
     // Color groups for user-customizable body/accent colors
@@ -355,17 +355,17 @@ export const PROFILES = {
     floatFaceCamera: ['paddle1', 'paddle2', 'paddle3', 'paddle4'],
     floatFactor: 0.6,         // radial spread for the auto-positioned parts (paddles)
     // Per-part pop-off tuning for the triggers + bumpers only (the paddles keep
-    // the default radial fan-out, untouched). Like the Larf/ceski overlays, each
-    // side stacks bumper-below-trigger and rises straight out of the top, sitting
-    // on the controller's plane rather than fanning to the corners:
-    //   lateral 0.55 — pull the pair in toward the centerline (still left/right)
-    //   depth   0    — flatten onto the body plane (no forward/back drift)
-    //   lift         — height out the top; trigger rides above its bumper
+    // the default radial fan-out, untouched). The triggers/bumpers sit on the
+    // BACK of the controller, so they lift off the rear surface (−Z) with a
+    // slight rise (+Y) — away from the body but close — keeping their natural
+    // left/right + stacked positions. Knobs are in model-radius units:
+    //   back — push off the rear surface (−Z)
+    //   up   — slight lift toward the top (+Y) so they stay visible head-on
     floatTuning: {
-      left_shoulder:  { lateral: 0.55, depth: 0, lift: 0.30 },
-      right_shoulder: { lateral: 0.55, depth: 0, lift: 0.30 },
-      left_trigger:   { lateral: 0.55, depth: 0, lift: 0.62 },
-      right_trigger:  { lateral: 0.55, depth: 0, lift: 0.62 },
+      left_shoulder:  { back: 0.40, up: 0.15 },
+      right_shoulder: { back: 0.40, up: 0.15 },
+      left_trigger:   { back: 0.40, up: 0.15 },
+      right_trigger:  { back: 0.40, up: 0.15 },
     },
     // Capacitive grip sensors (digital): glow these meshes while the grip is
     // held (driver parsed.grips). Highlighted via overlay.setGripState.

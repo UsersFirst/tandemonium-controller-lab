@@ -677,24 +677,25 @@ export class ControllerOverlay {
       // uniformly-scaled parent this is just divide-by-scale.
       //
       // Per-part tuning (profile.floatTuning[name]) replaces the radial fan-out
-      // with deliberate target placement, so e.g. the Steam Controller
-      // triggers/bumpers rise straight out of the top, stacked and flattened
-      // onto the body plane, instead of flying to the corners. Each axis is set
-      // relative to the part's natural position (which keeps left on the left):
-      //   lateral — scale on the natural X spread (1 = keep, 0 = centerline)
-      //   depth   — scale on the natural Z spread (1 = keep, 0 = body plane)
-      //   lift    — upward push out the top, in model-radius units
-      //   factor  — magnitude override for the default radial pop (untuned parts)
+      // with a deliberate push along the controller's own axes, so e.g. the
+      // triggers/bumpers lift off the BACK surface (where they sit) instead of
+      // flying to the corners. The part keeps its natural spot and is nudged by:
+      //   back — push toward the back (−Z), off the rear surface
+      //   up   — push toward the top (+Y)
+      //   side — push outward to its own side (±X, away from the centerline)
+      // all in model-radius units. (Axes per the camera presets: +Z front /
+      // −Z back, +Y top, +X right.) Untuned parts use the default radial pop.
       const tuning = profile.floatTuning?.[name];
       let offset;
       if (tuning) {
-        const lateral = tuning.lateral ?? 1;
-        const depth = tuning.depth ?? 1;
-        const lift = tuning.lift ?? 0;
+        const back = tuning.back ?? 0;
+        const up = tuning.up ?? 0;
+        const side = tuning.side ?? 0;
+        const sideSign = Math.sign(rel.x) || 1; // keep left on the left, right on the right
         offset = new THREE.Vector3(
-          rel.x * (lateral - 1),     // move toward the centerline (keeps its side)
-          worldRadius * lift,        // lift straight up, out of the top
-          rel.z * (depth - 1)        // flatten toward the body plane
+          sideSign * worldRadius * side,
+          worldRadius * up,
+          -worldRadius * back        // −Z = back, off the rear surface
         ).divideScalar(scale);
       } else {
         offset = dir.clone().multiplyScalar((worldRadius * factor) / scale);
