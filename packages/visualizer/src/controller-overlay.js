@@ -620,6 +620,9 @@ export class ControllerOverlay {
     // the window. Auto-derived from the spread (a wider pop → smaller body),
     // with a margin; override via profile.floatShrink.
     this._floatShrink = profile.floatShrink ?? (1 / (1 + factor * 0.9));
+    // Parts that should additionally turn their flat face toward the camera
+    // while popped (e.g. the back paddles, which sit edge-on at rest).
+    const faceCamSet = new Set(profile.floatFaceCamera || []);
 
     const seen = new Set();
     for (const name of names) {
@@ -629,7 +632,7 @@ export class ControllerOverlay {
 
       // World-space radial direction from model center to the part's center.
       const partCenter = new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3());
-      const dir = partCenter.sub(modelCenter);
+      const dir = partCenter.clone().sub(modelCenter);
       if (dir.lengthSq() < 1e-12) dir.set(0, 1, 0); // dead-center part → push up
       dir.normalize();
       // Convert the world displacement to the wrapper's parent-local space. At
@@ -637,7 +640,22 @@ export class ControllerOverlay {
       // uniformly-scaled parent this is just divide-by-scale.
       const offset = dir.multiplyScalar((worldRadius * factor) / scale);
       offset.x *= lateralBias; // bias the pop outward to the sides
-      this._floatWrappers.push({ group: this._wrapForFloat(obj), offset });
+
+      // Rotation pivot = the part's own center (parent-local), captured before
+      // wrapping reparents obj. Rotating about this point (not the model origin)
+      // keeps the part in place as it turns — otherwise a big face-camera turn
+      // swings it in a wide arc (the left paddles ending up under the body).
+      const pivot = obj.parent.worldToLocal(partCenter.clone());
+      const wrapper = { group: this._wrapForFloat(obj), pivot, offset, t: 0 };
+      if (faceCamSet.has(name)) {
+        const normal = this._partSurfaceNormal(obj);
+        if (normal) {
+          wrapper.faceCamera = true;
+          wrapper.restNormal = normal;       // world surface normal at rest
+          wrapper.restCenter = partCenter;    // world center (for camera direction)
+        }
+      }
+      this._floatWrappers.push(wrapper);
     }
   }
 
@@ -648,6 +666,21 @@ export class ControllerOverlay {
     obj.parent.add(g);
     g.add(obj);
     return g;
+  }
+
+  // World-space surface normal of a (roughly flat) part = its thinnest local
+  // bounding-box axis, mapped to world. Used to turn paddles face-on.
+  _partSurfaceNormal(obj) {
+    let mesh = obj.isMesh ? obj : null;
+    if (!mesh) obj.traverse((c) => { if (!mesh && c.isMesh) mesh = c; });
+    if (!mesh?.geometry) return null;
+    mesh.geometry.computeBoundingBox();
+    const bb = mesh.geometry.boundingBox;
+    const dims = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
+    const minIdx = dims.indexOf(Math.min(...dims));
+    const local = new THREE.Vector3(minIdx === 0 ? 1 : 0, minIdx === 1 ? 1 : 0, minIdx === 2 ? 1 : 0);
+    mesh.updateWorldMatrix(true, false);
+    return local.transformDirection(mesh.matrixWorld).normalize();
   }
 
   /** Toggle the pop-off float (parts ease in/out via the render loop). */
@@ -676,9 +709,32 @@ export class ControllerOverlay {
     } else {
       counter.identity();
     }
+    // Scratch objects for the per-part "face the camera" rotation.
+    const camPos = this._floatCamPos || (this._floatCamPos = new THREE.Vector3());
+    const camDir = this._floatCamDir || (this._floatCamDir = new THREE.Vector3());
+    const faceRot = this._floatFaceRot || (this._floatFaceRot = new THREE.Quaternion());
+    const tgt = this._floatTargetQuat || (this._floatTargetQuat = new THREE.Quaternion());
+    const rp = this._floatRP || (this._floatRP = new THREE.Vector3());
+    const pos = this._floatPos || (this._floatPos = new THREE.Vector3());
+    if (this.camera) this.camera.getWorldPosition(camPos);
+
     for (const w of this._floatWrappers) {
-      w.group.position.lerp(this._floatActive ? w.offset : FLOAT_ZERO, LERP_SPEED);
-      w.group.quaternion.slerp(counter, LERP_SPEED);
+      let target = counter;
+      if (w.faceCamera && this._floatActive && this.camera) {
+        // Rotate the part's rest surface-normal to point at the camera so its
+        // flat face shows (composed onto the counter-rotation).
+        camDir.copy(camPos).sub(w.restCenter).normalize();
+        faceRot.setFromUnitVectors(w.restNormal, camDir);
+        target = tgt.copy(counter).multiply(faceRot);
+      }
+      w.group.quaternion.slerp(target, LERP_SPEED);
+      // Ease the pop amount, then place the wrapper so its rotation pivots about
+      // the part's own center: pos = P − R·P + offset·t. (Seated: R = identity,
+      // t = 0 → pos = 0, byte-identical to no wrapper.)
+      w.t = THREE.MathUtils.lerp(w.t, this._floatActive ? 1 : 0, LERP_SPEED);
+      rp.copy(w.pivot).applyQuaternion(w.group.quaternion);
+      pos.copy(w.pivot).sub(rp).addScaledVector(w.offset, w.t);
+      w.group.position.copy(pos);
     }
   }
 

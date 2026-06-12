@@ -297,6 +297,9 @@ function applyHudLabels(profileKey) {
     const idx = Number(el.getAttribute('data-btn'));
     if (labels[idx] !== undefined) el.textContent = labels[idx];
   });
+  // Show the back-paddle row in the HUD only for controllers that map them
+  // (buttonMap slots 18-21, e.g. the Steam Controller).
+  document.body.classList.toggle('has-paddles', profile.buttonMap?.[18] !== undefined);
   // Trigger labels live inside the trigger fill containers.
   const l2Label = document.querySelector('#button-hud [data-trigger="l2"] .bh-trigger-label');
   const r2Label = document.querySelector('#button-hud [data-trigger="r2"] .bh-trigger-label');
@@ -317,9 +320,11 @@ function _getButtonHudRefs() {
   };
   const sticks = {
     l: { wrap: document.querySelector('#button-hud [data-stick="l"]'),
-         dot:  document.querySelector('#button-hud [data-stick="l"] .bh-stick-dot') },
+         dot:  document.querySelector('#button-hud [data-stick="l"] .bh-stick-dot'),
+         line: document.querySelector('#button-hud [data-stick="l"] .bh-stick-line') },
     r: { wrap: document.querySelector('#button-hud [data-stick="r"]'),
-         dot:  document.querySelector('#button-hud [data-stick="r"] .bh-stick-dot') },
+         dot:  document.querySelector('#button-hud [data-stick="r"] .bh-stick-dot'),
+         line: document.querySelector('#button-hud [data-stick="r"] .bh-stick-line') },
   };
   _bhRefs = { buttons, triggers, sticks };
   return _bhRefs;
@@ -362,16 +367,20 @@ function updateButtonHud(gamepad) {
   // so we negate to make "up = dot up" visually intuitive.
   const axes = gamepad?.axes || [0, 0, 0, 0];
   const STICK_RADIUS_PCT = 40;
-  if (refs.sticks.l.dot) {
-    const x = (axes[0] || 0) * STICK_RADIUS_PCT;
-    const y = (axes[1] || 0) * STICK_RADIUS_PCT;
-    refs.sticks.l.dot.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-  }
-  if (refs.sticks.r.dot) {
-    const x = (axes[2] || 0) * STICK_RADIUS_PCT;
-    const y = (axes[3] || 0) * STICK_RADIUS_PCT;
-    refs.sticks.r.dot.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-  }
+  const placeStick = (s, ax, ay) => {
+    const x = (ax || 0) * STICK_RADIUS_PCT;
+    const y = (ay || 0) * STICK_RADIUS_PCT;
+    if (s.dot) s.dot.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+    // Thin line from the stick center to the dot.
+    if (s.line) {
+      const len = Math.hypot(x, y);
+      const ang = Math.atan2(y, x) * 180 / Math.PI;
+      s.line.style.width = len + 'px';
+      s.line.style.transform = `rotate(${ang}deg)`;
+    }
+  };
+  placeStick(refs.sticks.l, axes[0], axes[1]);
+  placeStick(refs.sticks.r, axes[2], axes[3]);
   // L3 / R3 clicks light up the stick border (separate from button 10/11
   // which already get mapped above — that's the bh-btn variant; the stick
   // wrapper just gets the same .pressed class for the border glow).

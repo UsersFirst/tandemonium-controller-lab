@@ -324,6 +324,9 @@ export const PROFILES = {
       'left_trigger', 'right_trigger', 'left_shoulder', 'right_shoulder',
       'paddle1', 'paddle2', 'paddle3', 'paddle4',
     ],
+    // Paddles sit edge-on at rest; turn their flat face to the camera when
+    // popped so a press/highlight is obvious.
+    floatFaceCamera: ['paddle1', 'paddle2', 'paddle3', 'paddle4'],
     floatFactor: 0.6,
     // Single-color controller — every part shares the body theme color.
     // Back paddles (paddle1-4) and trackpads are static (no standard
