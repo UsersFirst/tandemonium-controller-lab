@@ -149,6 +149,22 @@
     margin: 10px 0;
   }
 
+  /* Build stamp — commit + UTC build time, injected by the desktop/web
+     GitHub Actions builds (see the "Stamp build version" steps). The literal
+     "dev build" text is what ships in the repo; CI rewrites it in place. */
+  .build-stamp {
+    margin-top: 4px;
+    text-align: center;
+    font-size: 10px;
+    font-family: monospace;
+    color: rgba(255,255,255,0.3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .build-stamp a { color: inherit; text-decoration: none; }
+  .build-stamp a:hover { color: rgba(255,255,255,0.6); }
+
   .combo-display {
     font-size: 10px;
     color: #8af;
@@ -939,6 +955,12 @@
   <div class="setting-row">
     <button class="settings-action-btn exit" id="btn-exit-app">EXIT APPLICATION</button>
   </div>
+
+  <hr class="settings-divider">
+  <!-- Build stamp. CI rewrites the inner content of #build-version with the
+       commit short SHA + UTC build time (see the "Stamp build version" steps
+       in build-desktop.yml and deploy-pages.yml). Stays "dev build" locally. -->
+  <div class="build-stamp"><span id="build-version">dev build</span></div>
 </div>
 
 <!-- Test Report modal — guided HID capture wizard -->

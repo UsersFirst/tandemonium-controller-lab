@@ -39,6 +39,11 @@ jobs:
       # (no dependencies), and `three` is loaded from a CDN in web mode.
       - name: Vendor workspace packages into the overlay
         run: node apps/overlay/scripts/copy-workspace.js
+      - name: Stamp build version (overlay + landing page)
+        run: |
+          HASH=$(git rev-parse --short HEAD)
+          export BUILD_STAMP="<a href=\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}\" target=\"_blank\" rel=\"noopener\">v.${HASH}</a> &middot; $(date -u +'%Y-%m-%d %H:%M UTC')"
+          node scripts/stamp-build-version.js apps/overlay/src/index.html web/index.html
       - name: Assemble _site (landing + /overlay + CNAME)
         run: node scripts/build-web.js
       - uses: actions/configure-pages@v6

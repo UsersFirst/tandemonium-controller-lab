@@ -41,6 +41,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Stamp build version
+        shell: bash
+        run: |
+          HASH=$(git rev-parse --short HEAD)
+          export BUILD_STAMP="<a href=\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}\" target=\"_blank\" rel=\"noopener\">v.${HASH}</a> &middot; $(date -u +'%Y-%m-%d %H:%M UTC')"
+          node scripts/stamp-build-version.js apps/overlay/src/index.html
       - name: Build macOS (zip + dmg)
         working-directory: apps/overlay
         shell: bash
@@ -68,6 +74,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Stamp build version
+        shell: bash
+        run: |
+          HASH=$(git rev-parse --short HEAD)
+          export BUILD_STAMP="<a href=\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}\" target=\"_blank\" rel=\"noopener\">v.${HASH}</a> &middot; $(date -u +'%Y-%m-%d %H:%M UTC')"
+          node scripts/stamp-build-version.js apps/overlay/src/index.html
       - name: Build Windows (squirrel + zip)
         working-directory: apps/overlay
         shell: bash
@@ -85,9 +97,13 @@ jobs:
 
   release:
     needs: [build-macos, build-windows]
-    # Only publish a Release for tag pushes or manual runs. Plain pushes to
-    # main just build + upload artifacts (downloadable from the run page).
-    if: ${{ github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' }}
+    # Publish/refresh a Release for: tag pushes, manual runs, AND every push to
+    # main. Main pushes update a single ROLLING release (fixed tag
+    # `webhid-overlay-latest`, marked make_latest) so the landing page's
+    # /releases/latest/download/… always serves the newest main build — that's
+    # the fix for "the website .exe never updates". Semver `webhid-overlay-v*`
+    # tags still cut their own immutable, named releases.
+    if: ${{ github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -102,20 +118,32 @@ jobs:
       - id: meta
         run: |
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            # Explicit versioned release: keep the tag as its own named release.
             TAG="$GITHUB_REF_NAME"
+            NAME="WebHID Controller Overlay — $GITHUB_REF_NAME"
           else
-            TAG="webhid-overlay-v0.1.0-$(git rev-parse --short HEAD)"
+            # Rolling "latest build" release: one fixed tag that every main push
+            # (and manual run) moves to HEAD and overwrites the assets of.
+            TAG="webhid-overlay-latest"
+            NAME="WebHID Controller Overlay — latest ($(git rev-parse --short HEAD), $(date -u +'%Y-%m-%d %H:%M UTC'))"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
-          name: "WebHID Controller Overlay — ${{ steps.meta.outputs.date }}"
+          name: ${{ steps.meta.outputs.name }}
+          # make_latest keeps /releases/latest pointing at this build, so the
+          # landing-page download tracks the freshest one published.
           make_latest: true
           files: release-assets/*
           body: |
-            Automated desktop build of the **WebHID Controller Overlay** from ${{ github.sha }}.
+            Automated desktop build of the **WebHID Controller Overlay**.
+
+            - **Commit:** ${{ steps.meta.outputs.sha }} (`${{ github.sha }}`)
+            - **Built:** ${{ steps.meta.outputs.date }}
 
             ### Downloads
             - **Windows** — `WebHID-Controller-Overlay-Setup.exe` (installer) or `.zip` (portable)
