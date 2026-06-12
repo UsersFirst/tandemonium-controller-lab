@@ -37,9 +37,11 @@ const refs = {
   },
   sticks: {
     l: { wrap: document.querySelector('#button-hud [data-stick="l"]'),
-         dot:  document.querySelector('#button-hud [data-stick="l"] .bh-stick-dot') },
+         dot:  document.querySelector('#button-hud [data-stick="l"] .bh-stick-dot'),
+         line: document.querySelector('#button-hud [data-stick="l"] .bh-stick-line') },
     r: { wrap: document.querySelector('#button-hud [data-stick="r"]'),
-         dot:  document.querySelector('#button-hud [data-stick="r"] .bh-stick-dot') },
+         dot:  document.querySelector('#button-hud [data-stick="r"] .bh-stick-dot'),
+         line: document.querySelector('#button-hud [data-stick="r"] .bh-stick-line') },
   },
 };
 document.querySelectorAll('#button-hud [data-btn]').forEach(el => {
@@ -50,6 +52,9 @@ document.querySelectorAll('#button-hud [data-btn]').forEach(el => {
 function applyProfile(profileKey) {
   const profile = PROFILES[profileKey] || PROFILES.dualsense;
   profileNameEl.textContent = profile.name || profileKey || 'Controller';
+
+  // Show the back-paddle row only for controllers that map them (slots 18-21).
+  document.body.classList.toggle('has-paddles', profile.buttonMap?.[18] !== undefined);
 
   const labels = profile.hudLabels;
   if (!labels) return;
@@ -86,16 +91,17 @@ function applyState(state) {
 
   const axes = state.axes || [0, 0, 0, 0];
   const STICK_RADIUS_PCT = 40;
-  if (refs.sticks.l.dot) {
-    const x = (axes[0] || 0) * STICK_RADIUS_PCT;
-    const y = (axes[1] || 0) * STICK_RADIUS_PCT;
-    refs.sticks.l.dot.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-  }
-  if (refs.sticks.r.dot) {
-    const x = (axes[2] || 0) * STICK_RADIUS_PCT;
-    const y = (axes[3] || 0) * STICK_RADIUS_PCT;
-    refs.sticks.r.dot.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-  }
+  const placeStick = (s, ax, ay) => {
+    const x = (ax || 0) * STICK_RADIUS_PCT;
+    const y = (ay || 0) * STICK_RADIUS_PCT;
+    if (s.dot) s.dot.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+    if (s.line) {
+      s.line.style.width = Math.hypot(x, y) + 'px';
+      s.line.style.transform = `rotate(${Math.atan2(y, x) * 180 / Math.PI}deg)`;
+    }
+  };
+  placeStick(refs.sticks.l, axes[0], axes[1]);
+  placeStick(refs.sticks.r, axes[2], axes[3]);
   if (refs.sticks.l.wrap) refs.sticks.l.wrap.classList.toggle('pressed', !!buttons[10]?.pressed);
   if (refs.sticks.r.wrap) refs.sticks.r.wrap.classList.toggle('pressed', !!buttons[11]?.pressed);
 }

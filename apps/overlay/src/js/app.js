@@ -297,6 +297,9 @@ function applyHudLabels(profileKey) {
     const idx = Number(el.getAttribute('data-btn'));
     if (labels[idx] !== undefined) el.textContent = labels[idx];
   });
+  // Show the back-paddle row in the HUD only for controllers that map them
+  // (buttonMap slots 18-21, e.g. the Steam Controller).
+  document.body.classList.toggle('has-paddles', profile.buttonMap?.[18] !== undefined);
   // Trigger labels live inside the trigger fill containers.
   const l2Label = document.querySelector('#button-hud [data-trigger="l2"] .bh-trigger-label');
   const r2Label = document.querySelector('#button-hud [data-trigger="r2"] .bh-trigger-label');
@@ -317,9 +320,11 @@ function _getButtonHudRefs() {
   };
   const sticks = {
     l: { wrap: document.querySelector('#button-hud [data-stick="l"]'),
-         dot:  document.querySelector('#button-hud [data-stick="l"] .bh-stick-dot') },
+         dot:  document.querySelector('#button-hud [data-stick="l"] .bh-stick-dot'),
+         line: document.querySelector('#button-hud [data-stick="l"] .bh-stick-line') },
     r: { wrap: document.querySelector('#button-hud [data-stick="r"]'),
-         dot:  document.querySelector('#button-hud [data-stick="r"] .bh-stick-dot') },
+         dot:  document.querySelector('#button-hud [data-stick="r"] .bh-stick-dot'),
+         line: document.querySelector('#button-hud [data-stick="r"] .bh-stick-line') },
   };
   _bhRefs = { buttons, triggers, sticks };
   return _bhRefs;
@@ -362,16 +367,20 @@ function updateButtonHud(gamepad) {
   // so we negate to make "up = dot up" visually intuitive.
   const axes = gamepad?.axes || [0, 0, 0, 0];
   const STICK_RADIUS_PCT = 40;
-  if (refs.sticks.l.dot) {
-    const x = (axes[0] || 0) * STICK_RADIUS_PCT;
-    const y = (axes[1] || 0) * STICK_RADIUS_PCT;
-    refs.sticks.l.dot.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-  }
-  if (refs.sticks.r.dot) {
-    const x = (axes[2] || 0) * STICK_RADIUS_PCT;
-    const y = (axes[3] || 0) * STICK_RADIUS_PCT;
-    refs.sticks.r.dot.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-  }
+  const placeStick = (s, ax, ay) => {
+    const x = (ax || 0) * STICK_RADIUS_PCT;
+    const y = (ay || 0) * STICK_RADIUS_PCT;
+    if (s.dot) s.dot.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+    // Thin line from the stick center to the dot.
+    if (s.line) {
+      const len = Math.hypot(x, y);
+      const ang = Math.atan2(y, x) * 180 / Math.PI;
+      s.line.style.width = len + 'px';
+      s.line.style.transform = `rotate(${ang}deg)`;
+    }
+  };
+  placeStick(refs.sticks.l, axes[0], axes[1]);
+  placeStick(refs.sticks.r, axes[2], axes[3]);
   // L3 / R3 clicks light up the stick border (separate from button 10/11
   // which already get mapped above — that's the bh-btn variant; the stick
   // wrapper just gets the same .pressed class for the border glow).
@@ -463,6 +472,11 @@ async function init() {
   // (The 2D HUD picks it up from the CSS var set during settings wiring.)
   const savedHighlight = localStorage.getItem('overlay:highlightColor');
   if (savedHighlight) overlay.setPressColor(savedHighlight);
+
+  // Apply the saved "pop-out controls" preference to the freshly-loaded model.
+  if (overlay.setFloatParts) {
+    overlay.setFloatParts(localStorage.getItem('overlay:floatParts') === '1');
+  }
 
   if (hasGamepad) {
     currentControllerType = initialType;
@@ -600,7 +614,7 @@ async function bootstrapFromHID() {
       id: d.productName || entry.name,
       index: -1,
       axes: [0, 0, 0, 0],
-      buttons: Array.from({ length: 18 }, () => ({ pressed: false, value: 0 })),
+      buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })), // 0-17 standard + 18-21 back paddles (L4/L5/R4/R5)
     };
     await switchController(stub);
     // switchController() calls disconnectGyro() which nulls syntheticGamepad,
@@ -1373,7 +1387,7 @@ function createSyntheticGamepad(id) {
     id: id || 'HID Controller',
     index: -1,
     axes: [0, 0, 0, 0],
-    buttons: Array.from({ length: 18 }, () => ({ pressed: false, value: 0 })),
+    buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })), // 0-17 standard + 18-21 back paddles (L4/L5/R4/R5)
     _synthetic: true,
   };
 }
@@ -1418,7 +1432,22 @@ function updateSyntheticFromParsed(parsed) {
     set(14, b.dpadLeft);
     set(15, b.dpadRight);
     set(16, b.ps);
-    set(17, b.mic);
+    set(17, b.mic || b.quickAccess); // DualSense mic / Steam Controller "…" share slot 17
+  }
+
+  // Back paddles (L4/L5/R4/R5) — no Standard-Gamepad index, so park them in
+  // synthetic slots 18-21. The profile buttonMap points those at the paddle
+  // meshes, so the normal press/glow path lights them up.
+  if (parsed.paddles) {
+    const p = parsed.paddles;
+    const pset = (i, pressed) => {
+      const slot = g.buttons[i];
+      if (slot) { slot.pressed = !!pressed; slot.value = pressed ? 1 : 0; }
+    };
+    pset(18, p.l4);
+    pset(19, p.l5);
+    pset(20, p.r4);
+    pset(21, p.r5);
   }
 }
 
@@ -1619,6 +1648,17 @@ connectGyroBtn.addEventListener('click', async () => {
 });
 
 document.getElementById('hud-position').addEventListener('change', () => applyHudPosition());
+
+// Pop-out controls — float triggers/bumpers/paddles clear of the body. The
+// overlay eases them in/out; we just persist + forward the toggle.
+const floatPartsCheck = document.getElementById('float-parts');
+if (floatPartsCheck) {
+  floatPartsCheck.checked = localStorage.getItem('overlay:floatParts') === '1';
+  floatPartsCheck.addEventListener('change', (e) => {
+    localStorage.setItem('overlay:floatParts', e.target.checked ? '1' : '0');
+    if (overlay?.setFloatParts) overlay.setFloatParts(e.target.checked);
+  });
+}
 
 driftModeSelect.addEventListener('change', (e) => {
   gravityMode = e.target.value;

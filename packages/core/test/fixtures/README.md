@@ -58,6 +58,16 @@ tests.
     responds when rotated. (R1 wasn't pressed in the captured window, so it's
     intentionally unasserted.)
 
+## `steam-controller-puck-system_28de-1304.json`
+
+- **Source:** the `Capture HID Report` wizard, captured 2026-06-12 from a
+  **Steam Controller 2026 via Puck** (`28de:1304`) — the `system-buttons` step,
+  taken **with the "…" quick-access button pressed**, downsampled to 120 reports.
+- **What it proves** (`steam-controller-system-buttons.test.js`): the system
+  buttons (Steam/View/Menu) and the **"…" quick-access button** all register.
+  quickAccess is **btn0 bit 0x10** — the one unused face-byte bit, identified
+  from this capture (it was silent in the general capture above).
+
 The `bytes` field of each report is the WebHID input-report payload **with the
 report ID already stripped** (as `HIDInputReportEvent.data` delivers it), so byte
 indices map directly onto the driver's `parseReport` `DataView` offsets.

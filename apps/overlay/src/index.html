@@ -637,7 +637,24 @@
     border-radius: 50%;
     transform: translate(-50%, -50%);
     pointer-events: none;
+    z-index: 1; /* above the connector line */
   }
+  /* Thin connector from the stick center to the dot (width + rotation set in
+     JS each frame). transform-origin at the left edge = the stick center. */
+  #button-hud .bh-stick-line {
+    position: absolute;
+    left: 50%; top: 50%;
+    height: 2px; width: 0;
+    margin-top: -1px;
+    background: #cfd;
+    opacity: 0.55;
+    border-radius: 1px;
+    transform-origin: 0 50%;
+    pointer-events: none;
+  }
+  /* Back-paddle HUD row: hidden unless the active controller maps paddles. */
+  #button-hud .bh-paddles { display: none; }
+  body.has-paddles #button-hud .bh-paddles { display: flex; }
   #button-hud .bh-stick-label {
     position: absolute;
     left: 50%; bottom: -10px;
@@ -797,6 +814,11 @@
   <div class="camera-presets" data-row="1">
     <button data-preset="player">Player</button>
     <button data-preset="top">Top</button>
+  </div>
+
+  <div class="setting-row">
+    <label title="Float the triggers, bumpers & back paddles clear of the body so they're visible at any angle">Pop Out Controls</label>
+    <input type="checkbox" id="float-parts">
   </div>
 
   <div class="setting-row">
@@ -991,14 +1013,22 @@
     </div>
   </div>
   <div class="bh-section bh-sticks">
-    <div class="bh-stick" data-stick="l"><div class="bh-stick-dot"></div><span class="bh-stick-label">L</span></div>
-    <div class="bh-stick" data-stick="r"><div class="bh-stick-dot"></div><span class="bh-stick-label">R</span></div>
+    <div class="bh-stick" data-stick="l"><div class="bh-stick-line"></div><div class="bh-stick-dot"></div><span class="bh-stick-label">L</span></div>
+    <div class="bh-stick" data-stick="r"><div class="bh-stick-line"></div><div class="bh-stick-dot"></div><span class="bh-stick-label">R</span></div>
   </div>
   <div class="bh-section bh-system">
     <div class="bh-btn bh-sm" data-btn="8">Sh</div>
     <div class="bh-btn bh-sm" data-btn="9">Op</div>
     <div class="bh-btn bh-sm" data-btn="16">PS</div>
     <div class="bh-btn bh-sm" data-btn="17">TP</div>
+  </div>
+  <!-- Back paddles (L4/L5/R4/R5) — shown only for controllers that map them
+       (body.has-paddles, set per-profile in app.js). -->
+  <div class="bh-section bh-paddles">
+    <div class="bh-btn bh-sm" data-btn="18">L4</div>
+    <div class="bh-btn bh-sm" data-btn="19">L5</div>
+    <div class="bh-btn bh-sm" data-btn="20">R4</div>
+    <div class="bh-btn bh-sm" data-btn="21">R5</div>
   </div>
 </div>
 

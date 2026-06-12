@@ -23,6 +23,7 @@ const LERP_SPEED = 0.25; // Smoothing factor for animations
 // orange/yellow. ~1.5 keeps the chosen hue faithful while still glowing. Nudge
 // up for a punchier glow if you don't mind some hue shift on saturated colors.
 const PRESS_GLOW = 1.5;
+const FLOAT_ZERO = new THREE.Vector3(); // shared read-only lerp target (parts seated)
 
 export class ControllerOverlay {
   /**
@@ -74,6 +75,15 @@ export class ControllerOverlay {
     this._touchpadClickState = false;
     this._glowTexture = null;
     this._touchRaycaster = new THREE.Raycaster();
+
+    // "Pop-off" floating parts: each floatable mesh is wrapped in an identity
+    // Group whose position lerps to a radial-outward offset when active (so
+    // triggers/bumpers/paddles float clear of the body, visible at any angle)
+    // and back to zero when not — zero offset is a no-op, so the seated look
+    // is byte-identical to before.
+    this._floatWrappers = []; // [{ group, offset:Vector3 }]
+    this._floatActive = false;
+    this._floatShrink = 1; // model scale while popped (computed per profile)
   }
 
   async init() {
@@ -489,6 +499,10 @@ export class ControllerOverlay {
       }
     }
 
+    // Wrap floatable parts for the "pop-off" feature (after aliasing so every
+    // profile name resolves in this.meshes).
+    this._setupFloatParts(profile);
+
     // Diagnostic: per-mapping check at load time so we can tell whether
     // each gamepad-index → mesh path will animate at runtime. The press
     // / tilt / trigger loops all early-return on missing mesh OR missing
@@ -606,6 +620,148 @@ export class ControllerOverlay {
     console.log('Placeholder controller model created');
   }
 
+  // ── "Pop-off" floating parts ──
+  // Wrap each profile.floatParts mesh in an identity Group and precompute a
+  // radial-outward offset (auto-derived from geometry: direction = part center
+  // → model center, magnitude = model radius × floatFactor). Floating just
+  // lerps each wrapper between 0 (seated) and its offset (popped) — the seated
+  // state is a no-op, and the part's own press/rotation animation runs inside
+  // the wrapper untouched.
+  _setupFloatParts(profile) {
+    this._floatWrappers = [];
+    const names = profile.floatParts;
+    if (!names || !names.length) return;
+
+    this.model.updateWorldMatrix(true, true);
+    const modelBox = new THREE.Box3().setFromObject(this.model);
+    const modelCenter = modelBox.getCenter(new THREE.Vector3());
+    const worldRadius = modelBox.getSize(new THREE.Vector3()).length() * 0.5;
+    const scale = this.model.scale.x || 1; // uniform scale applied in _setupModel
+    const factor = profile.floatFactor ?? 0.6;
+    // Extra sideways push so parts clear the body's width, not just radially.
+    const lateralBias = profile.floatLateralBias ?? 1.6;
+    // Shrink the whole model while popped so the spread-out layout still fits
+    // the window. Auto-derived from the spread (a wider pop → smaller body),
+    // with a margin; override via profile.floatShrink.
+    this._floatShrink = profile.floatShrink ?? (1 / (1 + factor * 0.9));
+    // Parts that should additionally turn their flat face toward the camera
+    // while popped (e.g. the back paddles, which sit edge-on at rest).
+    const faceCamSet = new Set(profile.floatFaceCamera || []);
+
+    const seen = new Set();
+    for (const name of names) {
+      const obj = this.meshes[name];
+      if (!obj || seen.has(obj)) continue; // skip missing / duplicate (alias) refs
+      seen.add(obj);
+
+      // World-space radial direction from model center to the part's center.
+      const partCenter = new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3());
+      const dir = partCenter.clone().sub(modelCenter);
+      if (dir.lengthSq() < 1e-12) dir.set(0, 1, 0); // dead-center part → push up
+      dir.normalize();
+      // Convert the world displacement to the wrapper's parent-local space. At
+      // setup the model isn't gyro-rotated yet (rotation identity), so for a
+      // uniformly-scaled parent this is just divide-by-scale.
+      const offset = dir.multiplyScalar((worldRadius * factor) / scale);
+      offset.x *= lateralBias; // bias the pop outward to the sides
+
+      // Rotation pivot = the part's own center (parent-local), captured before
+      // wrapping reparents obj. Rotating about this point (not the model origin)
+      // keeps the part in place as it turns — otherwise a big face-camera turn
+      // swings it in a wide arc (the left paddles ending up under the body).
+      const pivot = obj.parent.worldToLocal(partCenter.clone());
+      const wrapper = { group: this._wrapForFloat(obj), pivot, offset, t: 0 };
+      if (faceCamSet.has(name)) {
+        const normal = this._partSurfaceNormal(obj);
+        if (normal) {
+          wrapper.faceCamera = true;
+          wrapper.restNormal = normal;       // world surface normal at rest
+          wrapper.restCenter = partCenter;    // world center (for camera direction)
+        }
+      }
+      this._floatWrappers.push(wrapper);
+    }
+  }
+
+  // Wrap an animated part in an identity Group so floating (group position)
+  // is decoupled from the part's own press/rotation animation (mesh transform).
+  _wrapForFloat(obj) {
+    const g = new THREE.Group(); // identity → preserves obj's world transform
+    obj.parent.add(g);
+    g.add(obj);
+    return g;
+  }
+
+  // World-space surface normal of a (roughly flat) part = its thinnest local
+  // bounding-box axis, mapped to world. Used to turn paddles face-on.
+  _partSurfaceNormal(obj) {
+    let mesh = obj.isMesh ? obj : null;
+    if (!mesh) obj.traverse((c) => { if (!mesh && c.isMesh) mesh = c; });
+    if (!mesh?.geometry) return null;
+    mesh.geometry.computeBoundingBox();
+    const bb = mesh.geometry.boundingBox;
+    const dims = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
+    const minIdx = dims.indexOf(Math.min(...dims));
+    const local = new THREE.Vector3(minIdx === 0 ? 1 : 0, minIdx === 1 ? 1 : 0, minIdx === 2 ? 1 : 0);
+    mesh.updateWorldMatrix(true, false);
+    return local.transformDirection(mesh.matrixWorld).normalize();
+  }
+
+  /** Toggle the pop-off float (parts ease in/out via the render loop). */
+  setFloatParts(enabled) {
+    this._floatActive = !!enabled;
+  }
+
+  _updateFloat() {
+    if (!this._floatWrappers.length) return;
+    // Shrink the whole model while popped so the spread-out parts fit the
+    // window; ease back to full size when seated. (bodyGroup also carries the
+    // gyro rotation — scale and rotation compose fine.)
+    if (this.bodyGroup) {
+      const target = this._floatActive ? this._floatShrink : 1;
+      const s = THREE.MathUtils.lerp(this.bodyGroup.scale.x, target, LERP_SPEED);
+      this.bodyGroup.scale.setScalar(s);
+    }
+    // Keep popped parts facing the camera: counter the body's gyro rotation so
+    // each part holds its rest (camera-facing) orientation instead of tilting
+    // away with the controller. Wrapper parent (scene) has no rotation, so the
+    // wrapper's inverse-body rotation cancels gyro for the part inside it. Eases
+    // back to identity (rotate with the body) when seated.
+    const counter = this._floatCounterQuat || (this._floatCounterQuat = new THREE.Quaternion());
+    if (this._floatActive && this.bodyGroup) {
+      counter.copy(this.bodyGroup.quaternion).invert();
+    } else {
+      counter.identity();
+    }
+    // Scratch objects for the per-part "face the camera" rotation.
+    const camPos = this._floatCamPos || (this._floatCamPos = new THREE.Vector3());
+    const camDir = this._floatCamDir || (this._floatCamDir = new THREE.Vector3());
+    const faceRot = this._floatFaceRot || (this._floatFaceRot = new THREE.Quaternion());
+    const tgt = this._floatTargetQuat || (this._floatTargetQuat = new THREE.Quaternion());
+    const rp = this._floatRP || (this._floatRP = new THREE.Vector3());
+    const pos = this._floatPos || (this._floatPos = new THREE.Vector3());
+    if (this.camera) this.camera.getWorldPosition(camPos);
+
+    for (const w of this._floatWrappers) {
+      let target = counter;
+      if (w.faceCamera && this._floatActive && this.camera) {
+        // Rotate the part's rest surface-normal to point at the camera so its
+        // flat face shows (composed onto the counter-rotation).
+        camDir.copy(camPos).sub(w.restCenter).normalize();
+        faceRot.setFromUnitVectors(w.restNormal, camDir);
+        target = tgt.copy(counter).multiply(faceRot);
+      }
+      w.group.quaternion.slerp(target, LERP_SPEED);
+      // Ease the pop amount, then place the wrapper so its rotation pivots about
+      // the part's own center: pos = P − R·P + offset·t. (Seated: R = identity,
+      // t = 0 → pos = 0, byte-identical to no wrapper.)
+      w.t = THREE.MathUtils.lerp(w.t, this._floatActive ? 1 : 0, LERP_SPEED);
+      rp.copy(w.pivot).applyQuaternion(w.group.quaternion);
+      pos.copy(w.pivot).sub(rp).addScaledVector(w.offset, w.t);
+      w.group.position.copy(pos);
+    }
+  }
+
   /**
    * Update the overlay with current input state.
    * @param {Gamepad|null} gamepad — from navigator.getGamepads()
@@ -632,11 +788,18 @@ export class ControllerOverlay {
         mesh.position.y = THREE.MathUtils.lerp(mesh.position.y, targetY, LERP_SPEED);
 
         // Emissive glow on press (color configurable via setPressColor).
-        // Set every frame so a runtime color change takes effect immediately;
-        // intensity lerps to 0 when not pressed, so the color is invisible then.
+        // Color is set every frame so a runtime color change takes effect
+        // immediately; intensity lerps to 0 when not pressed, so the color
+        // is invisible then. DoubleSide (set once) keeps the highlight
+        // visible from front AND back once the part is popped out via float.
         const mat = mesh.isMesh ? mesh.material :
                     (mesh.children?.[0]?.isMesh ? mesh.children[0].material : null);
         if (mat && 'emissive' in mat) {
+          if (!mat._btnEmissiveSet) {
+            mat._btnEmissiveSet = true;
+            mat.side = THREE.DoubleSide;
+            mat.needsUpdate = true;
+          }
           mat.emissive.set(this._pressColor);
           const targetIntensity = btn.pressed ? PRESS_GLOW : 0;
           mat.emissiveIntensity = THREE.MathUtils.lerp(
@@ -755,6 +918,7 @@ export class ControllerOverlay {
     if (this._disposed) return;
     this._animationId = requestAnimationFrame(() => this._animate());
 
+    this._updateFloat();
     this.controls?.update();
     this.renderer.render(this.scene, this.camera);
   }

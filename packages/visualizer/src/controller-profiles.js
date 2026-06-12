@@ -66,6 +66,12 @@ export const PROFILES = {
     touchPoint2Mesh: 'touch_point2',
     bodyMeshes: ['body_top', 'body_bottom', 'body_extra'],  // gyro applied to bodyGroup parent
 
+    // "Pop-off" parts: float clear of the body (toggle in settings) so they're
+    // visible at any camera angle. Direction/magnitude are auto-derived from
+    // geometry; tune the spread via floatFactor.
+    floatParts: ['trigger_l2', 'trigger_r2', 'bumper_l1', 'bumper_r1'],
+    floatFactor: 0.6,
+
     // Color groups for user-customizable body/accent colors
     bodyColorMeshes: [
       'body_top', 'face_cross', 'face_circle', 'face_square', 'face_triangle',
@@ -277,7 +283,16 @@ export const PROFILES = {
       14: 'dpad_left',
       15: 'dpad_right',
       16: 'guide_button',    // Steam
-      // 17: quick-access "…" — driver doesn't parse a bit for it yet.
+      17: 'misc1',           // "…" quick-access button (central, between the trackpads)
+      // Back paddles: no Standard-Gamepad index, so the overlay synthesizes
+      // them at slots 18-21 from the driver's WebHID paddle bits (L4/L5/R4/R5).
+      // Right = paddle1/3, left = paddle2/4 (verified from GLB X-centers);
+      // upper/lower within a side (the 4-vs-5 split) is a best guess — swap the
+      // two on a side if a press lights the wrong paddle.
+      18: 'paddle2',  // L4 (left)
+      19: 'paddle4',  // L5 (left)
+      20: 'paddle1',  // R4 (right)
+      21: 'paddle3',  // R5 (right)
     },
     triggerMap: {
       6: 'left_trigger',     // LT
@@ -320,6 +335,17 @@ export const PROFILES = {
     trackpadSwapXY: false,
     // gyro rotates the whole model (bodyGroup); bodyMeshes is informational.
     bodyMeshes: ['top_shell', 'bottom_shell', 'misc1', 'left_gripsense', 'right_gripsense'],
+    // "Pop-off" parts: triggers, bumpers, and the four back paddles float clear
+    // of the body (toggle in settings). Auto-positioned radially; tune spread
+    // via floatFactor.
+    floatParts: [
+      'left_trigger', 'right_trigger', 'left_shoulder', 'right_shoulder',
+      'paddle1', 'paddle2', 'paddle3', 'paddle4',
+    ],
+    // Paddles sit edge-on at rest; turn their flat face to the camera when
+    // popped so a press/highlight is obvious.
+    floatFaceCamera: ['paddle1', 'paddle2', 'paddle3', 'paddle4'],
+    floatFactor: 0.6,
     // Single-color controller — every part shares the body theme color.
     // Back paddles (paddle1-4) and trackpads are static (no standard
     // gamepad index) but still themed.
@@ -340,7 +366,7 @@ export const PROFILES = {
     hudLabels: {
       0: 'A',  1: 'B',  2: 'X',  3: 'Y',
       4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT',
-      8: 'Vw', 9: 'Mn', 16: 'St', 17: '',
+      8: 'Vw', 9: 'Mn', 16: 'St', 17: '…',
     },
   },
 };
