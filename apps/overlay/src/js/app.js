@@ -1015,6 +1015,7 @@ function loop() {
     window.electronAPI.sendButtonHudState({
       buttons: gamepad.buttons.map(b => ({ pressed: !!b.pressed, value: b.value || 0 })),
       axes: Array.from(gamepad.axes || []),
+      grips: _lastGrips || undefined,
     });
   }
 
@@ -1426,18 +1427,22 @@ function updateSyntheticFromParsed(parsed) {
 // 2D grip-sense indicator — readable at any 3D camera angle (the grip meshes
 // are on the back of the controller and usually occluded). Lazily revealed the
 // first time grip data arrives, then tracks left/right state.
-let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // default on
-let _gripRefs = null;
-function updateGripIndicator(grips) {
-  if (!_gripRefs) {
-    const root = document.getElementById('grip-indicator');
-    if (!root) return;
-    _gripRefs = { root, l: root.querySelector('.grip-l'), r: root.querySelector('.grip-r') };
+let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // 3D handle glow on/off
+// Grip-sense HUD row — toggles the LG/RG cells in the Button HUD from
+// parsed.grips (dedicated path; grips aren't in the gamepad). Revealed via
+// body.has-grips the first time a controller reports grips.
+let _gripHudRefs = null;
+let _lastGrips = null; // latest grip state, forwarded to the popout HUD
+function updateGripHud(grips) {
+  if (!_gripHudRefs) {
+    const l = document.querySelector('#button-hud [data-grip="l"]');
+    const r = document.querySelector('#button-hud [data-grip="r"]');
+    if (!l || !r) return;
+    _gripHudRefs = { l, r };
   }
-  if (!gripVizEnabled) { _gripRefs.root.setAttribute('hidden', ''); return; }
-  if (_gripRefs.root.hasAttribute('hidden')) _gripRefs.root.removeAttribute('hidden');
-  _gripRefs.l.classList.toggle('active', !!grips.left);
-  _gripRefs.r.classList.toggle('active', !!grips.right);
+  document.body.classList.add('has-grips');
+  _gripHudRefs.l.classList.toggle('active', !!grips.left);
+  _gripHudRefs.r.classList.toggle('active', !!grips.right);
 }
 
 // Grip-sense display toggle — gates both the 2D edge indicator and the 3D
@@ -1448,8 +1453,7 @@ if (gripToggle) {
   gripToggle.addEventListener('change', (e) => {
     gripVizEnabled = e.target.checked;
     localStorage.setItem('overlay:gripViz', gripVizEnabled ? '1' : '0');
-    if (overlay?.setGripVisible) overlay.setGripVisible(gripVizEnabled);
-    if (!gripVizEnabled) document.getElementById('grip-indicator')?.setAttribute('hidden', '');
+    if (overlay?.setGripVisible) overlay.setGripVisible(gripVizEnabled); // 3D handle glow only
   });
 }
 
@@ -1511,8 +1515,9 @@ function handleInputReport(event) {
   }
 
   if (parsed.grips) {
-    if (overlay.setGripState) overlay.setGripState(parsed.grips); // 3D mesh glow (when visible)
-    updateGripIndicator(parsed.grips);                            // 2D edge indicator (any angle)
+    _lastGrips = parsed.grips;                                    // forwarded to the popout HUD
+    if (overlay.setGripState) overlay.setGripState(parsed.grips); // 3D handle glow (toggleable)
+    updateGripHud(parsed.grips);                                  // grip cells in the Button HUD
   }
 
   if (!gyroActive || !parsed.gyro) return;

@@ -104,6 +104,12 @@
     transform: scale(1.08);
     box-shadow: 0 0 6px rgba(51, 136, 255, 0.65);
   }
+  #button-hud .bh-grips { display: none; }
+  body.has-grips #button-hud .bh-grips { display: flex; }
+  #button-hud .bh-grip.active {
+    background: var(--hl-color, #3388ff); color: #fff; border-color: var(--hl-color, #3388ff);
+    box-shadow: 0 0 6px var(--hl-color, #3388ff);
+  }
   #button-hud .bh-face-a.pressed { background: #2ec27e; border-color: #2ec27e; box-shadow: 0 0 6px rgba(46,194,126,0.65); }
   #button-hud .bh-face-b.pressed { background: #ed333b; border-color: #ed333b; box-shadow: 0 0 6px rgba(237,51,59,0.65); }
   #button-hud .bh-face-x.pressed { background: #3388ff; border-color: #3388ff; box-shadow: 0 0 6px rgba(51,136,255,0.65); }
@@ -180,6 +186,10 @@
     <div class="bh-btn bh-sm" data-btn="9">Op</div>
     <div class="bh-btn bh-sm" data-btn="16">PS</div>
     <div class="bh-btn bh-sm" data-btn="17">TP</div>
+  </div>
+  <div class="bh-section bh-grips">
+    <div class="bh-btn bh-sm bh-grip" data-grip="l">LG</div>
+    <div class="bh-btn bh-sm bh-grip" data-grip="r">RG</div>
   </div>
 </div>
 
