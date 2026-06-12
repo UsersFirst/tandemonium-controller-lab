@@ -37,9 +37,30 @@ tests.
   is identical to the GameSir capture, so the shared steering pipeline needs no
   DS4-specific axis/sign/scale handling.
 
+## `steam-controller-puck_28de-1304.json`
+
+- **Source:** the `Capture HID Report` wizard in `apps/overlay`, captured
+  2026-06-11 from a **Steam Controller 2026 via the wireless Puck**
+  (`28de:1304`), USB connection. STATE reports are id `0x45`, 53 bytes.
+- **Trimmed:** nine steps kept (`at-rest`, `pitch`, `face-buttons`,
+  `system-buttons`, `triggers-shoulders`, `sticks`, `dpad`, `back-paddles`,
+  `touchpad`), evenly downsampled to ≤120 reports each. Non-STATE 53-byte
+  reports (`0x7b`/`0x43`) are left in and exercise the #28 report-id guard.
+- **What it proves:**
+  - **Trackpads** decode from the 0x45 STATE report at **left X@17 Y@19
+    area@21, right X@23 Y@25 area@27** (int16 LE) — active sweeps during the
+    touchpad step, inactive at rest (`steam-controller-trackpads.test.js`).
+  - **Full button/stick/IMU map** against ground truth
+    (`steam-controller-capture.test.js`): each scripted step pressed a known
+    set of inputs, so face buttons, system buttons, all four dpad directions,
+    all four paddles register; L2/R2 reach full pull and L1 registers; both
+    sticks sweep the full range; and the IMU reads zero-bias + 1g at rest and
+    responds when rotated. (R1 wasn't pressed in the captured window, so it's
+    intentionally unasserted.)
+
 The `bytes` field of each report is the WebHID input-report payload **with the
 report ID already stripped** (as `HIDInputReportEvent.data` delivers it), so byte
-indices map directly onto `PlayStationDriver.parseReport`'s `DataView` offsets.
+indices map directly onto the driver's `parseReport` `DataView` offsets.
 
 > No genuine DualSense (DS5) capture exists in this repo yet — the DS5 parse path
 > is covered by synthesized frames in `playstation-driver.test.js`. Drop a real
