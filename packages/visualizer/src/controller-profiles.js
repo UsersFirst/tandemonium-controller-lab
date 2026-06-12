@@ -66,18 +66,18 @@ export const PROFILES = {
     touchPoint2Mesh: 'touch_point2',
     bodyMeshes: ['body_top', 'body_bottom', 'body_extra'],  // gyro applied to bodyGroup parent
 
-    // "Pop-off" parts: float clear of the body (toggle in settings) so they're
-    // visible at any camera angle. Triggers + bumpers lift off the BACK surface
-    // via floatTuning (same scheme as the Steam Controller — see that profile
-    // for the back/up meaning): each part lifts off the rear (−Z) with a slight
-    // rise (+Y), away from the body but close, keeping its natural position.
+    // "Pop-off" parts: float clear of the body (toggle in settings). Triggers +
+    // bumpers flip UP to the top and EXTEND out the back, stacked bumper-then-
+    // trigger (same scheme as the Steam Controller — see that profile for the
+    // back/up meaning). DualSense geometry differs, so these may want their own
+    // numbers, but they start matched for parity.
     floatParts: ['trigger_l2', 'trigger_r2', 'bumper_l1', 'bumper_r1'],
     floatFactor: 0.6,
     floatTuning: {
-      bumper_l1:  { back: 0.40, up: 0.15 },
-      bumper_r1:  { back: 0.40, up: 0.15 },
-      trigger_l2: { back: 0.40, up: 0.15 },
-      trigger_r2: { back: 0.40, up: 0.15 },
+      bumper_l1:  { back: 0.40, up: 0.30 },
+      bumper_r1:  { back: 0.40, up: 0.30 },
+      trigger_l2: { back: 0.70, up: 0.46 },
+      trigger_r2: { back: 0.70, up: 0.46 },
     },
 
     // Color groups for user-customizable body/accent colors
@@ -355,17 +355,19 @@ export const PROFILES = {
     floatFaceCamera: ['paddle1', 'paddle2', 'paddle3', 'paddle4'],
     floatFactor: 0.6,         // radial spread for the auto-positioned parts (paddles)
     // Per-part pop-off tuning for the triggers + bumpers only (the paddles keep
-    // the default radial fan-out, untouched). The triggers/bumpers sit on the
-    // BACK of the controller, so they lift off the rear surface (−Z) with a
-    // slight rise (+Y) — away from the body but close — keeping their natural
-    // left/right + stacked positions. Knobs are in model-radius units:
-    //   back — push off the rear surface (−Z)
-    //   up   — slight lift toward the top (+Y) so they stay visible head-on
+    // the default radial fan-out, untouched). The goal: flip the pair UP to the
+    // top and EXTEND them out the back, like the top of the body extends
+    // rearward — stacked bumper-then-trigger (bumper closer to the body, trigger
+    // reaching further out). The trigger starts lower than the bumper, so it
+    // gets more `up` to reach the same top level, and more `back` to sit beyond
+    // the bumper. Knobs are in model-radius units:
+    //   back — extend out the back, along the edge the parts sit on (−Z)
+    //   up   — flip up toward the top (+Y)
     floatTuning: {
-      left_shoulder:  { back: 0.40, up: 0.15 },
-      right_shoulder: { back: 0.40, up: 0.15 },
-      left_trigger:   { back: 0.40, up: 0.15 },
-      right_trigger:  { back: 0.40, up: 0.15 },
+      left_shoulder:  { back: 0.40, up: 0.30 },
+      right_shoulder: { back: 0.40, up: 0.30 },
+      left_trigger:   { back: 0.70, up: 0.46 },
+      right_trigger:  { back: 0.70, up: 0.46 },
     },
     // Capacitive grip sensors (digital): glow these meshes while the grip is
     // held (driver parsed.grips). Highlighted via overlay.setGripState.
