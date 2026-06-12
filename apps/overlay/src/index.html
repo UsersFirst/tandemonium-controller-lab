@@ -549,11 +549,11 @@
   #button-hud .bh-btn.bh-sm { width: 20px; height: 16px; font-size: 9px; }
   #button-hud .bh-btn.bh-dp { width: 18px; height: 18px; font-size: 8px; color: #777; }
   #button-hud .bh-btn.pressed {
-    background: #3388ff;
+    background: var(--hl-color, #3388ff);
     color: #fff;
-    border-color: #3388ff;
+    border-color: var(--hl-color, #3388ff);
     transform: scale(1.08);
-    box-shadow: 0 0 6px rgba(51, 136, 255, 0.65);
+    box-shadow: 0 0 6px var(--hl-color, #3388ff);
   }
   /* Face button accents — keep their familiar colors */
   #button-hud .bh-face-a.pressed { background: #2ec27e; border-color: #2ec27e; box-shadow: 0 0 6px rgba(46,194,126,0.65); }
@@ -626,8 +626,8 @@
     transition: border-color 60ms linear, box-shadow 60ms linear;
   }
   #button-hud .bh-stick.pressed {
-    border-color: #3388ff;
-    box-shadow: 0 0 6px rgba(51, 136, 255, 0.65);
+    border-color: var(--hl-color, #3388ff);
+    box-shadow: 0 0 6px var(--hl-color, #3388ff);
   }
   #button-hud .bh-stick-dot {
     position: absolute;
@@ -781,6 +781,11 @@
   </div>
 
   <div class="setting-row">
+    <label>Highlight Color</label>
+    <input type="color" id="highlight-color" value="#3388ff">
+  </div>
+
+  <div class="setting-row">
     <label>Camera</label>
   </div>
   <div class="camera-presets" data-row="0">
@@ -848,6 +853,14 @@
   <div class="setting-row">
     <label>Pop out Button HUD</label>
     <button id="popout-button-hud" title="Open Button HUD in its own draggable window">Pop Out</button>
+  </div>
+  <div class="setting-row">
+    <label title="Paint a solid keyable color behind the overlay for chroma-key compositing">Green-Screen Background</label>
+    <input type="checkbox" id="green-screen-toggle">
+  </div>
+  <div class="setting-row">
+    <label>Green-Screen Color</label>
+    <input type="color" id="green-screen-color" value="#00b140">
   </div>
 
   <hr class="settings-divider">

@@ -459,6 +459,11 @@ async function init() {
   });
   await overlay.init();
 
+  // Re-apply a saved highlight color to the freshly-created 3D overlay.
+  // (The 2D HUD picks it up from the CSS var set during settings wiring.)
+  const savedHighlight = localStorage.getItem('overlay:highlightColor');
+  if (savedHighlight) overlay.setPressColor(savedHighlight);
+
   if (hasGamepad) {
     currentControllerType = initialType;
     modelReady = true;
@@ -1632,6 +1637,48 @@ const bodyColorInput = document.getElementById('body-color');
 const accentColorInput = document.getElementById('accent-color');
 bodyColorInput.addEventListener('input', (e) => overlay.setBodyColor(e.target.value));
 accentColorInput.addEventListener('input', (e) => overlay.setAccentColor(e.target.value));
+
+// ── Highlight (pressed-button) color ──────────────────────────────────────
+// Drives both the 2D Button HUD .pressed states (via the --hl-color CSS var)
+// and the 3D model's press glow (via overlay.setPressColor). It's persisted
+// only once the user changes it, so the defaults (blue HUD / yellow 3D) are
+// preserved until they opt in. Face buttons keep their iconic A/B/X/Y colors.
+const highlightColorInput = document.getElementById('highlight-color');
+function applyHighlightColor(hex) {
+  document.documentElement.style.setProperty('--hl-color', hex);
+  if (overlay) overlay.setPressColor(hex); // 3D overlay may not exist yet on load
+}
+{
+  const savedHl = localStorage.getItem('overlay:highlightColor');
+  if (savedHl) { highlightColorInput.value = savedHl; applyHighlightColor(savedHl); }
+}
+highlightColorInput.addEventListener('input', (e) => {
+  localStorage.setItem('overlay:highlightColor', e.target.value);
+  applyHighlightColor(e.target.value);
+});
+
+// ── Green-screen background ────────────────────────────────────────────────
+// Paints a solid keyable color behind the (otherwise transparent) overlay so
+// it can be chroma-keyed in editing/OBS. Off by default. BASE_BG restores the
+// normal look when toggled off: '' clears the inline style so the Electron
+// window stays transparent; in the browser we fall back to the dim app bg.
+const greenScreenToggle = document.getElementById('green-screen-toggle');
+const greenScreenColorInput = document.getElementById('green-screen-color');
+const BASE_BG = isDesktop ? '' : '#1a1a2e';
+function applyGreenScreen() {
+  const on = greenScreenToggle.checked;
+  document.body.style.background = on ? greenScreenColorInput.value : BASE_BG;
+  localStorage.setItem('overlay:greenScreen', on ? '1' : '0');
+  localStorage.setItem('overlay:greenScreenColor', greenScreenColorInput.value);
+}
+{
+  const savedColor = localStorage.getItem('overlay:greenScreenColor');
+  if (savedColor) greenScreenColorInput.value = savedColor;
+  greenScreenToggle.checked = localStorage.getItem('overlay:greenScreen') === '1';
+  if (greenScreenToggle.checked) applyGreenScreen();
+}
+greenScreenToggle.addEventListener('change', applyGreenScreen);
+greenScreenColorInput.addEventListener('input', applyGreenScreen);
 
 // Camera presets — one selected at a time, used as calibration view
 let selectedCameraPreset = 'player';
