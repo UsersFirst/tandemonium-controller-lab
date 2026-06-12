@@ -136,7 +136,12 @@
   #button-hud .bh-stick.pressed { border-color: #3388ff; box-shadow: 0 0 6px rgba(51, 136, 255, 0.65); }
   #button-hud .bh-stick-dot { position: absolute; left: 50%; top: 50%;
     width: 6px; height: 6px; background: #cfd; border-radius: 50%;
-    transform: translate(-50%, -50%); pointer-events: none; }
+    transform: translate(-50%, -50%); pointer-events: none; z-index: 1; }
+  #button-hud .bh-stick-line { position: absolute; left: 50%; top: 50%;
+    height: 2px; width: 0; margin-top: -1px; background: #cfd; opacity: 0.55;
+    border-radius: 1px; transform-origin: 0 50%; pointer-events: none; }
+  #button-hud .bh-paddles { display: none; }
+  body.has-paddles #button-hud .bh-paddles { display: flex; }
   #button-hud .bh-stick-label { position: absolute; left: 50%; bottom: -10px;
     transform: translateX(-50%); color: #888; font-size: 8px; font-weight: 600;
     pointer-events: none; }
@@ -172,14 +177,20 @@
     </div>
   </div>
   <div class="bh-section bh-sticks">
-    <div class="bh-stick" data-stick="l"><div class="bh-stick-dot"></div><span class="bh-stick-label">L</span></div>
-    <div class="bh-stick" data-stick="r"><div class="bh-stick-dot"></div><span class="bh-stick-label">R</span></div>
+    <div class="bh-stick" data-stick="l"><div class="bh-stick-line"></div><div class="bh-stick-dot"></div><span class="bh-stick-label">L</span></div>
+    <div class="bh-stick" data-stick="r"><div class="bh-stick-line"></div><div class="bh-stick-dot"></div><span class="bh-stick-label">R</span></div>
   </div>
   <div class="bh-section bh-system">
     <div class="bh-btn bh-sm" data-btn="8">Sh</div>
     <div class="bh-btn bh-sm" data-btn="9">Op</div>
     <div class="bh-btn bh-sm" data-btn="16">PS</div>
     <div class="bh-btn bh-sm" data-btn="17">TP</div>
+  </div>
+  <div class="bh-section bh-paddles">
+    <div class="bh-btn bh-sm" data-btn="18">L4</div>
+    <div class="bh-btn bh-sm" data-btn="19">L5</div>
+    <div class="bh-btn bh-sm" data-btn="20">R4</div>
+    <div class="bh-btn bh-sm" data-btn="21">R5</div>
   </div>
 </div>
 
