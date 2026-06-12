@@ -302,6 +302,9 @@ export const PROFILES = {
     hasTouchpad: false,      // two trackpads (touchpad + misc2); touch-point anim TBD
     // gyro rotates the whole model (bodyGroup); bodyMeshes is informational.
     bodyMeshes: ['top_shell', 'bottom_shell', 'misc1', 'left_gripsense', 'right_gripsense'],
+    // Capacitive grip sensors (digital): glow these meshes while the grip is
+    // held (driver parsed.grips). Highlighted via overlay.setGripState.
+    gripMeshes: { left: 'left_gripsense', right: 'right_gripsense' },
     // Single-color controller — every part shares the body theme color.
     // Back paddles (paddle1-4) and trackpads are static (no standard
     // gamepad index) but still themed.

@@ -1077,6 +1077,27 @@ export class ControllerOverlay {
     this._setColorGroup('accentColorMeshes', hexColor);
   }
 
+  /**
+   * Highlight the capacitive grip sensors. Glows the profile's grip meshes
+   * while a grip is held (digital on/off from the driver). Emissive only — the
+   * body color (albedo) is untouched. Called per HID report; intensity lerps.
+   * @param {{left:boolean, right:boolean}} grips
+   */
+  setGripState(grips) {
+    const map = PROFILES[this.controllerType]?.gripMeshes;
+    if (!map || !grips) return;
+    for (const side of ['left', 'right']) {
+      const obj = this.meshes[map[side]];
+      if (!obj) continue;
+      const mesh = obj.isMesh ? obj : obj.children?.find((c) => c.isMesh);
+      const mat = mesh?.material;
+      if (!mat || !('emissive' in mat)) continue;
+      if (!mat._gripEmissiveSet) { mat._gripEmissiveSet = true; mat.emissive.set(0x33ddaa); }
+      const target = grips[side] ? 0.9 : 0;
+      mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, target, LERP_SPEED);
+    }
+  }
+
   _setColorGroup(groupKey, hexColor) {
     const profile = PROFILES[this.controllerType];
     if (!profile || !profile[groupKey]) return;

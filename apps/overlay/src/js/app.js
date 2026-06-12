@@ -1443,6 +1443,10 @@ function handleInputReport(event) {
     overlay.updateTouchpad(parsed.touchpad, parsed.touchpadButton);
   }
 
+  if (parsed.grips && overlay.setGripState) {
+    overlay.setGripState(parsed.grips);
+  }
+
   if (!gyroActive || !parsed.gyro) return;
 
   const now = performance.now();
