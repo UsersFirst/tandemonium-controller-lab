@@ -13,6 +13,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // without meshopt GLBs don't pay the import cost.
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { PROFILES } from './controller-profiles.js';
+import { normalizeTrackpad } from './trackpad-math.js';
 
 const DEADZONE = 0.08;
 const LERP_SPEED = 0.25; // Smoothing factor for animations
@@ -69,6 +70,7 @@ export class ControllerOverlay {
     // triggers (pre-bottom). Defaults to yellow; override via setPressColor.
     this._pressColor = 0xffcc00;
     this._touchpadBounds = null; // { minX, maxX, minZ, maxZ, topY, mesh }
+    this._trackpads = null; // multi-pad controllers (Steam Controller): per-pad indicator config
     this._touchpadClickState = false;
     this._glowTexture = null;
     this._touchRaycaster = new THREE.Raycaster();
@@ -444,19 +446,31 @@ export class ControllerOverlay {
       if (m) m.visible = false;
     }
 
-    // Set up touchpad visualization if touchpad mesh exists
-    const tpMesh = meshByName['touchpad'];
-    if (tpMesh && profile.hasTouchpad) {
-      tpMesh.geometry.computeBoundingBox();
-      this._touchpadBounds = {
-        minX: tpMesh.geometry.boundingBox.min.x,
-        maxX: tpMesh.geometry.boundingBox.max.x,
-        minZ: tpMesh.geometry.boundingBox.min.z,
-        maxZ: tpMesh.geometry.boundingBox.max.z,
-        topY: tpMesh.geometry.boundingBox.max.y + 0.02,
-        mesh: tpMesh,
-      };
-      this._setupTouchIndicators();
+    // Set up touchpad visualization.
+    //  - Multi-pad controllers (Steam Controller: two trackpads) use the
+    //    per-pad indicator path: each driver touch-point moves a pre-modeled
+    //    indicator dot across its pad surface.
+    //  - Single-pad controllers (DualSense) use the two-finger path below.
+    // Reset prior-model touchpad state so a controller switch can't leave the
+    // multi-pad path active with stale (disposed) mesh refs.
+    this._trackpads = null;
+    this._touchpadBounds = null;
+    if (profile.trackpads && profile.hasTouchpad) {
+      this._setupTrackpads(profile, meshByName);
+    } else {
+      const tpMesh = meshByName['touchpad'];
+      if (tpMesh && profile.hasTouchpad) {
+        tpMesh.geometry.computeBoundingBox();
+        this._touchpadBounds = {
+          minX: tpMesh.geometry.boundingBox.min.x,
+          maxX: tpMesh.geometry.boundingBox.max.x,
+          minZ: tpMesh.geometry.boundingBox.min.z,
+          maxZ: tpMesh.geometry.boundingBox.max.z,
+          topY: tpMesh.geometry.boundingBox.max.y + 0.02,
+          mesh: tpMesh,
+        };
+        this._setupTouchIndicators();
+      }
     }
 
     // Name aliasing: Three.js's GLTFLoader replaces spaces in glTF
@@ -901,13 +915,100 @@ export class ControllerOverlay {
     return new THREE.Vector3(x, b.topY, z);
   }
 
+  // ── Multi-trackpad (Steam Controller) ──
+  // Each profile.trackpads entry maps a driver touch-point index to a pad mesh
+  // and a pre-modeled indicator dot (touch_point1/2) that sits at the pad's
+  // center; on touch we move the dot to the finger position on that pad.
+  _setupTrackpads(profile, meshByName) {
+    this._trackpads = [];
+    profile.trackpads.forEach((cfg, idx) => {
+      const padMesh = meshByName[cfg.pad];
+      if (!padMesh) {
+        console.warn(`Trackpad pad mesh '${cfg.pad}' not found in model`);
+        return;
+      }
+      padMesh.geometry.computeBoundingBox();
+      const bb = padMesh.geometry.boundingBox;
+      const dot = meshByName[cfg.indicator] || null;
+      let restPos = null;
+      let dotLiftY = 0;
+      if (dot) {
+        restPos = dot.position.clone();
+        dot.visible = false; // shown only while a finger is on the pad
+        // dot.position is an OFFSET from the dot's baked geometry (already at
+        // the pad surface), so the lift must be a small DELTA: raise the dot
+        // from its modeled height just past the raised pad edge, plus a small
+        // margin. (Using an absolute Y double-counts the baked height and
+        // floats the dot way off the pad.) Margin scales with pad thickness so
+        // it survives the body-resize on the float branch; tune trackpadDotLift.
+        dot.geometry?.computeBoundingBox?.();
+        const dotCenterY = dot.geometry
+          ? (dot.geometry.boundingBox.min.y + dot.geometry.boundingBox.max.y) / 2
+          : bb.max.y;
+        const margin = (bb.max.y - bb.min.y) * (profile.trackpadDotLift ?? 0.05);
+        dotLiftY = Math.max(0, bb.max.y - dotCenterY) + margin;
+      } else {
+        console.warn(`Trackpad indicator '${cfg.indicator}' not found in model`);
+      }
+      this._trackpads.push({
+        point: cfg.point,
+        width: bb.max.x - bb.min.x,
+        depth: bb.max.z - bb.min.z,
+        dotLiftY,
+        dot,
+        restPos,
+        color: this._touchColors[idx % this._touchColors.length],
+      });
+    });
+  }
+
+  // TODO(trackpad contour): the dot rides a single flat plane (pad top + lift),
+  // so on a curved/dished pad it doesn't hug the surface precisely. The
+  // single-pad DualSense path solves this in `_touchToLocal` by raycasting
+  // straight down onto the pad mesh to find the exact surface point + normal;
+  // adopt that here per-pad when we revisit. Good enough for now.
+  _updateTrackpads(touchPoints) {
+    const profile = PROFILES[this.controllerType];
+    const range = profile.trackpadRange || 32768;
+    const opts = {
+      invertX: !!profile.trackpadInvertX,
+      invertY: !!profile.trackpadInvertY,
+      swapXY: !!profile.trackpadSwapXY,
+    };
+    for (const pad of this._trackpads) {
+      if (!pad.dot || !pad.restPos) continue;
+      const t = touchPoints[pad.point];
+      if (t && t.active) {
+        const { fx, fy } = normalizeTrackpad(t.x, t.y, range, opts);
+        // Offset the dot from the pad center (its rest position) by the
+        // fractional touch position across the pad's local XZ extent.
+        pad.dot.position.set(
+          pad.restPos.x + (fx - 0.5) * pad.width,
+          pad.restPos.y + pad.dotLiftY, // small lift above the modeled surface
+          pad.restPos.z + (fy - 0.5) * pad.depth,
+        );
+        pad.dot.visible = true;
+        const m = pad.dot.material;
+        if (m && 'emissive' in m) {
+          m.emissive.set(pad.color);
+          m.emissiveIntensity = 1.2;
+        }
+      } else {
+        pad.dot.visible = false;
+      }
+    }
+  }
+
   /**
    * Update touchpad visualization from WebHID touch data.
    * @param {Array} touchPoints — [{active, id, x, y}, {active, id, x, y}]
    * @param {boolean} touchpadButton — whether touchpad is clicked
    */
   updateTouchpad(touchPoints, touchpadButton) {
-    if (!this._touchpadBounds || !touchPoints) return;
+    if (!touchPoints) return;
+    // Multi-pad controllers (Steam Controller) take the per-pad path.
+    if (this._trackpads) { this._updateTrackpads(touchPoints); return; }
+    if (!this._touchpadBounds) return;
     const profile = PROFILES[this.controllerType];
     if (!profile?.hasTouchpad) return;
 

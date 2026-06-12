@@ -299,7 +299,25 @@ export const PROFILES = {
     // Axis remap is applied inside the driver (Y↔Z swap on gyro+accel —
     // see steam-controller-driver.js parseReport).
     gyroTransform: (gx, gy, gz) => [gx, gy, gz],
-    hasTouchpad: false,      // two trackpads (touchpad + misc2); touch-point anim TBD
+    hasTouchpad: true,
+    // Two trackpads. Pad meshes: `touchpad` (mesh X-center < 0) = LEFT,
+    // `misc2` (X-center > 0) = RIGHT — verified against left/right_shoulder
+    // X-centers in the GLB. `touch_point1`/`touch_point2` are pre-modeled
+    // indicator dots that sit at each pad's center; the visualizer moves them
+    // to the finger position. `point` = driver touchPoints index (0 = left
+    // pad @ STATE bytes 17/19, 1 = right pad @ 23/25).
+    trackpads: [
+      { pad: 'touchpad', indicator: 'touch_point1', point: 0 }, // LEFT
+      { pad: 'misc2',    indicator: 'touch_point2', point: 1 }, // RIGHT
+    ],
+    // Raw samples are int16 LE centered at 0 (±32768). If the on-screen dot
+    // moves mirrored or perpendicular to your finger, flip the matching flag:
+    //   invertX → dot is left/right-mirrored;  invertY → up/down-mirrored;
+    //   swapXY  → dot moves perpendicular to the finger.
+    trackpadRange: 32768,
+    trackpadInvertX: false,
+    trackpadInvertY: true,
+    trackpadSwapXY: false,
     // gyro rotates the whole model (bodyGroup); bodyMeshes is informational.
     bodyMeshes: ['top_shell', 'bottom_shell', 'misc1', 'left_gripsense', 'right_gripsense'],
     // Single-color controller — every part shares the body theme color.
