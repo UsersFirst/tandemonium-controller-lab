@@ -74,10 +74,10 @@ export const PROFILES = {
     floatParts: ['trigger_l2', 'trigger_r2', 'bumper_l1', 'bumper_r1'],
     floatFactor: 0.6,
     floatTuning: {
-      bumper_l1:  { back: 0.20, up: 0.20, tiltUp: 40 },
-      bumper_r1:  { back: 0.20, up: 0.20, tiltUp: 40 },
-      trigger_l2: { back: 0.38, up: 0.30, tiltUp: 40 },
-      trigger_r2: { back: 0.38, up: 0.30, tiltUp: 40 },
+      bumper_l1:  { back: 0.12, up: 0.16, tiltUp: 65 },
+      bumper_r1:  { back: 0.12, up: 0.16, tiltUp: 65 },
+      trigger_l2: { back: 0.34, up: 0.34, tiltUp: 65 },
+      trigger_r2: { back: 0.34, up: 0.34, tiltUp: 65 },
     },
 
     // Color groups for user-customizable body/accent colors
@@ -365,10 +365,10 @@ export const PROFILES = {
     //   up     — flip up toward the top (+Y)
     //   tiltUp — rotate the part about its own center toward the top (degrees)
     floatTuning: {
-      left_shoulder:  { back: 0.20, up: 0.20, tiltUp: 40 },
-      right_shoulder: { back: 0.20, up: 0.20, tiltUp: 40 },
-      left_trigger:   { back: 0.38, up: 0.30, tiltUp: 40 },
-      right_trigger:  { back: 0.38, up: 0.30, tiltUp: 40 },
+      left_shoulder:  { back: 0.12, up: 0.16, tiltUp: 65 },
+      right_shoulder: { back: 0.12, up: 0.16, tiltUp: 65 },
+      left_trigger:   { back: 0.34, up: 0.34, tiltUp: 65 },
+      right_trigger:  { back: 0.34, up: 0.34, tiltUp: 65 },
     },
     // Capacitive grip sensors (digital): glow these meshes while the grip is
     // held (driver parsed.grips). Highlighted via overlay.setGripState.
