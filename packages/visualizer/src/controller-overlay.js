@@ -940,10 +940,11 @@ export class ControllerOverlay {
         point: cfg.point,
         width: bb.max.x - bb.min.x,
         depth: bb.max.z - bb.min.z,
-        // Float the dot just above the pad's top surface so it never dips
-        // under the raised pad edge near the borders. Lift scales with pad
-        // thickness so it's model-independent; tune via trackpadDotLift.
-        topY: bb.max.y + (bb.max.y - bb.min.y) * (profile.trackpadDotLift ?? 0.3),
+        // Sit the dot just above the pad's top surface so it clears the raised
+        // edge without floating off. Lift is a fraction of pad thickness so it
+        // scales with the model (incl. the body-resize on the float branch);
+        // tune via trackpadDotLift.
+        topY: bb.max.y + (bb.max.y - bb.min.y) * (profile.trackpadDotLift ?? 0.1),
         dot,
         restPos,
         color: this._touchColors[idx % this._touchColors.length],
