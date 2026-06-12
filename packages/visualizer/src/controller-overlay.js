@@ -665,8 +665,20 @@ export class ControllerOverlay {
       const s = THREE.MathUtils.lerp(this.bodyGroup.scale.x, target, LERP_SPEED);
       this.bodyGroup.scale.setScalar(s);
     }
+    // Keep popped parts facing the camera: counter the body's gyro rotation so
+    // each part holds its rest (camera-facing) orientation instead of tilting
+    // away with the controller. Wrapper parent (scene) has no rotation, so the
+    // wrapper's inverse-body rotation cancels gyro for the part inside it. Eases
+    // back to identity (rotate with the body) when seated.
+    const counter = this._floatCounterQuat || (this._floatCounterQuat = new THREE.Quaternion());
+    if (this._floatActive && this.bodyGroup) {
+      counter.copy(this.bodyGroup.quaternion).invert();
+    } else {
+      counter.identity();
+    }
     for (const w of this._floatWrappers) {
       w.group.position.lerp(this._floatActive ? w.offset : FLOAT_ZERO, LERP_SPEED);
+      w.group.quaternion.slerp(counter, LERP_SPEED);
     }
   }
 
