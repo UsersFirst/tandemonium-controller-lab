@@ -488,6 +488,24 @@ async function init() {
   const _gripB = localStorage.getItem('overlay:gripBrightness');
   if (_gripB !== null && overlay.setGripBrightness) overlay.setGripBrightness(parseInt(_gripB, 10) / 100);
 
+  // ── Layout editor (#51) ──
+  // Provider auto-applies each controller's saved layout whenever its model
+  // (re)loads; change handler persists edits; select handler updates the UI.
+  if (overlay.setLayoutProvider) {
+    overlay.setLayoutProvider((type) => {
+      try { return JSON.parse(localStorage.getItem('overlay:partLayout:' + type) || 'null'); }
+      catch { return null; }
+    });
+    overlay.setLayoutChangeHandler((layout) => {
+      localStorage.setItem('overlay:partLayout:' + currentControllerType, JSON.stringify(layout));
+    });
+    overlay.setSelectHandler(onEditSelectionChange);
+    overlay.setLayoutMode(localStorage.getItem('overlay:layoutMode') || 'relative');
+    // Re-apply now in case the model loaded before the provider was registered.
+    const _savedLayout = overlay._layoutProvider?.(currentControllerType);
+    if (_savedLayout) overlay.applyLayout(_savedLayout);
+  }
+
   if (hasGamepad) {
     currentControllerType = initialType;
     modelReady = true;
@@ -1743,6 +1761,47 @@ if (floatPartsCheck) {
   });
 }
 
+// ── Layout editor (#51) controls ──
+// While editing, the window-drag handler must stand down so click-drag moves
+// the part, not the OS window (see wireWindowDrag below).
+let layoutEditing = false;
+const editLayoutToggle = document.getElementById('edit-layout-toggle');
+const layoutModeSelect = document.getElementById('layout-mode');
+const resetLayoutBtn = document.getElementById('reset-layout');
+const editLayoutStatusRow = document.getElementById('edit-layout-status-row');
+const editLayoutHelp = document.getElementById('edit-layout-help');
+const editLayoutSelected = document.getElementById('edit-layout-selected');
+
+// Reflect the overlay's current selection in the settings UI.
+function onEditSelectionChange(partName) {
+  if (editLayoutSelected) editLayoutSelected.textContent = partName || 'none';
+}
+
+if (editLayoutToggle) {
+  editLayoutToggle.addEventListener('change', (e) => {
+    const on = e.target.checked;
+    layoutEditing = on; // suppress window-drag while editing
+    if (overlay?.setEditMode) overlay.setEditMode(on);
+    if (editLayoutStatusRow) editLayoutStatusRow.style.display = on ? '' : 'none';
+    if (editLayoutHelp) editLayoutHelp.style.display = on ? '' : 'none';
+    if (!on) onEditSelectionChange(null);
+  });
+}
+
+if (layoutModeSelect) {
+  layoutModeSelect.value = localStorage.getItem('overlay:layoutMode') || 'relative';
+  layoutModeSelect.addEventListener('change', (e) => {
+    localStorage.setItem('overlay:layoutMode', e.target.value);
+    if (overlay?.setLayoutMode) overlay.setLayoutMode(e.target.value);
+  });
+}
+
+if (resetLayoutBtn) {
+  resetLayoutBtn.addEventListener('click', () => {
+    if (overlay?.resetLayout) overlay.resetLayout();
+  });
+}
+
 driftModeSelect.addEventListener('change', (e) => {
   gravityMode = e.target.value;
   gyroFusion.gravityMode = GRAVITY_MODES[gravityMode] || 0;
@@ -1951,6 +2010,9 @@ if (window.electronAPI) {
   window.addEventListener('pointerdown', (e) => {
     // Left button only — right-click still opens settings (contextmenu).
     if (e.button !== 0 || clickThrough) return;
+    // While editing the pop-out layout, click-drag positions parts — never move
+    // the window (otherwise the OS window-move eats the drag).
+    if (layoutEditing) return;
     if (e.target instanceof Element && e.target.closest(INTERACTIVE_SELECTOR)) return;
 
     dragging = true;
