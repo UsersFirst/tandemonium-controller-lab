@@ -943,6 +943,30 @@
   </div>
 
   <hr class="settings-divider">
+  <h3>Edit Layout</h3>
+  <div class="setting-row">
+    <label title="Click-drag the triggers, bumpers and back paddles to position them; rotate the selected one with the keyboard.">Edit pop-out layout</label>
+    <input type="checkbox" id="edit-layout-toggle">
+  </div>
+  <div class="setting-row">
+    <label title="Relative: parts move/rotate with the controller. Absolute: parts stay fixed in space and don't move with the controller.">Positioning</label>
+    <select id="layout-mode">
+      <option value="relative" selected>Relative to body</option>
+      <option value="absolute">Absolute (fixed)</option>
+    </select>
+  </div>
+  <div class="setting-row" id="edit-layout-status-row" style="display:none;">
+    <label>Selected</label>
+    <span class="combo-display" id="edit-layout-selected">none</span>
+  </div>
+  <div id="edit-layout-help" class="build-stamp" style="display:none; text-align:left; margin-top:2px; white-space:normal;">
+    Click a part to select. Drag to move. Rotate with arrows (pitch/yaw), Q/E (roll); Shift = fine, R = reset rotation, Esc = deselect.
+  </div>
+  <div class="setting-row">
+    <button class="settings-action-btn" id="reset-layout">RESET LAYOUT</button>
+  </div>
+
+  <hr class="settings-divider">
   <h3>Diagnostics</h3>
   <div class="setting-row">
     <button class="settings-action-btn capture" id="btn-capture-report">CAPTURE HID REPORT</button>

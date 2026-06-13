@@ -92,6 +92,21 @@ export class ControllerOverlay {
     // Grip highlight color — shares the global highlight color (#45's
     // overlay:highlightColor / --hl-color). Default matches that picker.
     this._gripColor = 0x3388ff;
+
+    // ── Layout editor (#51): click-drag + keyboard-rotate the floatable parts ──
+    this._editMode = false;        // editing the pop-out layout right now
+    this._layoutMode = 'relative'; // 'relative' (rides with body) | 'absolute' (world-fixed)
+    this._selectedWrapper = null;  // the wrapper currently being edited
+    this._selectionBox = null;     // THREE.BoxHelper around the selection
+    this._editRaycaster = new THREE.Raycaster();
+    this._dragState = null;        // { plane, startLocal, startOffset } during a drag
+    this._onLayoutChange = null;   // callback(layoutJSON) — app persists it
+    this._onSelectChange = null;   // callback(partName|null) — app shows selection
+    // Bound DOM handlers (kept so we can add/remove them on edit toggle).
+    this._boundPointerDown = (e) => this._editPointerDown(e);
+    this._boundPointerMove = (e) => this._editPointerMove(e);
+    this._boundPointerUp = (e) => this._editPointerUp(e);
+    this._boundKeyDown = (e) => this._editKeyDown(e);
   }
 
   async init() {
@@ -639,6 +654,9 @@ export class ControllerOverlay {
   // state is a no-op, and the part's own press/rotation animation runs inside
   // the wrapper untouched.
   _setupFloatParts(profile) {
+    // Re-setup (e.g. controller switch) invalidates any active selection.
+    this._selectedWrapper = null;
+    if (this._selectionBox) { this.scene?.remove(this._selectionBox); this._selectionBox = null; }
     this._floatWrappers = [];
     const names = profile.floatParts;
     if (!names || !names.length) return;
@@ -707,7 +725,15 @@ export class ControllerOverlay {
       // keeps the part in place as it turns — otherwise a big face-camera turn
       // swings it in a wide arc (the left paddles ending up under the body).
       const pivot = obj.parent.worldToLocal(partCenter.clone());
-      const wrapper = { group: this._wrapForFloat(obj), pivot, offset, t: 0 };
+      const wrapper = {
+        group: this._wrapForFloat(obj), pivot, offset, t: 0,
+        // Editor metadata (#51):
+        partName: name,
+        obj,                            // raycast target / highlight subject
+        seatedWorld: partCenter.clone(),// world center at the identity pose (for absolute pin)
+        modelScale: scale,              // uniform model scale (parent-local → world)
+        layout: null,                   // user override { offset:Vector3, euler:{x,y,z} } or null
+      };
       // Tuned parts (triggers/bumpers) are deliberately placed relative to the
       // body, so they should rotate WITH the body (no camera-facing counter-
       // rotation) — otherwise they appear to spin independently as the gyro
@@ -731,6 +757,14 @@ export class ControllerOverlay {
         }
       }
       this._floatWrappers.push(wrapper);
+    }
+
+    // Re-apply any saved user layout for this controller (the editor's provider
+    // is registered by the app); runs on every (re)load so switching controllers
+    // restores each one's saved positions.
+    if (this._layoutProvider) {
+      const saved = this._layoutProvider(this.controllerType);
+      if (saved) this.applyLayout(saved);
     }
   }
 
@@ -765,58 +799,288 @@ export class ControllerOverlay {
 
   _updateFloat() {
     if (!this._floatWrappers.length) return;
+    // Parts are "popped" while the float is on OR while editing the layout
+    // (so the user can grab them in their popped positions).
+    const popped = this._floatActive || this._editMode;
     // Shrink the whole model while popped so the spread-out parts fit the
-    // window; ease back to full size when seated. (bodyGroup also carries the
-    // gyro rotation — scale and rotation compose fine.)
+    // window — but NOT while editing, where a stable 1:1 scale keeps the
+    // click-drag math WYSIWYG. Eases back to full size when seated.
     if (this.bodyGroup) {
-      const target = this._floatActive ? this._floatShrink : 1;
+      const target = this._editMode ? 1 : (popped ? this._floatShrink : 1);
       const s = THREE.MathUtils.lerp(this.bodyGroup.scale.x, target, LERP_SPEED);
       this.bodyGroup.scale.setScalar(s);
     }
-    // Keep popped parts facing the camera: counter the body's gyro rotation so
-    // each part holds its rest (camera-facing) orientation instead of tilting
-    // away with the controller. Wrapper parent (scene) has no rotation, so the
-    // wrapper's inverse-body rotation cancels gyro for the part inside it. Eases
-    // back to identity (rotate with the body) when seated.
+    // Counter-rotation: cancel the body's gyro so non-tuned popped parts hold a
+    // camera-facing orientation. Identity when seated.
     const counter = this._floatCounterQuat || (this._floatCounterQuat = new THREE.Quaternion());
-    if (this._floatActive && this.bodyGroup) {
-      counter.copy(this.bodyGroup.quaternion).invert();
-    } else {
-      counter.identity();
-    }
-    // Scratch objects for the per-part "face the camera" rotation.
+    if (popped && this.bodyGroup) counter.copy(this.bodyGroup.quaternion).invert();
+    else counter.identity();
+
+    // Scratch objects (reused each frame to avoid allocations).
     const camPos = this._floatCamPos || (this._floatCamPos = new THREE.Vector3());
     const camDir = this._floatCamDir || (this._floatCamDir = new THREE.Vector3());
     const faceRot = this._floatFaceRot || (this._floatFaceRot = new THREE.Quaternion());
     const tgt = this._floatTargetQuat || (this._floatTargetQuat = new THREE.Quaternion());
     const rp = this._floatRP || (this._floatRP = new THREE.Vector3());
     const pos = this._floatPos || (this._floatPos = new THREE.Vector3());
+    const idn = this._floatIdentityQuat || (this._floatIdentityQuat = new THREE.Quaternion());
+    const eul = this._floatEuler || (this._floatEuler = new THREE.Euler());
+    const layoutQ = this._floatLayoutQuat || (this._floatLayoutQuat = new THREE.Quaternion());
+    const parentQ = this._floatParentQuat || (this._floatParentQuat = new THREE.Quaternion());
+    const wpt = this._floatWPos || (this._floatWPos = new THREE.Vector3());
     if (this.camera) this.camera.getWorldPosition(camPos);
 
-    const idn = this._floatIdentityQuat || (this._floatIdentityQuat = new THREE.Quaternion());
+    const absolute = this._layoutMode === 'absolute';
+
     for (const w of this._floatWrappers) {
-      let target = counter;
-      if (w.stayWithBody) {
-        // Inherit the body's gyro rotation (so the part rides with the
-        // controller), optionally tilted up toward the top while popped. Eases
-        // back to identity (natural orientation) when seated.
-        target = (this._floatActive && w.tiltQuat) ? w.tiltQuat : idn;
-      } else if (w.faceCamera && this._floatActive && this.camera) {
-        // Rotate the part's rest surface-normal to point at the camera so its
-        // flat face shows (composed onto the counter-rotation).
-        camDir.copy(camPos).sub(w.restCenter).normalize();
-        faceRot.setFromUnitVectors(w.restNormal, camDir);
-        target = tgt.copy(counter).multiply(faceRot);
+      // A saved/edited layout overrides the profile's floatTuning offset + tilt.
+      const effOffset = w.layout ? w.layout.offset : w.offset;
+      let layoutRot = null;
+      if (w.layout && w.layout.euler) {
+        eul.set(
+          THREE.MathUtils.degToRad(w.layout.euler.x || 0),
+          THREE.MathUtils.degToRad(w.layout.euler.y || 0),
+          THREE.MathUtils.degToRad(w.layout.euler.z || 0)
+        );
+        layoutRot = layoutQ.setFromEuler(eul);
       }
-      w.group.quaternion.slerp(target, LERP_SPEED);
-      // Ease the pop amount, then place the wrapper so its rotation pivots about
-      // the part's own center: pos = P − R·P + offset·t. (Seated: R = identity,
-      // t = 0 → pos = 0, byte-identical to no wrapper.)
-      w.t = THREE.MathUtils.lerp(w.t, this._floatActive ? 1 : 0, LERP_SPEED);
-      rp.copy(w.pivot).applyQuaternion(w.group.quaternion);
-      pos.copy(w.pivot).sub(rp).addScaledVector(w.offset, w.t);
-      w.group.position.copy(pos);
+
+      if (absolute) {
+        // Absolute: pin the part to a fixed WORLD transform, independent of the
+        // body's gyro rotation/shrink, by countering the parent's live world
+        // transform. Eases to its seated spot when not popped.
+        const parent = w.group.parent;
+        let targetQuat = idn;
+        let targetPos = rp.set(0, 0, 0);
+        if (popped && parent) {
+          parent.updateWorldMatrix(true, false);
+          parent.getWorldQuaternion(parentQ);
+          const Qworld = layoutRot || w.tiltQuat || idn;       // fixed world orientation
+          wpt.copy(effOffset).multiplyScalar(w.modelScale).add(w.seatedWorld); // fixed world center
+          const localQ = tgt.copy(parentQ).invert().multiply(Qworld);
+          parent.worldToLocal(wpt);                            // → parent-local target center
+          targetPos = pos.copy(wpt).sub(rp.copy(w.pivot).applyQuaternion(localQ));
+          targetQuat = localQ;
+        }
+        w.group.quaternion.slerp(targetQuat, LERP_SPEED);
+        w.group.position.lerp(targetPos, LERP_SPEED);
+      } else {
+        // Relative: rides with the body (wrapper under bodyGroup).
+        let target = counter;
+        if (layoutRot) {
+          target = layoutRot;                                  // user-set orientation, rides with body
+        } else if (w.stayWithBody) {
+          target = (popped && w.tiltQuat) ? w.tiltQuat : idn;
+        } else if (w.faceCamera && popped && this.camera) {
+          camDir.copy(camPos).sub(w.restCenter).normalize();
+          faceRot.setFromUnitVectors(w.restNormal, camDir);
+          target = tgt.copy(counter).multiply(faceRot);
+        }
+        w.group.quaternion.slerp(target, LERP_SPEED);
+        // Ease the pop amount, then place the wrapper so its rotation pivots
+        // about the part's own center: pos = P − R·P + offset·t.
+        w.t = THREE.MathUtils.lerp(w.t, popped ? 1 : 0, LERP_SPEED);
+        rp.copy(w.pivot).applyQuaternion(w.group.quaternion);
+        pos.copy(w.pivot).sub(rp).addScaledVector(effOffset, w.t);
+        w.group.position.copy(pos);
+      }
     }
+
+    // Keep the selection outline glued to the selected part.
+    if (this._selectionBox && this._selectedWrapper) this._selectionBox.update();
+  }
+
+  // ── Layout editor (#51) ────────────────────────────────────────────────
+  // Public API used by the app's "Edit Layout" settings UI.
+
+  /** Enable/disable layout editing (click-drag + keyboard-rotate the parts). */
+  setEditMode(on) {
+    on = !!on;
+    if (on === this._editMode) return;
+    this._editMode = on;
+    const el = this.renderer?.domElement;
+    if (on) {
+      this._floatActiveBeforeEdit = this._floatActive;
+      this._floatActive = true; // pop parts out so they're grabbable
+      el?.addEventListener('pointerdown', this._boundPointerDown);
+      window.addEventListener('pointermove', this._boundPointerMove);
+      window.addEventListener('pointerup', this._boundPointerUp);
+      window.addEventListener('keydown', this._boundKeyDown);
+      if (el) el.style.cursor = 'pointer';
+    } else {
+      el?.removeEventListener('pointerdown', this._boundPointerDown);
+      window.removeEventListener('pointermove', this._boundPointerMove);
+      window.removeEventListener('pointerup', this._boundPointerUp);
+      window.removeEventListener('keydown', this._boundKeyDown);
+      this._dragState = null;
+      this._selectWrapper(null);
+      if (this.controls) this.controls.enabled = true;
+      this._floatActive = this._floatActiveBeforeEdit ?? this._floatActive;
+      if (el) el.style.cursor = '';
+    }
+  }
+
+  /** Register a provider(controllerType) → saved layout JSON, auto-applied on (re)load. */
+  setLayoutProvider(fn) { this._layoutProvider = fn; }
+
+  /** 'relative' (parts ride with the body) | 'absolute' (world-fixed). */
+  setLayoutMode(mode) {
+    this._layoutMode = mode === 'absolute' ? 'absolute' : 'relative';
+  }
+  getLayoutMode() { return this._layoutMode; }
+
+  /** Register a callback(layoutJSON) fired whenever the layout changes. */
+  setLayoutChangeHandler(fn) { this._onLayoutChange = fn; }
+  /** Register a callback(partName|null) fired when the selection changes. */
+  setSelectHandler(fn) { this._onSelectChange = fn; }
+
+  /** Serialize the per-part layout overrides to plain JSON (for localStorage). */
+  getLayout() {
+    const out = {};
+    for (const w of this._floatWrappers) {
+      if (!w.layout) continue;
+      const o = w.layout.offset, e = w.layout.euler || {};
+      out[w.partName] = {
+        offset: [o.x, o.y, o.z],
+        euler: [e.x || 0, e.y || 0, e.z || 0],
+      };
+    }
+    return out;
+  }
+
+  /** Apply a saved layout (from getLayout()) to the current parts. */
+  applyLayout(layout) {
+    if (!layout || typeof layout !== 'object') return;
+    for (const w of this._floatWrappers) {
+      const e = layout[w.partName];
+      if (e && Array.isArray(e.offset)) {
+        w.layout = {
+          offset: new THREE.Vector3(e.offset[0] || 0, e.offset[1] || 0, e.offset[2] || 0),
+          euler: { x: e.euler?.[0] || 0, y: e.euler?.[1] || 0, z: e.euler?.[2] || 0 },
+        };
+      }
+    }
+  }
+
+  /** Clear all per-part overrides back to the profile defaults. */
+  resetLayout() {
+    for (const w of this._floatWrappers) w.layout = null;
+    this._emitLayout();
+  }
+  /** Clear just the selected part's override. */
+  resetSelected() {
+    if (this._selectedWrapper) { this._selectedWrapper.layout = null; this._emitLayout(); }
+  }
+
+  _emitLayout() { if (this._onLayoutChange) this._onLayoutChange(this.getLayout()); }
+
+  // Raycast canvas coords → the floatable wrapper under the cursor (or null).
+  _pickWrapper(clientX, clientY) {
+    const el = this.renderer?.domElement;
+    if (!el || !this.camera) return null;
+    const rect = el.getBoundingClientRect();
+    const ndc = this._editNDC || (this._editNDC = new THREE.Vector2());
+    ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    this._editRaycaster.setFromCamera(ndc, this.camera);
+    const targets = [];
+    for (const w of this._floatWrappers) if (w.obj) targets.push(w.obj);
+    const hits = this._editRaycaster.intersectObjects(targets, true);
+    if (!hits.length) return null;
+    let o = hits[0].object;
+    while (o) {
+      const w = this._floatWrappers.find((ww) => ww.group === o);
+      if (w) return w;
+      o = o.parent;
+    }
+    return null;
+  }
+
+  _selectWrapper(w) {
+    if (w === this._selectedWrapper) return;
+    this._selectedWrapper = w || null;
+    if (this._selectionBox) {
+      this.scene?.remove(this._selectionBox);
+      this._selectionBox.geometry?.dispose?.();
+      this._selectionBox = null;
+    }
+    if (w && w.obj && this.scene) {
+      this._selectionBox = new THREE.BoxHelper(w.obj, 0x33ddff);
+      this._selectionBox.material.depthTest = false;
+      this._selectionBox.renderOrder = 999;
+      this.scene.add(this._selectionBox);
+    }
+    if (this._onSelectChange) this._onSelectChange(w ? w.partName : null);
+  }
+
+  // Project canvas coords onto a world-space plane; returns a Vector3 or null.
+  _rayToPlane(clientX, clientY, plane) {
+    const el = this.renderer?.domElement;
+    if (!el || !this.camera) return null;
+    const rect = el.getBoundingClientRect();
+    const ndc = this._editNDC || (this._editNDC = new THREE.Vector2());
+    ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    this._editRaycaster.setFromCamera(ndc, this.camera);
+    const out = new THREE.Vector3();
+    return this._editRaycaster.ray.intersectPlane(plane, out) ? out : null;
+  }
+
+  _editPointerDown(e) {
+    if (!this._editMode || e.button !== 0) return;
+    const w = this._pickWrapper(e.clientX, e.clientY);
+    this._selectWrapper(w);
+    if (!w) return;
+    e.preventDefault();
+    if (this.controls) this.controls.enabled = false; // don't zoom mid-drag
+    // Drag on a plane through the part center, facing the camera.
+    const center = w.obj.getWorldPosition(new THREE.Vector3());
+    const normal = this.camera.getWorldDirection(new THREE.Vector3()).negate();
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center);
+    const hit = this._rayToPlane(e.clientX, e.clientY, plane);
+    if (!hit) { if (this.controls) this.controls.enabled = true; return; }
+    const parent = w.group.parent;
+    const startLocal = parent ? parent.worldToLocal(hit.clone()) : hit.clone();
+    if (!w.layout) w.layout = { offset: w.offset.clone(), euler: { x: 0, y: 0, z: 0 } };
+    this._dragState = { wrapper: w, plane, startLocal, startOffset: w.layout.offset.clone() };
+  }
+
+  _editPointerMove(e) {
+    const ds = this._dragState;
+    if (!ds) return;
+    const hit = this._rayToPlane(e.clientX, e.clientY, ds.plane);
+    if (!hit) return;
+    const parent = ds.wrapper.group.parent;
+    const curLocal = parent ? parent.worldToLocal(hit) : hit;
+    ds.wrapper.layout.offset.copy(ds.startOffset).add(curLocal).sub(ds.startLocal);
+  }
+
+  _editPointerUp() {
+    if (!this._dragState) return;
+    this._dragState = null;
+    if (this.controls) this.controls.enabled = true;
+    this._emitLayout();
+  }
+
+  _editKeyDown(e) {
+    if (!this._editMode) return;
+    if (e.key === 'Escape') { this._selectWrapper(null); e.preventDefault(); return; }
+    const w = this._selectedWrapper;
+    if (!w) return;
+    if (!w.layout) w.layout = { offset: w.offset.clone(), euler: { x: 0, y: 0, z: 0 } };
+    const step = e.shiftKey ? 2 : 15; // degrees per press (Shift = fine)
+    let handled = true;
+    switch (e.key) {
+      case 'ArrowUp':    w.layout.euler.x += step; break; // pitch
+      case 'ArrowDown':  w.layout.euler.x -= step; break;
+      case 'ArrowLeft':  w.layout.euler.y += step; break; // yaw
+      case 'ArrowRight': w.layout.euler.y -= step; break;
+      case 'q': case 'Q': w.layout.euler.z += step; break; // roll
+      case 'e': case 'E': w.layout.euler.z -= step; break;
+      case 'r': case 'R': w.layout.euler = { x: 0, y: 0, z: 0 }; break; // reset rotation
+      default: handled = false;
+    }
+    if (handled) { e.preventDefault(); this._emitLayout(); }
   }
 
   /**
@@ -965,9 +1229,17 @@ export class ControllerOverlay {
     }
 
     // ── Gyro (body rotation) ──
-    if (gyroQuaternion && this.bodyGroup) {
-      this.animState.gyro.slerp(gyroQuaternion, LERP_SPEED);
-      this.bodyGroup.quaternion.copy(this.animState.gyro);
+    // While editing the layout we hold the body level (ease toward identity) so
+    // dragging/rotating parts is stable and WYSIWYG, ignoring live gyro.
+    if (this.bodyGroup) {
+      const idn = this._floatIdentityQuat || (this._floatIdentityQuat = new THREE.Quaternion());
+      if (this._editMode) {
+        this.animState.gyro.slerp(idn, LERP_SPEED);
+        this.bodyGroup.quaternion.copy(this.animState.gyro);
+      } else if (gyroQuaternion) {
+        this.animState.gyro.slerp(gyroQuaternion, LERP_SPEED);
+        this.bodyGroup.quaternion.copy(this.animState.gyro);
+      }
     }
   }
 
@@ -1537,6 +1809,13 @@ export class ControllerOverlay {
   dispose() {
     this._disposed = true;
     if (this._animationId) cancelAnimationFrame(this._animationId);
+    // Tear down layout-editor listeners + handles.
+    const el = this.renderer?.domElement;
+    el?.removeEventListener('pointerdown', this._boundPointerDown);
+    window.removeEventListener('pointermove', this._boundPointerMove);
+    window.removeEventListener('pointerup', this._boundPointerUp);
+    window.removeEventListener('keydown', this._boundKeyDown);
+    if (this._selectionBox) { this.scene?.remove(this._selectionBox); this._selectionBox = null; }
     this.controls?.dispose();
     this.renderer?.dispose();
     if (this.model) {
