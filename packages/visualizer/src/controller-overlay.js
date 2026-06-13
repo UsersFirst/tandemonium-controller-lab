@@ -902,6 +902,10 @@ export class ControllerOverlay {
     if (on) {
       this._floatActiveBeforeEdit = this._floatActive;
       this._floatActive = true; // pop parts out so they're grabbable
+      // Disable OrbitControls for the whole session: its onPointerDown calls
+      // setPointerCapture BEFORE checking rotate/pan, so even "zoom-only" it
+      // would steal the drag. (Re-enabled on exit.)
+      if (this.controls) this.controls.enabled = false;
       el?.addEventListener('pointerdown', this._boundPointerDown);
       window.addEventListener('pointermove', this._boundPointerMove);
       window.addEventListener('pointerup', this._boundPointerUp);
@@ -1028,6 +1032,9 @@ export class ControllerOverlay {
 
   _editPointerDown(e) {
     if (!this._editMode || e.button !== 0) return;
+    // Stop this click from bubbling to the app's window-drag handler (which
+    // would otherwise move the whole OS window instead of the part).
+    e.stopPropagation();
     const w = this._pickWrapper(e.clientX, e.clientY);
     this._selectWrapper(w);
     if (!w) return;

@@ -1762,6 +1762,9 @@ if (floatPartsCheck) {
 }
 
 // ── Layout editor (#51) controls ──
+// While editing, the window-drag handler must stand down so click-drag moves
+// the part, not the OS window (see wireWindowDrag below).
+let layoutEditing = false;
 const editLayoutToggle = document.getElementById('edit-layout-toggle');
 const layoutModeSelect = document.getElementById('layout-mode');
 const resetLayoutBtn = document.getElementById('reset-layout');
@@ -1777,6 +1780,7 @@ function onEditSelectionChange(partName) {
 if (editLayoutToggle) {
   editLayoutToggle.addEventListener('change', (e) => {
     const on = e.target.checked;
+    layoutEditing = on; // suppress window-drag while editing
     if (overlay?.setEditMode) overlay.setEditMode(on);
     if (editLayoutStatusRow) editLayoutStatusRow.style.display = on ? '' : 'none';
     if (editLayoutHelp) editLayoutHelp.style.display = on ? '' : 'none';
@@ -2006,6 +2010,9 @@ if (window.electronAPI) {
   window.addEventListener('pointerdown', (e) => {
     // Left button only — right-click still opens settings (contextmenu).
     if (e.button !== 0 || clickThrough) return;
+    // While editing the pop-out layout, click-drag positions parts — never move
+    // the window (otherwise the OS window-move eats the drag).
+    if (layoutEditing) return;
     if (e.target instanceof Element && e.target.closest(INTERACTIVE_SELECTOR)) return;
 
     dragging = true;
