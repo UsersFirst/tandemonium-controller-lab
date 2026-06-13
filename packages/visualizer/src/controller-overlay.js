@@ -665,16 +665,42 @@ export class ControllerOverlay {
       if (!obj || seen.has(obj)) continue; // skip missing / duplicate (alias) refs
       seen.add(obj);
 
-      // World-space radial direction from model center to the part's center.
+      // The part's center relative to the model center (world space). `dir` is
+      // the normalized version used for the default radial fan-out.
       const partCenter = new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3());
-      const dir = partCenter.clone().sub(modelCenter);
+      const rel = partCenter.clone().sub(modelCenter);
+      const dir = rel.clone();
       if (dir.lengthSq() < 1e-12) dir.set(0, 1, 0); // dead-center part → push up
       dir.normalize();
       // Convert the world displacement to the wrapper's parent-local space. At
       // setup the model isn't gyro-rotated yet (rotation identity), so for a
       // uniformly-scaled parent this is just divide-by-scale.
-      const offset = dir.multiplyScalar((worldRadius * factor) / scale);
-      offset.x *= lateralBias; // bias the pop outward to the sides
+      //
+      // Per-part tuning (profile.floatTuning[name]) replaces the radial fan-out
+      // with a deliberate push along the controller's own axes, so e.g. the
+      // triggers/bumpers lift off the BACK surface (where they sit) instead of
+      // flying to the corners. The part keeps its natural spot and is nudged by:
+      //   back — push toward the back (−Z), off the rear surface
+      //   up   — push toward the top (+Y)
+      //   side — push outward to its own side (±X, away from the centerline)
+      // all in model-radius units. (Axes per the camera presets: +Z front /
+      // −Z back, +Y top, +X right.) Untuned parts use the default radial pop.
+      const tuning = profile.floatTuning?.[name];
+      let offset;
+      if (tuning) {
+        const back = tuning.back ?? 0;
+        const up = tuning.up ?? 0;
+        const side = tuning.side ?? 0;
+        const sideSign = Math.sign(rel.x) || 1; // keep left on the left, right on the right
+        offset = new THREE.Vector3(
+          sideSign * worldRadius * side,
+          worldRadius * up,
+          -worldRadius * back        // −Z = back, off the rear surface
+        ).divideScalar(scale);
+      } else {
+        offset = dir.clone().multiplyScalar((worldRadius * factor) / scale);
+        offset.x *= lateralBias; // bias the pop outward to the sides
+      }
 
       // Rotation pivot = the part's own center (parent-local), captured before
       // wrapping reparents obj. Rotating about this point (not the model origin)
@@ -682,6 +708,20 @@ export class ControllerOverlay {
       // swings it in a wide arc (the left paddles ending up under the body).
       const pivot = obj.parent.worldToLocal(partCenter.clone());
       const wrapper = { group: this._wrapForFloat(obj), pivot, offset, t: 0 };
+      // Tuned parts (triggers/bumpers) are deliberately placed relative to the
+      // body, so they should rotate WITH the body (no camera-facing counter-
+      // rotation) — otherwise they appear to spin independently as the gyro
+      // moves and swing out of place at steep angles. An optional `tiltUp`
+      // (degrees) pivots the part about its own center toward the top, so it
+      // flips up rather than just translating.
+      if (tuning) {
+        wrapper.stayWithBody = true;
+        if (tuning.tiltUp) {
+          wrapper.tiltQuat = new THREE.Quaternion().setFromAxisAngle(
+            new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(tuning.tiltUp)
+          );
+        }
+      }
       if (faceCamSet.has(name)) {
         const normal = this._partSurfaceNormal(obj);
         if (normal) {
@@ -753,9 +793,15 @@ export class ControllerOverlay {
     const pos = this._floatPos || (this._floatPos = new THREE.Vector3());
     if (this.camera) this.camera.getWorldPosition(camPos);
 
+    const idn = this._floatIdentityQuat || (this._floatIdentityQuat = new THREE.Quaternion());
     for (const w of this._floatWrappers) {
       let target = counter;
-      if (w.faceCamera && this._floatActive && this.camera) {
+      if (w.stayWithBody) {
+        // Inherit the body's gyro rotation (so the part rides with the
+        // controller), optionally tilted up toward the top while popped. Eases
+        // back to identity (natural orientation) when seated.
+        target = (this._floatActive && w.tiltQuat) ? w.tiltQuat : idn;
+      } else if (w.faceCamera && this._floatActive && this.camera) {
         // Rotate the part's rest surface-normal to point at the camera so its
         // flat face shows (composed onto the counter-rotation).
         camDir.copy(camPos).sub(w.restCenter).normalize();
