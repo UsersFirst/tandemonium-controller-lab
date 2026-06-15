@@ -92,8 +92,9 @@ export class ControllerOverlay {
 
     // Grip-sense highlighting (Steam Controller capacitive grips)
     this._gripMarkers = null;   // { left, right } billboard sprites, on top
-    this._gripEnabled = true;   // grip glow (mesh emissive + on-top markers); toggled from settings
-    this._gripBarsVisible = true; // grip-sense BAR meshes shown at all; toggled from settings
+    this._gripEnabled = true;   // on-top grip GLOW markers on/off; toggled from settings
+    this._gripBarsVisible = true; // grip-sense BAR meshes shown (and highlighting on touch); from settings
+    this._gripGlowShape = 'circle'; // on-top glow marker shape: 'circle' | 'bar' (stretched along handle)
     this._gripBrightness = 0.95; // on-top marker peak opacity (settings slider)
     // Grip highlight color — shares the global highlight color (#45's
     // overlay:highlightColor / --hl-color). Default matches that picker.
@@ -1842,18 +1843,23 @@ export class ControllerOverlay {
     const map = PROFILES[this.controllerType]?.gripMeshes;
     if (!map || !grips) return;
     for (const side of ['left', 'right']) {
-      const on = this._gripEnabled && !!grips[side];
-      // (1) mesh emissive glow
+      const gripped = !!grips[side];
+      // The bars and the on-top glow markers are INDEPENDENT:
+      //  - bars highlight on touch whenever the bars are shown (their own glow),
+      //  - the on-top markers are the separate, toggleable "glow".
+      const barOn = this._gripBarsVisible && gripped;
+      const glowOn = this._gripEnabled && gripped;
+      // (1) bar mesh emissive highlight (on touch, if the bars are visible)
       const obj = this.meshes[map[side]];
       const mesh = obj && (obj.isMesh ? obj : obj.children?.find((c) => c.isMesh));
       const mat = mesh?.material;
       if (mat && 'emissive' in mat) {
         mat.emissive.set(this._gripColor); // set each frame so a color change applies live
-        mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, on ? 0.9 : 0, LERP_SPEED);
+        mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, barOn ? 0.9 : 0, LERP_SPEED);
       }
-      // (2) always-on-top billboard marker (brightness = peak opacity)
+      // (2) always-on-top billboard glow marker (brightness = peak opacity)
       const marker = this._gripMarkers?.[side];
-      if (marker) marker.material.opacity = THREE.MathUtils.lerp(marker.material.opacity, on ? this._gripBrightness : 0, LERP_SPEED);
+      if (marker) marker.material.opacity = THREE.MathUtils.lerp(marker.material.opacity, glowOn ? this._gripBrightness : 0, LERP_SPEED);
     }
   }
 
@@ -1874,6 +1880,26 @@ export class ControllerOverlay {
     for (const side of ['left', 'right']) {
       const mesh = this.meshes[map[side]];
       if (mesh) mesh.visible = this._gripBarsVisible;
+    }
+  }
+
+  /**
+   * On-top grip glow marker shape: 'circle' (current, ~square) or 'bar'
+   * (stretched 4× along the handle direction to echo the grip bars).
+   */
+  setGripGlowShape(shape) {
+    this._gripGlowShape = shape === 'bar' ? 'bar' : 'circle';
+    this._applyGripGlowShape();
+  }
+
+  _applyGripGlowShape() {
+    if (!this._gripMarkers) return;
+    for (const side of ['left', 'right']) {
+      const m = this._gripMarkers[side];
+      if (!m) continue;
+      const base = m.userData.gripBaseSize || m.scale.x;
+      // Stretch along the sprite's vertical (the handle direction) for 'bar'.
+      m.scale.set(base, this._gripGlowShape === 'bar' ? base * 4 : base, 1);
     }
   }
 
@@ -1925,6 +1951,7 @@ export class ControllerOverlay {
       }));
       sprite.renderOrder = 10; // draw after the model so it sits on top
       const s = Math.max(gb.max.x - gb.min.x, gb.max.z - gb.min.z) * 1.3;
+      sprite.userData.gripBaseSize = s; // remembered so the shape toggle can rescale
       sprite.scale.set(s, s, 1);
       // world == bodyGroup-local at setup (no gyro yet, bodyGroup unscaled)
       sprite.position.copy(pos);
@@ -1932,6 +1959,7 @@ export class ControllerOverlay {
       markers[side] = sprite;
     }
     this._gripMarkers = markers;
+    this._applyGripGlowShape(); // honor the current Circle/Bar setting
   }
 
   // Move the grip-sense bar meshes from their modeled spot (low on the back of

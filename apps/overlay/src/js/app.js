@@ -486,6 +486,7 @@ async function init() {
   // Apply saved grip-sense display preferences.
   if (overlay.setGripVisible) overlay.setGripVisible(gripVizEnabled);
   if (overlay.setGripBarsVisible) overlay.setGripBarsVisible(gripBarsVisible);
+  if (overlay.setGripGlowShape) overlay.setGripGlowShape(gripGlowShape);
   const _gripB = localStorage.getItem('overlay:gripBrightness');
   if (_gripB !== null && overlay.setGripBrightness) overlay.setGripBrightness(parseInt(_gripB, 10) / 100);
 
@@ -1484,8 +1485,9 @@ function updateSyntheticFromParsed(parsed) {
 // 2D grip-sense indicator — readable at any 3D camera angle (the grip meshes
 // are on the back of the controller and usually occluded). Lazily revealed the
 // first time grip data arrives, then tracks left/right state.
-let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // 3D handle glow on/off
+let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // on-top glow markers on/off
 let gripBarsVisible = localStorage.getItem('overlay:gripBars') !== '0'; // grip-sense bar meshes shown (default on)
+let gripGlowShape = localStorage.getItem('overlay:gripGlowShape') || 'circle'; // glow marker shape: circle|bar
 // Grip-sense HUD row — toggles the LG/RG cells in the Button HUD from
 // parsed.grips (dedicated path; grips aren't in the gamepad). Revealed via
 // body.has-grips the first time a controller reports grips.
@@ -1522,6 +1524,17 @@ if (gripBarsToggle) {
     gripBarsVisible = e.target.checked;
     localStorage.setItem('overlay:gripBars', gripBarsVisible ? '1' : '0');
     if (overlay?.setGripBarsVisible) overlay.setGripBarsVisible(gripBarsVisible);
+  });
+}
+
+// Grip glow marker shape — Circle (current) or Bar (stretched along the handle).
+const gripGlowShapeSel = document.getElementById('grip-glow-shape');
+if (gripGlowShapeSel) {
+  gripGlowShapeSel.value = gripGlowShape;
+  gripGlowShapeSel.addEventListener('change', (e) => {
+    gripGlowShape = e.target.value;
+    localStorage.setItem('overlay:gripGlowShape', gripGlowShape);
+    if (overlay?.setGripGlowShape) overlay.setGripGlowShape(gripGlowShape);
   });
 }
 

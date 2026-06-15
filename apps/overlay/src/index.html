@@ -895,12 +895,19 @@
     <input type="checkbox" id="show-button-hud">
   </div>
   <div class="setting-row">
-    <label title="Glow on the grip-sense bars while a grip is held (Steam Controller). Grip state also shows in the Button HUD.">Show Grip Sense Glow</label>
+    <label title="On-top grip glow markers, shown while a grip is held (Steam Controller). Independent of the bars; grip state also shows in the Button HUD.">Show Grip Sense Glow</label>
     <input type="checkbox" id="grip-viz-toggle" checked>
   </div>
   <div class="setting-row">
-    <label title="Show the grip-sense bars on the controller's left/right sides (Steam Controller).">Show Grip Sense Bars</label>
+    <label title="Show the grip-sense bars on the controller's left/right sides (Steam Controller). When shown, the bars highlight on touch.">Show Grip Sense Bars</label>
     <input type="checkbox" id="grip-bars-toggle" checked>
+  </div>
+  <div class="setting-row">
+    <label title="Shape of the on-top grip glow markers: Circle, or Bar (stretched along the handle).">Glow</label>
+    <select id="grip-glow-shape">
+      <option value="circle" selected>Circle</option>
+      <option value="bar">Bar</option>
+    </select>
   </div>
   <div class="setting-row">
     <label>Grip Brightness</label>
