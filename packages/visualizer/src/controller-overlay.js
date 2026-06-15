@@ -29,12 +29,6 @@ const PRESS_GLOW = 1.5;
 // expanding to full while held.
 const TRACKPAD_FILL_MIN = 0.45;
 const FLOAT_ZERO = new THREE.Vector3(); // shared read-only lerp target (parts seated)
-// Shared scratch for the grip-bar glow orientation (avoid per-frame allocation).
-const _gmQ = new THREE.Quaternion();
-const _gmCamQ = new THREE.Quaternion();
-const _gmUp = new THREE.Vector3();
-const _gmRight = new THREE.Vector3();
-const _gmCamUp = new THREE.Vector3();
 
 export class ControllerOverlay {
   /**
@@ -1280,30 +1274,8 @@ export class ControllerOverlay {
 
     this._updateFloat();
     this._updateTrackpadFills();
-    this._updateGripGlowOrientation();
     this.controls?.update();
     this.renderer.render(this.scene, this.camera);
-  }
-
-  // Roll the 'bar' grip-glow markers so they track the controller instead of
-  // staying screen-vertical (billboard sprites otherwise ignore the body's
-  // rotation, making the bar look like it counter-rotates). We take the
-  // controller's handle long-axis (model local +Y), project it onto the camera
-  // plane, and set the sprite's screen-space rotation to match.
-  _updateGripGlowOrientation() {
-    const markers = this._gripMarkers;
-    if (!markers || this._gripGlowShape !== 'bar' || !this.camera || !this.bodyGroup) return;
-    this.bodyGroup.getWorldQuaternion(_gmQ);
-    _gmUp.set(0, 1, 0).applyQuaternion(_gmQ);             // handle axis in world space
-    this.camera.getWorldQuaternion(_gmCamQ);
-    _gmRight.set(1, 0, 0).applyQuaternion(_gmCamQ);       // screen +X
-    _gmCamUp.set(0, 1, 0).applyQuaternion(_gmCamQ);       // screen +Y
-    // Angle of the handle axis from screen-up; rotate the sprite to align with
-    // it so the bar rolls WITH the controller. (Flip the sign if it tracks the
-    // wrong way on a given build.)
-    const angle = Math.atan2(-_gmUp.dot(_gmRight), _gmUp.dot(_gmCamUp));
-    if (markers.left) markers.left.material.rotation = angle;
-    if (markers.right) markers.right.material.rotation = angle;
   }
 
   // Advance the per-pad radial click-fill animation (issue #57). Time-based so

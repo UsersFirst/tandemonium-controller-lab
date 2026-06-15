@@ -379,6 +379,9 @@ export const PROFILES = {
     // the gap past the side edge, in model widths.
     gripBarsToSides: true,
     gripBarSideGap: 0.02,
+    // Pin the on-top glow markers ON the handle (0 = grip center) rather than
+    // lifting them toward the top, so they sit within the handle and track it.
+    gripMarkerHeight: 0,
     // Single-color controller — every part shares the body theme color.
     // Back paddles (paddle1-4) and trackpads are static (no standard
     // gamepad index) but still themed.
