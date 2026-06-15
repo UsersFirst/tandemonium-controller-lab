@@ -94,8 +94,12 @@ export class ControllerOverlay {
     this._gripMarkers = null;   // { left, right } billboard sprites, on top
     this._gripEnabled = true;   // on-top grip GLOW markers on/off; toggled from settings
     this._gripBarsVisible = true; // grip-sense BAR meshes shown (and highlighting on touch); from settings
-    this._gripGlowShape = 'bar'; // on-top glow marker shape: 'circle' | 'bar' (stretched along handle); default bar
-    this._gripMarkerSpecs = null; // per-side { pos, baseSize } for (re)building markers on shape change
+    // Grip glow marker size in 1..5 steps of the base unit. width = across the
+    // handle, length = front-to-back (model Z, the handle's long axis).
+    // (1,1) renders a small circle; anything larger is a bar.
+    this._gripGlowWidth = 2;
+    this._gripGlowLength = 3;
+    this._gripMarkerSpecs = null; // per-side { pos, baseSize } for (re)building markers on size change
     this._gripBrightness = 0.95; // on-top marker peak opacity (settings slider)
     // Grip highlight color — shares the global highlight color (#45's
     // overlay:highlightColor / --hl-color). Default matches that picker.
@@ -1884,14 +1888,15 @@ export class ControllerOverlay {
     }
   }
 
-  /**
-   * On-top grip glow marker shape: 'circle' (camera-facing billboard) or 'bar'
-   * (a 3D plane pinned to the handle, elongated along it, so it foreshortens
-   * and turns WITH the controller — including on yaw). Rebuilds the markers
-   * since the two shapes use different object types.
-   */
-  setGripGlowShape(shape) {
-    this._gripGlowShape = shape === 'bar' ? 'bar' : 'circle';
+  /** Grip glow marker across-handle width (1..5 base units). */
+  setGripGlowWidth(v) {
+    this._gripGlowWidth = Math.max(1, Math.min(5, Math.round(v)));
+    this._buildGripMarkers();
+  }
+
+  /** Grip glow marker front-to-back length along the handle / model Z (1..5). */
+  setGripGlowLength(v) {
+    this._gripGlowLength = Math.max(1, Math.min(5, Math.round(v)));
     this._buildGripMarkers();
   }
 
@@ -1963,40 +1968,43 @@ export class ControllerOverlay {
     this._gripMarkers = null;
   }
 
-  // (Re)build the marker objects for the current shape from the stored specs.
-  //  - 'circle': a camera-facing billboard sprite (symmetric, so yaw is moot).
-  //  - 'bar':    a 3D plane pinned to the handle and elongated along it (Y), so
-  //              it foreshortens/turns with the controller; DoubleSide +
-  //              depthTest off keeps it always-on-top and visible at any angle.
+  // (Re)build the marker objects from the stored specs at the current size.
+  //  - width 1 AND length 1: a camera-facing billboard sprite (a small circle;
+  //    symmetric, so yaw is moot).
+  //  - otherwise: a 3D plane pinned to the handle's broad (Y–Z) face — length
+  //    runs FRONT-TO-BACK (model Z, the handle's long axis), width across it
+  //    (Y). As a real child of the body it foreshortens/turns with the
+  //    controller (follows yaw); DoubleSide + depthTest off keep it on top.
   _buildGripMarkers() {
     this._disposeGripMarkers();
     const specs = this._gripMarkerSpecs;
     if (!specs) return;
-    const bar = this._gripGlowShape === 'bar';
+    const w = this._gripGlowWidth;
+    const len = this._gripGlowLength;
+    const isCircle = w === 1 && len === 1;
     const markers = {};
     for (const side of ['left', 'right']) {
       const spec = specs[side];
       if (!spec) continue;
       const s = spec.baseSize;
       let obj;
-      if (bar) {
-        const mat = new THREE.MeshBasicMaterial({
-          map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
-          blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
-          side: THREE.DoubleSide,
-        });
-        // Long axis runs FRONT-TO-BACK (model Z, the handle's long axis), short
-        // axis vertical (Y). rotateY swings the plane's long extent from X to Z
-        // and its normal from Z to X (the handle's thin axis). 3.8 = 4× − 5%.
-        const geo = new THREE.PlaneGeometry(s * 3.8, s);
-        geo.rotateY(Math.PI / 2);
-        obj = new THREE.Mesh(geo, mat);
-      } else {
+      if (isCircle) {
         obj = new THREE.Sprite(new THREE.SpriteMaterial({
           map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
           blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
         }));
         obj.scale.set(s, s, 1);
+      } else {
+        const mat = new THREE.MeshBasicMaterial({
+          map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
+          blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        // Build in XY (X = length, Y = width), then rotateY so the length extent
+        // swings onto Z (front-to-back) and the normal onto X (handle's thin axis).
+        const geo = new THREE.PlaneGeometry(s * len, s * w);
+        geo.rotateY(Math.PI / 2);
+        obj = new THREE.Mesh(geo, mat);
       }
       obj.renderOrder = 10; // draw after the model so it sits on top
       obj.position.copy(spec.pos);
