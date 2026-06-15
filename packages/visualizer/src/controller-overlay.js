@@ -87,7 +87,8 @@ export class ControllerOverlay {
 
     // Grip-sense highlighting (Steam Controller capacitive grips)
     this._gripMarkers = null;   // { left, right } billboard sprites, on top
-    this._gripEnabled = true;   // toggled from settings
+    this._gripEnabled = true;   // grip glow (mesh emissive + on-top markers); toggled from settings
+    this._gripBarsVisible = true; // grip-sense BAR meshes shown at all; toggled from settings
     this._gripBrightness = 0.95; // on-top marker peak opacity (settings slider)
     // Grip highlight color — shares the global highlight color (#45's
     // overlay:highlightColor / --hl-color). Default matches that picker.
@@ -532,6 +533,13 @@ export class ControllerOverlay {
 
     // Grip-sense on-top markers (after aliasing so grip meshes resolve).
     this._setupGripMarkers(profile);
+
+    // Move the grip-sense BAR meshes out to the controller's left/right sides
+    // (after the markers are placed, so the markers keep their original
+    // anchoring and only the bars move).
+    this._repositionGripBars(profile);
+    // Honor the current "show grip bars" setting on this freshly-loaded model.
+    this._applyGripBarsVisible();
 
     // Diagnostic: per-mapping check at load time so we can tell whether
     // each gamepad-index → mesh path will animate at runtime. The press
@@ -1751,9 +1759,24 @@ export class ControllerOverlay {
     }
   }
 
-  /** Toggle all grip-sense highlighting (mesh glow + on-top markers). */
+  /** Toggle the grip-sense glow (mesh emissive + on-top markers). */
   setGripVisible(enabled) {
     this._gripEnabled = !!enabled;
+  }
+
+  /** Show/hide the grip-sense BAR meshes (the physical bars on the handles). */
+  setGripBarsVisible(enabled) {
+    this._gripBarsVisible = !!enabled;
+    this._applyGripBarsVisible();
+  }
+
+  _applyGripBarsVisible() {
+    const map = PROFILES[this.controllerType]?.gripMeshes;
+    if (!map) return;
+    for (const side of ['left', 'right']) {
+      const mesh = this.meshes[map[side]];
+      if (mesh) mesh.visible = this._gripBarsVisible;
+    }
   }
 
   /** On-top grip marker peak brightness (0–1). */
@@ -1811,6 +1834,38 @@ export class ControllerOverlay {
       markers[side] = sprite;
     }
     this._gripMarkers = markers;
+  }
+
+  // Move the grip-sense bar meshes from their modeled spot (low on the back of
+  // the controller, where they're hidden under the body) out to just beyond
+  // the controller's left/right silhouette, so the bars — and the emissive
+  // glow they get while a grip is held (setGripState) — are visible in use.
+  // Opt-in per profile via gripBarsToSides; gripBarSideGap tunes the gap.
+  _repositionGripBars(profile) {
+    const map = profile.gripMeshes;
+    if (!map || !profile.gripBarsToSides) return;
+    const modelBox = new THREE.Box3().setFromObject(this.model);
+    const centerX = (modelBox.min.x + modelBox.max.x) / 2;
+    const gap = (modelBox.max.x - modelBox.min.x) * (profile.gripBarSideGap ?? 0.02);
+    const parentScale = new THREE.Vector3();
+    for (const side of ['left', 'right']) {
+      const mesh = this.meshes[map[side]];
+      if (!mesh) continue;
+      const box = new THREE.Box3().setFromObject(mesh);
+      const cx = (box.min.x + box.max.x) / 2;
+      const halfW = (box.max.x - box.min.x) / 2;
+      // Sit the bar fully OUTSIDE the side it's already on (derived from
+      // geometry, so naming can't flip it).
+      const onLeft = cx < centerX;
+      const targetCx = onLeft ? modelBox.min.x - gap - halfW : modelBox.max.x + gap + halfW;
+      // Convert the world-space shift to the mesh's local frame (model has a
+      // uniform scale and no rotation at setup, so X maps straight through).
+      mesh.parent.getWorldScale(parentScale);
+      mesh.position.x += (targetCx - cx) / (parentScale.x || 1);
+      mesh.updateMatrixWorld(true);
+      const orig = this.originals[map[side]];
+      if (orig) orig.posX = mesh.position.x; // keep rest pose consistent
+    }
   }
 
   _setColorGroup(groupKey, hexColor) {
