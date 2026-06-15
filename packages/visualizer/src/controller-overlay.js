@@ -1267,8 +1267,34 @@ export class ControllerOverlay {
     this._animationId = requestAnimationFrame(() => this._animate());
 
     this._updateFloat();
+    this._updateTrackpadFills();
     this.controls?.update();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  // Advance the per-pad radial click-fill animation (issue #57). Time-based so
+  // the spread/fade are smooth regardless of frame rate or HID report cadence.
+  _updateTrackpadFills() {
+    if (!this._trackpads) return;
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const dt = Math.min(0.05, (now - (this._fillLastT ?? now)) / 1000); // clamp hitches
+    this._fillLastT = now;
+    const EXPAND_S = 0.18; // spread out to full pad
+    const FADE_S = 0.18;   // fade after release
+    for (const pad of this._trackpads) {
+      const f = pad.fill;
+      if (!f || !f.uniforms) continue;
+      if (f.phase === 'expand') {
+        f.progress = Math.min(1, f.progress + dt / EXPAND_S);
+        f.alpha = 1;
+        if (f.progress >= 1) f.phase = 'hold';
+      } else if (f.phase === 'fade') {
+        f.alpha = Math.max(0, f.alpha - dt / FADE_S);
+        if (f.alpha <= 0) { f.phase = 'idle'; f.progress = 0; }
+      }
+      f.uniforms.uFillRadius.value = f.progress * f.maxRadius;
+      f.uniforms.uFillAlpha.value = f.alpha;
+    }
   }
 
   /**
@@ -1469,10 +1495,12 @@ export class ControllerOverlay {
       const baseEmissive = padMat && 'emissive' in padMat ? padMat.emissive.getHex() : null;
       const baseEmissiveIntensity = padMat && 'emissiveIntensity' in padMat
         ? padMat.emissiveIntensity : 0;
-      this._trackpads.push({
+      const pad = {
         point: cfg.point,
         width: bb.max.x - bb.min.x,
         depth: bb.max.z - bb.min.z,
+        bbMinX: bb.min.x,        // geometry-local origin, for the fill center
+        bbMinZ: bb.min.z,
         dotLiftY,
         dot,
         restPos,
@@ -1481,8 +1509,52 @@ export class ControllerOverlay {
         baseEmissive,
         baseEmissiveIntensity,
         clickState: false,       // prior-frame click, so we only set on transitions
-      });
+        fill: null,              // radial click-fill animation state (issue #57)
+      };
+      this._installPadFillShader(pad);
+      this._trackpads.push(pad);
     });
+  }
+
+  // Experiment (#57): a radial color-fill that spreads from the click point out
+  // to cover the whole trackpad on a full press. Injects a small additive
+  // emissive term into the pad's standard material via onBeforeCompile: every
+  // fragment inside an animated radius (measured from the click center in the
+  // pad geometry's local XZ plane) gets the press color. The pad mesh itself
+  // clips the fill to the trackpad shape. Uniforms are advanced per-frame in
+  // _updateTrackpadFills; the click edge in _updateTrackpads seeds the center.
+  _installPadFillShader(pad) {
+    const mat = pad.padMesh?.material;
+    if (!mat || !('emissive' in mat)) return;
+    pad.fill = {
+      phase: 'idle',                       // 'idle' | 'expand' | 'hold' | 'fade'
+      progress: 0,                         // 0..1 radius fraction
+      alpha: 0,                            // 0..1 fill opacity (fades on release)
+      center: new THREE.Vector2(
+        pad.bbMinX + pad.width / 2,
+        pad.bbMinZ + pad.depth / 2,
+      ),
+      color: new THREE.Color(this._pressColor),
+      maxRadius: 0.5 * Math.hypot(pad.width, pad.depth) * 1.05, // cover corners
+      uniforms: null,
+    };
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uFillCenter = { value: pad.fill.center };
+      shader.uniforms.uFillRadius = { value: 0 };
+      shader.uniforms.uFillColor = { value: pad.fill.color };
+      shader.uniforms.uFillAlpha = { value: 0 };
+      shader.uniforms.uFillEdge = { value: pad.fill.maxRadius * 0.18 }; // soft front
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vPadXZ;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vPadXZ = position.xz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>',
+          '#include <common>\nvarying vec2 vPadXZ;\nuniform vec2 uFillCenter;\nuniform float uFillRadius;\nuniform vec3 uFillColor;\nuniform float uFillAlpha;\nuniform float uFillEdge;')
+        .replace('#include <emissivemap_fragment>',
+          '#include <emissivemap_fragment>\n  float _fd = distance(vPadXZ, uFillCenter);\n  float _fm = 1.0 - smoothstep(uFillRadius - uFillEdge, uFillRadius, _fd);\n  totalEmissiveRadiance += uFillColor * (_fm * uFillAlpha * 1.5);');
+      pad.fill.uniforms = shader.uniforms;
+    };
+    mat.needsUpdate = true;
   }
 
   // TODO(trackpad contour): the dot rides a single flat plane (pad top + lift),
@@ -1501,20 +1573,23 @@ export class ControllerOverlay {
     for (const pad of this._trackpads) {
       const t = touchPoints[pad.point];
 
-      // Whole-pad click highlight: a physical press lights up the entire pad
-      // mesh with the press-glow color (mirrors the single-pad DualSense
-      // path), independent of the finger-position dot. Set only on
-      // transitions so we don't stomp the material every frame.
+      // Whole-pad click highlight (issue #57): a physical press starts a radial
+      // color-fill that spreads from the finger's click point out to cover the
+      // whole pad; release fades it out. Only react on click transitions.
       const clicked = !!(t && t.clicked);
       if (clicked !== pad.clickState) {
-        const pm = pad.padMesh?.material;
-        if (pm && 'emissive' in pm) {
+        if (pad.fill) {
           if (clicked) {
-            pm.emissive.set(this._pressColor);
-            pm.emissiveIntensity = PRESS_GLOW;
-          } else {
-            pm.emissive.setHex(pad.baseEmissive ?? 0x000000);
-            pm.emissiveIntensity = pad.baseEmissiveIntensity;
+            // Seed the fill center at the finger position (geometry-local XZ),
+            // matching where the indicator dot sits; fall back to pad center.
+            if (t) {
+              const { fx, fy } = normalizeTrackpad(t.x, t.y, range, opts);
+              pad.fill.center.set(pad.bbMinX + fx * pad.width, pad.bbMinZ + fy * pad.depth);
+            }
+            pad.fill.color.set(this._pressColor);
+            pad.fill.phase = 'expand';
+          } else if (pad.fill.phase !== 'idle') {
+            pad.fill.phase = 'fade';
           }
         }
         pad.clickState = clicked;
