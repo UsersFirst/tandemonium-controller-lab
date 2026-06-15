@@ -23,6 +23,11 @@ const LERP_SPEED = 0.25; // Smoothing factor for animations
 // orange/yellow. ~1.5 keeps the chosen hue faithful while still glowing. Nudge
 // up for a punchier glow if you don't mind some hue shift on saturated colors.
 const PRESS_GLOW = 1.5;
+// Trackpad click-fill (#57): a press jumps the fill straight to this fraction
+// of the pad's max radius (at full opacity) so even a quick tap that ends
+// between render frames still shows a noticeably-sized circle, then keeps
+// expanding to full while held.
+const TRACKPAD_FILL_MIN = 0.45;
 const FLOAT_ZERO = new THREE.Vector3(); // shared read-only lerp target (parts seated)
 
 export class ControllerOverlay {
@@ -1287,10 +1292,12 @@ export class ControllerOverlay {
       if (f.phase === 'expand') {
         f.progress = Math.min(1, f.progress + dt / EXPAND_S);
         f.alpha = 1;
-        if (f.progress >= 1) f.phase = 'hold';
+        // Reached full: fade if the press already ended (fire-and-forget ripple),
+        // otherwise hold filled until release.
+        if (f.progress >= 1) f.phase = f.releaseRequested ? 'fade' : 'hold';
       } else if (f.phase === 'fade') {
         f.alpha = Math.max(0, f.alpha - dt / FADE_S);
-        if (f.alpha <= 0) { f.phase = 'idle'; f.progress = 0; }
+        if (f.alpha <= 0) { f.phase = 'idle'; f.progress = 0; f.releaseRequested = false; }
       }
       f.uniforms.uFillRadius.value = f.progress * f.maxRadius;
       f.uniforms.uFillAlpha.value = f.alpha;
@@ -1530,6 +1537,7 @@ export class ControllerOverlay {
       phase: 'idle',                       // 'idle' | 'expand' | 'hold' | 'fade'
       progress: 0,                         // 0..1 radius fraction
       alpha: 0,                            // 0..1 fill opacity (fades on release)
+      releaseRequested: false,             // released mid-expand → fade once expand finishes
       center: new THREE.Vector2(
         pad.bbMinX + pad.width / 2,
         pad.bbMinZ + pad.depth / 2,
@@ -1579,17 +1587,32 @@ export class ControllerOverlay {
       const clicked = !!(t && t.clicked);
       if (clicked !== pad.clickState) {
         if (pad.fill) {
+          const f = pad.fill;
           if (clicked) {
             // Seed the fill center at the finger position (geometry-local XZ),
             // matching where the indicator dot sits; fall back to pad center.
             if (t) {
               const { fx, fy } = normalizeTrackpad(t.x, t.y, range, opts);
-              pad.fill.center.set(pad.bbMinX + fx * pad.width, pad.bbMinZ + fy * pad.depth);
+              f.center.set(pad.bbMinX + fx * pad.width, pad.bbMinZ + fy * pad.depth);
             }
-            pad.fill.color.set(this._pressColor);
-            pad.fill.phase = 'expand';
-          } else if (pad.fill.phase !== 'idle') {
-            pad.fill.phase = 'fade';
+            f.color.set(this._pressColor);
+            f.releaseRequested = false;
+            // (Re)start the expand only from a settled state — if it's already
+            // expanding/holding (e.g. pressure flickered across the threshold),
+            // let it keep going rather than snapping back.
+            if (f.phase === 'idle' || f.phase === 'fade') {
+              f.phase = 'expand';
+              f.progress = Math.max(f.progress, TRACKPAD_FILL_MIN);
+              f.alpha = 1;
+            }
+          } else {
+            // Release. The click is pressure-gated and often briefer than the
+            // time-based expand — so DON'T cut the animation short: if we're
+            // still expanding, just note the release and let the ripple finish
+            // (it fades once it reaches full). Only a held-to-full press fades
+            // immediately on release.
+            if (f.phase === 'hold') f.phase = 'fade';
+            else if (f.phase === 'expand') f.releaseRequested = true;
           }
         }
         pad.clickState = clicked;
