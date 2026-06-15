@@ -1938,12 +1938,17 @@ export class ControllerOverlay {
       this._glowTexture = new THREE.CanvasTexture(c);
     }
     const modelBox = new THREE.Box3().setFromObject(this.model);
+    const modelCenterX = (modelBox.min.x + modelBox.max.x) / 2;
+    // Push each marker outward (left → farther left, right → farther right) by
+    // this fraction of the model width; side derived from geometry.
+    const sideOffset = (modelBox.max.x - modelBox.min.x) * (profile.gripMarkerSideOffset ?? 0);
     const markers = {};
     for (const side of ['left', 'right']) {
       const mesh = this.meshes[map[side]];
       if (!mesh) continue;
       const gb = new THREE.Box3().setFromObject(mesh);
       const pos = gb.getCenter(new THREE.Vector3());
+      pos.x += (pos.x < modelCenterX ? -sideOffset : sideOffset);
       // Lift toward the top but keep it down on the handle (not the mid/top).
       // gripMarkerHeight: 0 = grip center, 1 = controller top.
       const h = profile.gripMarkerHeight ?? 0.5;
