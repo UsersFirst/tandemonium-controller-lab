@@ -23,6 +23,11 @@ const LERP_SPEED = 0.25; // Smoothing factor for animations
 // orange/yellow. ~1.5 keeps the chosen hue faithful while still glowing. Nudge
 // up for a punchier glow if you don't mind some hue shift on saturated colors.
 const PRESS_GLOW = 1.5;
+// Trackpad click-fill (#57): a press jumps the fill straight to this fraction
+// of the pad's max radius (at full opacity) so even a quick tap that ends
+// between render frames still shows a noticeably-sized circle, then keeps
+// expanding to full while held.
+const TRACKPAD_FILL_MIN = 0.45;
 const FLOAT_ZERO = new THREE.Vector3(); // shared read-only lerp target (parts seated)
 
 export class ControllerOverlay {
@@ -1588,6 +1593,11 @@ export class ControllerOverlay {
             }
             pad.fill.color.set(this._pressColor);
             pad.fill.phase = 'expand';
+            // Jump straight to a visible size at full opacity so a quick tap
+            // (press+release within one frame) still shows a circle instead of
+            // fading from nothing; it keeps expanding from here while held.
+            pad.fill.progress = Math.max(pad.fill.progress, TRACKPAD_FILL_MIN);
+            pad.fill.alpha = 1;
           } else if (pad.fill.phase !== 'idle') {
             pad.fill.phase = 'fade';
           }
