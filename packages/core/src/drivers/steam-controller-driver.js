@@ -48,6 +48,17 @@ const STATE_REPORT_IDS = new Set([0x45, 0x42]);
 const PUCK_PID = 0x1304;
 const LIZARD_HEARTBEAT_MS = 800;
 
+// Trackpad "click" (the pad physically presses down as a button). The pad's
+// contact-area field doubles as a PRESSURE reading, and a click is just a
+// hard press — pressure crosses a threshold. Verified against a real Puck
+// capture (issue #53): a light touch/slide tops out at ~3872, while a click
+// jumps to 7162–32767 (saturated), with a clean gap around 4000. The
+// firmware also exposes a digital left-click bit (flags byte 0x04) that
+// flips at exactly this threshold — the two agree on every sample — but the
+// matching right-pad bit hasn't been observed yet, so we threshold the
+// pressure for BOTH pads to stay symmetric and unblock the right pad.
+const TRACKPAD_CLICK_PRESSURE = 4000;
+
 const CMD_CLEAR_DIGITAL_MAPPINGS = 0x81;
 const CMD_SET_SETTINGS = 0x87;
 const SETTING_RIGHT_TRACKPAD_MODE = 0x07;
@@ -368,12 +379,15 @@ export class SteamControllerDriver extends ControllerDriver {
     // Trackpads: two int16 LE XY pairs + a contact-area uint16 each.
     // The contact-area being non-zero is the cleanest "is the finger
     // touching this trackpad" signal; X/Y read 0 when not touching but
-    // also legitimately 0 dead-center.
+    // also legitimately 0 dead-center. The same area field doubles as a
+    // pressure reading, so a hard press past TRACKPAD_CLICK_PRESSURE is a
+    // physical pad click (see the constant's note + issue #53).
     const lPadArea = u16(21);
     const rPadArea = u16(27);
     const touchpad = [
       {
         active: lPadArea > 0,
+        clicked: lPadArea >= TRACKPAD_CLICK_PRESSURE,
         id: 0,
         x: r(data, 17),
         y: r(data, 19),
@@ -381,6 +395,7 @@ export class SteamControllerDriver extends ControllerDriver {
       },
       {
         active: rPadArea > 0,
+        clicked: rPadArea >= TRACKPAD_CLICK_PRESSURE,
         id: 1,
         x: r(data, 23),
         y: r(data, 25),

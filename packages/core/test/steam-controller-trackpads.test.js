@@ -87,6 +87,36 @@ test('touchpad step: active touches span a real coordinate range (offset sanity)
   }
 });
 
+test('touchpad step: light touches/slides never register a click', () => {
+  // The touchpad step is finger-sliding only — pressure stays well below the
+  // click threshold, so no pad should report `clicked` (issue #53).
+  const parsed = parseAll(stepReports('touchpad'));
+  let clicks = 0;
+  for (const p of parsed) for (const pad of p.touchpad) if (pad.clicked) clicks++;
+  assert.equal(clicks, 0, `no clicks during a pure touch/slide (saw ${clicks})`);
+});
+
+test('system-buttons step: a hard left-pad press registers a click', () => {
+  // This step contains a deliberate hard left-pad press (pressure saturating
+  // up to int16 max). The right pad is never hard-pressed in this capture.
+  const parsed = parseAll(stepReports('system-buttons'));
+  let leftClicks = 0;
+  for (const p of parsed) {
+    const [l, r] = p.touchpad;
+    if (l.clicked) {
+      leftClicks++;
+      // A click implies contact and a pressure at/above the threshold.
+      assert.ok(l.active, 'a clicked pad is also active (touching)');
+      assert.ok(l.area >= 4000, `click pressure at/above threshold (${l.area})`);
+    }
+    // Whatever the state, clicked must never be set without contact.
+    for (const pad of [l, r]) {
+      if (pad.clicked) assert.ok(pad.active, 'clicked never set without contact');
+    }
+  }
+  assert.ok(leftClicks > 0, `left pad registered a hard-press click (${leftClicks})`);
+});
+
 test('at-rest step: trackpads read inactive (no phantom touches from a bad offset)', () => {
   const parsed = parseAll(stepReports('at-rest'));
   assert.ok(parsed.length > 10, 'expected at-rest STATE reports');

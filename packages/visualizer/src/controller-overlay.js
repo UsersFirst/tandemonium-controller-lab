@@ -467,8 +467,12 @@ export class ControllerOverlay {
       };
     }
 
-    // Fix meshes that should be body-colored but are dark in the GLB
-    for (const name of ['touchpad', 'button_create', 'button_options']) {
+    // Fix meshes that should be body-colored but are dark in the GLB.
+    // `misc2` is the RIGHT Steam Controller trackpad — it must match the LEFT
+    // pad (`touchpad`) or the click press-glow reads differently on each side
+    // (the emissive sits on top of the base color, so a darker base = duller
+    // glow). Keeping both pads the same body color makes the glow symmetric.
+    for (const name of ['touchpad', 'misc2', 'button_create', 'button_options']) {
       const m = meshByName[name];
       if (m?.material) m.material.color.set(0xe8e8ec);
     }
@@ -1450,6 +1454,13 @@ export class ControllerOverlay {
       } else {
         console.warn(`Trackpad indicator '${cfg.indicator}' not found in model`);
       }
+      // Capture the pad mesh's baseline emissive so a click glow can be
+      // cleanly restored on release (rather than blindly zeroing it and
+      // clobbering any baked/parent-set emissive).
+      const padMat = padMesh.material;
+      const baseEmissive = padMat && 'emissive' in padMat ? padMat.emissive.getHex() : null;
+      const baseEmissiveIntensity = padMat && 'emissiveIntensity' in padMat
+        ? padMat.emissiveIntensity : 0;
       this._trackpads.push({
         point: cfg.point,
         width: bb.max.x - bb.min.x,
@@ -1458,6 +1469,10 @@ export class ControllerOverlay {
         dot,
         restPos,
         color: this._touchColors[idx % this._touchColors.length],
+        padMesh,                 // whole-pad mesh, lit up on a physical click
+        baseEmissive,
+        baseEmissiveIntensity,
+        clickState: false,       // prior-frame click, so we only set on transitions
       });
     });
   }
@@ -1476,8 +1491,28 @@ export class ControllerOverlay {
       swapXY: !!profile.trackpadSwapXY,
     };
     for (const pad of this._trackpads) {
-      if (!pad.dot || !pad.restPos) continue;
       const t = touchPoints[pad.point];
+
+      // Whole-pad click highlight: a physical press lights up the entire pad
+      // mesh with the press-glow color (mirrors the single-pad DualSense
+      // path), independent of the finger-position dot. Set only on
+      // transitions so we don't stomp the material every frame.
+      const clicked = !!(t && t.clicked);
+      if (clicked !== pad.clickState) {
+        const pm = pad.padMesh?.material;
+        if (pm && 'emissive' in pm) {
+          if (clicked) {
+            pm.emissive.set(this._pressColor);
+            pm.emissiveIntensity = PRESS_GLOW;
+          } else {
+            pm.emissive.setHex(pad.baseEmissive ?? 0x000000);
+            pm.emissiveIntensity = pad.baseEmissiveIntensity;
+          }
+        }
+        pad.clickState = clicked;
+      }
+
+      if (!pad.dot || !pad.restPos) continue;
       if (t && t.active) {
         const { fx, fy } = normalizeTrackpad(t.x, t.y, range, opts);
         // Offset the dot from the pad center (its rest position) by the
