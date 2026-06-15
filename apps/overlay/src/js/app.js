@@ -1487,7 +1487,7 @@ function updateSyntheticFromParsed(parsed) {
 // first time grip data arrives, then tracks left/right state.
 let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // on-top glow markers on/off
 let gripBarsVisible = localStorage.getItem('overlay:gripBars') !== '0'; // grip-sense bar meshes shown (default on)
-let gripGlowShape = localStorage.getItem('overlay:gripGlowShape') || 'circle'; // glow marker shape: circle|bar
+let gripGlowShape = localStorage.getItem('overlay:gripGlowShape') || 'bar'; // glow marker shape: circle|bar (default bar)
 // Grip-sense HUD row — toggles the LG/RG cells in the Button HUD from
 // parsed.grips (dedicated path; grips aren't in the gamepad). Revealed via
 // body.has-grips the first time a controller reports grips.

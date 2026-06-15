@@ -29,6 +29,12 @@ const PRESS_GLOW = 1.5;
 // expanding to full while held.
 const TRACKPAD_FILL_MIN = 0.45;
 const FLOAT_ZERO = new THREE.Vector3(); // shared read-only lerp target (parts seated)
+// Shared scratch for the grip-bar glow orientation (avoid per-frame allocation).
+const _gmQ = new THREE.Quaternion();
+const _gmCamQ = new THREE.Quaternion();
+const _gmUp = new THREE.Vector3();
+const _gmRight = new THREE.Vector3();
+const _gmCamUp = new THREE.Vector3();
 
 export class ControllerOverlay {
   /**
@@ -94,7 +100,7 @@ export class ControllerOverlay {
     this._gripMarkers = null;   // { left, right } billboard sprites, on top
     this._gripEnabled = true;   // on-top grip GLOW markers on/off; toggled from settings
     this._gripBarsVisible = true; // grip-sense BAR meshes shown (and highlighting on touch); from settings
-    this._gripGlowShape = 'circle'; // on-top glow marker shape: 'circle' | 'bar' (stretched along handle)
+    this._gripGlowShape = 'bar'; // on-top glow marker shape: 'circle' | 'bar' (stretched along handle); default bar
     this._gripBrightness = 0.95; // on-top marker peak opacity (settings slider)
     // Grip highlight color — shares the global highlight color (#45's
     // overlay:highlightColor / --hl-color). Default matches that picker.
@@ -1274,8 +1280,30 @@ export class ControllerOverlay {
 
     this._updateFloat();
     this._updateTrackpadFills();
+    this._updateGripGlowOrientation();
     this.controls?.update();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  // Roll the 'bar' grip-glow markers so they track the controller instead of
+  // staying screen-vertical (billboard sprites otherwise ignore the body's
+  // rotation, making the bar look like it counter-rotates). We take the
+  // controller's handle long-axis (model local +Y), project it onto the camera
+  // plane, and set the sprite's screen-space rotation to match.
+  _updateGripGlowOrientation() {
+    const markers = this._gripMarkers;
+    if (!markers || this._gripGlowShape !== 'bar' || !this.camera || !this.bodyGroup) return;
+    this.bodyGroup.getWorldQuaternion(_gmQ);
+    _gmUp.set(0, 1, 0).applyQuaternion(_gmQ);             // handle axis in world space
+    this.camera.getWorldQuaternion(_gmCamQ);
+    _gmRight.set(1, 0, 0).applyQuaternion(_gmCamQ);       // screen +X
+    _gmCamUp.set(0, 1, 0).applyQuaternion(_gmCamQ);       // screen +Y
+    // Angle of the handle axis from screen-up; rotate the sprite to align with
+    // it so the bar rolls WITH the controller. (Flip the sign if it tracks the
+    // wrong way on a given build.)
+    const angle = Math.atan2(-_gmUp.dot(_gmRight), _gmUp.dot(_gmCamUp));
+    if (markers.left) markers.left.material.rotation = angle;
+    if (markers.right) markers.right.material.rotation = angle;
   }
 
   // Advance the per-pad radial click-fill animation (issue #57). Time-based so
@@ -1894,12 +1922,15 @@ export class ControllerOverlay {
 
   _applyGripGlowShape() {
     if (!this._gripMarkers) return;
+    const bar = this._gripGlowShape === 'bar';
     for (const side of ['left', 'right']) {
       const m = this._gripMarkers[side];
       if (!m) continue;
       const base = m.userData.gripBaseSize || m.scale.x;
-      // Stretch along the sprite's vertical (the handle direction) for 'bar'.
-      m.scale.set(base, this._gripGlowShape === 'bar' ? base * 4 : base, 1);
+      // Stretch along the sprite's vertical (the handle direction) for 'bar'
+      // (3.8 = 4× minus 5%). The circle is symmetric, so reset any roll.
+      m.scale.set(base, bar ? base * 3.8 : base, 1);
+      if (!bar) m.material.rotation = 0;
     }
   }
 
