@@ -895,16 +895,28 @@
     <input type="checkbox" id="show-button-hud">
   </div>
   <div class="setting-row">
-    <label title="Glow on the grip-sense bars while a grip is held (Steam Controller). Grip state also shows in the Button HUD.">Show Grip Sense Glow</label>
+    <label title="On-top grip glow markers, shown while a grip is held (Steam Controller). Independent of the bars; grip state also shows in the Button HUD.">Show Grip Sense Glow</label>
     <input type="checkbox" id="grip-viz-toggle" checked>
   </div>
   <div class="setting-row">
-    <label title="Show the grip-sense bars on the controller's left/right sides (Steam Controller).">Show Grip Sense Bars</label>
+    <label title="Across-handle width of the grip glow (1–5). Width 1 + Length 1 = a small circle.">Grip Sense Glow Width</label>
+    <input type="range" id="grip-glow-width" min="1" max="5" step="1" value="2" style="width:90px;accent-color:#33ddaa;">
+  </div>
+  <div class="setting-row">
+    <label title="Front-to-back length of the grip glow along the handle (1–5). Width 1 + Length 1 = a small circle.">Grip Sense Glow Length</label>
+    <input type="range" id="grip-glow-length" min="1" max="5" step="1" value="3" style="width:90px;accent-color:#33ddaa;">
+  </div>
+  <div class="setting-row">
+    <label title="Show the grip-sense bars on the controller's left/right sides (Steam Controller). When shown, the bars highlight on touch.">Show Grip Sense Bars</label>
     <input type="checkbox" id="grip-bars-toggle" checked>
   </div>
   <div class="setting-row">
     <label>Grip Brightness</label>
     <input type="range" id="grip-brightness" min="10" max="100" value="95" style="width:90px;accent-color:#33ddaa;">
+  </div>
+  <div class="setting-row">
+    <label title="Color of the grip-sense glow + bar highlight. Defaults to the Highlight Color; set here to override it.">Grip Sense Color</label>
+    <input type="color" id="grip-color" value="#3388ff">
   </div>
   <div class="setting-row">
     <label>Button HUD position</label>

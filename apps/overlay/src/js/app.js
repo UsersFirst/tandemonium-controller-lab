@@ -486,6 +486,10 @@ async function init() {
   // Apply saved grip-sense display preferences.
   if (overlay.setGripVisible) overlay.setGripVisible(gripVizEnabled);
   if (overlay.setGripBarsVisible) overlay.setGripBarsVisible(gripBarsVisible);
+  if (overlay.setGripGlowWidth) overlay.setGripGlowWidth(gripGlowWidth);
+  if (overlay.setGripGlowLength) overlay.setGripGlowLength(gripGlowLength);
+  const _gripColor = localStorage.getItem('overlay:gripColor');
+  if (_gripColor && overlay.setGripColor) overlay.setGripColor(_gripColor); // override after highlight
   const _gripB = localStorage.getItem('overlay:gripBrightness');
   if (_gripB !== null && overlay.setGripBrightness) overlay.setGripBrightness(parseInt(_gripB, 10) / 100);
 
@@ -1484,8 +1488,10 @@ function updateSyntheticFromParsed(parsed) {
 // 2D grip-sense indicator — readable at any 3D camera angle (the grip meshes
 // are on the back of the controller and usually occluded). Lazily revealed the
 // first time grip data arrives, then tracks left/right state.
-let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // 3D handle glow on/off
+let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // on-top glow markers on/off
 let gripBarsVisible = localStorage.getItem('overlay:gripBars') !== '0'; // grip-sense bar meshes shown (default on)
+let gripGlowWidth = parseInt(localStorage.getItem('overlay:gripGlowWidth') || '2', 10); // across-handle, 1-5
+let gripGlowLength = parseInt(localStorage.getItem('overlay:gripGlowLength') || '3', 10); // front-to-back, 1-5
 // Grip-sense HUD row — toggles the LG/RG cells in the Button HUD from
 // parsed.grips (dedicated path; grips aren't in the gamepad). Revealed via
 // body.has-grips the first time a controller reports grips.
@@ -1525,6 +1531,41 @@ if (gripBarsToggle) {
   });
 }
 
+// Grip glow marker size — across-handle width and front-to-back length, 1-5
+// each (width 1 + length 1 = a small circle).
+const gripGlowWidthSlider = document.getElementById('grip-glow-width');
+if (gripGlowWidthSlider) {
+  gripGlowWidthSlider.value = gripGlowWidth;
+  gripGlowWidthSlider.addEventListener('input', (e) => {
+    gripGlowWidth = parseInt(e.target.value, 10);
+    localStorage.setItem('overlay:gripGlowWidth', String(gripGlowWidth));
+    if (overlay?.setGripGlowWidth) overlay.setGripGlowWidth(gripGlowWidth);
+  });
+}
+const gripGlowLengthSlider = document.getElementById('grip-glow-length');
+if (gripGlowLengthSlider) {
+  gripGlowLengthSlider.value = gripGlowLength;
+  gripGlowLengthSlider.addEventListener('input', (e) => {
+    gripGlowLength = parseInt(e.target.value, 10);
+    localStorage.setItem('overlay:gripGlowLength', String(gripGlowLength));
+    if (overlay?.setGripGlowLength) overlay.setGripGlowLength(gripGlowLength);
+  });
+}
+
+// Grip-sense color — defaults to the Highlight Color; an explicit pick here
+// overrides it (stored separately as overlay:gripColor).
+const gripColorInput = document.getElementById('grip-color');
+if (gripColorInput) {
+  const savedGrip = localStorage.getItem('overlay:gripColor');
+  const savedHl = localStorage.getItem('overlay:highlightColor');
+  gripColorInput.value = savedGrip || savedHl || '#3388ff';
+  if (savedGrip && overlay?.setGripColor) overlay.setGripColor(savedGrip);
+  gripColorInput.addEventListener('input', (e) => {
+    localStorage.setItem('overlay:gripColor', e.target.value);
+    if (overlay?.setGripColor) overlay.setGripColor(e.target.value);
+  });
+}
+
 // Grip marker brightness (on-top 3D indicator).
 const gripBrightnessSlider = document.getElementById('grip-brightness');
 if (gripBrightnessSlider) {
@@ -1547,7 +1588,13 @@ const highlightColorInput = document.getElementById('highlight-color');
 function applyHighlightColor(hex) {
   document.documentElement.style.setProperty('--hl-color', hex);
   if (overlay?.setPressColor) overlay.setPressColor(hex); // 3D overlay may not exist yet on load
-  if (overlay?.setGripColor) overlay.setGripColor(hex);
+  // Grip color follows the highlight ONLY until the user sets an explicit grip
+  // override (overlay:gripColor); then the override wins.
+  if (!localStorage.getItem('overlay:gripColor')) {
+    if (overlay?.setGripColor) overlay.setGripColor(hex);
+    const gc = document.getElementById('grip-color');
+    if (gc) gc.value = hex; // keep the grip picker in sync while it follows the highlight
+  }
 }
 if (highlightColorInput) {
   const savedHl = localStorage.getItem('overlay:highlightColor');
