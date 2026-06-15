@@ -87,7 +87,8 @@ export class ControllerOverlay {
 
     // Grip-sense highlighting (Steam Controller capacitive grips)
     this._gripMarkers = null;   // { left, right } billboard sprites, on top
-    this._gripEnabled = true;   // toggled from settings
+    this._gripEnabled = true;   // grip glow (mesh emissive + on-top markers); toggled from settings
+    this._gripBarsVisible = true; // grip-sense BAR meshes shown at all; toggled from settings
     this._gripBrightness = 0.95; // on-top marker peak opacity (settings slider)
     // Grip highlight color — shares the global highlight color (#45's
     // overlay:highlightColor / --hl-color). Default matches that picker.
@@ -537,6 +538,8 @@ export class ControllerOverlay {
     // (after the markers are placed, so the markers keep their original
     // anchoring and only the bars move).
     this._repositionGripBars(profile);
+    // Honor the current "show grip bars" setting on this freshly-loaded model.
+    this._applyGripBarsVisible();
 
     // Diagnostic: per-mapping check at load time so we can tell whether
     // each gamepad-index → mesh path will animate at runtime. The press
@@ -1756,9 +1759,24 @@ export class ControllerOverlay {
     }
   }
 
-  /** Toggle all grip-sense highlighting (mesh glow + on-top markers). */
+  /** Toggle the grip-sense glow (mesh emissive + on-top markers). */
   setGripVisible(enabled) {
     this._gripEnabled = !!enabled;
+  }
+
+  /** Show/hide the grip-sense BAR meshes (the physical bars on the handles). */
+  setGripBarsVisible(enabled) {
+    this._gripBarsVisible = !!enabled;
+    this._applyGripBarsVisible();
+  }
+
+  _applyGripBarsVisible() {
+    const map = PROFILES[this.controllerType]?.gripMeshes;
+    if (!map) return;
+    for (const side of ['left', 'right']) {
+      const mesh = this.meshes[map[side]];
+      if (mesh) mesh.visible = this._gripBarsVisible;
+    }
   }
 
   /** On-top grip marker peak brightness (0–1). */

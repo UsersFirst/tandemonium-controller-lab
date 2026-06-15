@@ -485,6 +485,7 @@ async function init() {
 
   // Apply saved grip-sense display preferences.
   if (overlay.setGripVisible) overlay.setGripVisible(gripVizEnabled);
+  if (overlay.setGripBarsVisible) overlay.setGripBarsVisible(gripBarsVisible);
   const _gripB = localStorage.getItem('overlay:gripBrightness');
   if (_gripB !== null && overlay.setGripBrightness) overlay.setGripBrightness(parseInt(_gripB, 10) / 100);
 
@@ -1484,6 +1485,7 @@ function updateSyntheticFromParsed(parsed) {
 // are on the back of the controller and usually occluded). Lazily revealed the
 // first time grip data arrives, then tracks left/right state.
 let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // 3D handle glow on/off
+let gripBarsVisible = localStorage.getItem('overlay:gripBars') !== '0'; // grip-sense bar meshes shown (default on)
 // Grip-sense HUD row — toggles the LG/RG cells in the Button HUD from
 // parsed.grips (dedicated path; grips aren't in the gamepad). Revealed via
 // body.has-grips the first time a controller reports grips.
@@ -1501,8 +1503,7 @@ function updateGripHud(grips) {
   _gripHudRefs.r.classList.toggle('active', !!grips.right);
 }
 
-// Grip-sense display toggle — gates both the 2D edge indicator and the 3D
-// markers/glow (overlay.setGripVisible).
+// Grip-sense glow toggle — gates the 3D markers/glow (overlay.setGripVisible).
 const gripToggle = document.getElementById('grip-viz-toggle');
 if (gripToggle) {
   gripToggle.checked = gripVizEnabled;
@@ -1510,6 +1511,17 @@ if (gripToggle) {
     gripVizEnabled = e.target.checked;
     localStorage.setItem('overlay:gripViz', gripVizEnabled ? '1' : '0');
     if (overlay?.setGripVisible) overlay.setGripVisible(gripVizEnabled); // 3D handle glow only
+  });
+}
+
+// Grip-sense bars toggle — shows/hides the grip-sense bar meshes themselves.
+const gripBarsToggle = document.getElementById('grip-bars-toggle');
+if (gripBarsToggle) {
+  gripBarsToggle.checked = gripBarsVisible;
+  gripBarsToggle.addEventListener('change', (e) => {
+    gripBarsVisible = e.target.checked;
+    localStorage.setItem('overlay:gripBars', gripBarsVisible ? '1' : '0');
+    if (overlay?.setGripBarsVisible) overlay.setGripBarsVisible(gripBarsVisible);
   });
 }
 
