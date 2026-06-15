@@ -95,6 +95,7 @@ export class ControllerOverlay {
     this._gripEnabled = true;   // on-top grip GLOW markers on/off; toggled from settings
     this._gripBarsVisible = true; // grip-sense BAR meshes shown (and highlighting on touch); from settings
     this._gripGlowShape = 'bar'; // on-top glow marker shape: 'circle' | 'bar' (stretched along handle); default bar
+    this._gripMarkerSpecs = null; // per-side { pos, baseSize } for (re)building markers on shape change
     this._gripBrightness = 0.95; // on-top marker peak opacity (settings slider)
     // Grip highlight color — shares the global highlight color (#45's
     // overlay:highlightColor / --hl-color). Default matches that picker.
@@ -1884,26 +1885,14 @@ export class ControllerOverlay {
   }
 
   /**
-   * On-top grip glow marker shape: 'circle' (current, ~square) or 'bar'
-   * (stretched 4× along the handle direction to echo the grip bars).
+   * On-top grip glow marker shape: 'circle' (camera-facing billboard) or 'bar'
+   * (a 3D plane pinned to the handle, elongated along it, so it foreshortens
+   * and turns WITH the controller — including on yaw). Rebuilds the markers
+   * since the two shapes use different object types.
    */
   setGripGlowShape(shape) {
     this._gripGlowShape = shape === 'bar' ? 'bar' : 'circle';
-    this._applyGripGlowShape();
-  }
-
-  _applyGripGlowShape() {
-    if (!this._gripMarkers) return;
-    const bar = this._gripGlowShape === 'bar';
-    for (const side of ['left', 'right']) {
-      const m = this._gripMarkers[side];
-      if (!m) continue;
-      const base = m.userData.gripBaseSize || m.scale.x;
-      // Stretch along the sprite's vertical (the handle direction) for 'bar'
-      // (3.8 = 4× minus 5%). The circle is symmetric, so reset any roll.
-      m.scale.set(base, bar ? base * 3.8 : base, 1);
-      if (!bar) m.material.rotation = 0;
-    }
+    this._buildGripMarkers();
   }
 
   /** On-top grip marker peak brightness (0–1). */
@@ -1919,12 +1908,13 @@ export class ControllerOverlay {
     }
   }
 
-  // Create an always-on-top billboard glow marker above each grip so grip state
-  // is visible from any camera angle (the grip meshes are on the back/bottom
-  // and usually occluded). Markers live under bodyGroup so they rotate with the
-  // controller; depthTest off so they never hide behind the body.
+  // Set up the on-top grip glow markers. Computes each marker's pinned handle
+  // position + base size once (geometry-derived), then builds the actual marker
+  // objects for the current shape. Markers live under bodyGroup so they ride
+  // with the controller; depthTest off so they're never hidden by the body.
   _setupGripMarkers(profile) {
-    this._gripMarkers = null;
+    this._disposeGripMarkers();
+    this._gripMarkerSpecs = null;
     const map = profile.gripMeshes;
     if (!map) return;
     if (!this._glowTexture) {
@@ -1942,7 +1932,7 @@ export class ControllerOverlay {
     // Push each marker outward (left → farther left, right → farther right) by
     // this fraction of the model width; side derived from geometry.
     const sideOffset = (modelBox.max.x - modelBox.min.x) * (profile.gripMarkerSideOffset ?? 0);
-    const markers = {};
+    const specs = {};
     for (const side of ['left', 'right']) {
       const mesh = this.meshes[map[side]];
       if (!mesh) continue;
@@ -1953,21 +1943,62 @@ export class ControllerOverlay {
       // gripMarkerHeight: 0 = grip center, 1 = controller top.
       const h = profile.gripMarkerHeight ?? 0.5;
       pos.y = pos.y + (modelBox.max.y - pos.y) * h;
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
-        blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
-      }));
-      sprite.renderOrder = 10; // draw after the model so it sits on top
-      const s = Math.max(gb.max.x - gb.min.x, gb.max.z - gb.min.z) * 1.3;
-      sprite.userData.gripBaseSize = s; // remembered so the shape toggle can rescale
-      sprite.scale.set(s, s, 1);
+      const baseSize = Math.max(gb.max.x - gb.min.x, gb.max.z - gb.min.z) * 1.3;
       // world == bodyGroup-local at setup (no gyro yet, bodyGroup unscaled)
-      sprite.position.copy(pos);
-      this.bodyGroup.add(sprite);
-      markers[side] = sprite;
+      specs[side] = { pos, baseSize };
+    }
+    this._gripMarkerSpecs = specs;
+    this._buildGripMarkers();
+  }
+
+  _disposeGripMarkers() {
+    if (!this._gripMarkers) return;
+    for (const side of ['left', 'right']) {
+      const m = this._gripMarkers[side];
+      if (!m) continue;
+      this.bodyGroup?.remove(m);
+      m.material?.dispose?.();
+      m.geometry?.dispose?.(); // sprites share a built-in geometry; meshes own theirs
+    }
+    this._gripMarkers = null;
+  }
+
+  // (Re)build the marker objects for the current shape from the stored specs.
+  //  - 'circle': a camera-facing billboard sprite (symmetric, so yaw is moot).
+  //  - 'bar':    a 3D plane pinned to the handle and elongated along it (Y), so
+  //              it foreshortens/turns with the controller; DoubleSide +
+  //              depthTest off keeps it always-on-top and visible at any angle.
+  _buildGripMarkers() {
+    this._disposeGripMarkers();
+    const specs = this._gripMarkerSpecs;
+    if (!specs) return;
+    const bar = this._gripGlowShape === 'bar';
+    const markers = {};
+    for (const side of ['left', 'right']) {
+      const spec = specs[side];
+      if (!spec) continue;
+      const s = spec.baseSize;
+      let obj;
+      if (bar) {
+        const mat = new THREE.MeshBasicMaterial({
+          map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
+          blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        obj = new THREE.Mesh(new THREE.PlaneGeometry(s, s * 3.8), mat); // 3.8 = 4× − 5%
+      } else {
+        obj = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
+          blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
+        }));
+        obj.scale.set(s, s, 1);
+      }
+      obj.renderOrder = 10; // draw after the model so it sits on top
+      obj.position.copy(spec.pos);
+      this.bodyGroup.add(obj);
+      markers[side] = obj;
     }
     this._gripMarkers = markers;
-    this._applyGripGlowShape(); // honor the current Circle/Bar setting
   }
 
   // Move the grip-sense bar meshes from their modeled spot (low on the back of
