@@ -1985,7 +1985,12 @@ export class ControllerOverlay {
           blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
           side: THREE.DoubleSide,
         });
-        obj = new THREE.Mesh(new THREE.PlaneGeometry(s, s * 3.8), mat); // 3.8 = 4× − 5%
+        // Long axis runs FRONT-TO-BACK (model Z, the handle's long axis), short
+        // axis vertical (Y). rotateY swings the plane's long extent from X to Z
+        // and its normal from Z to X (the handle's thin axis). 3.8 = 4× − 5%.
+        const geo = new THREE.PlaneGeometry(s * 3.8, s);
+        geo.rotateY(Math.PI / 2);
+        obj = new THREE.Mesh(geo, mat);
       } else {
         obj = new THREE.Sprite(new THREE.SpriteMaterial({
           map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
