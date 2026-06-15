@@ -373,6 +373,12 @@ export const PROFILES = {
     // Capacitive grip sensors (digital): glow these meshes while the grip is
     // held (driver parsed.grips). Highlighted via overlay.setGripState.
     gripMeshes: { left: 'left_gripsense', right: 'right_gripsense' },
+    // The grip-sense bar meshes are modeled low on the back of the controller,
+    // where they're hidden under the body. Move them out beyond the left/right
+    // silhouette so the bars and their grip glow are visible. gripBarSideGap is
+    // the gap past the side edge, in model widths.
+    gripBarsToSides: true,
+    gripBarSideGap: 0.02,
     // Single-color controller — every part shares the body theme color.
     // Back paddles (paddle1-4) and trackpads are static (no standard
     // gamepad index) but still themed.
