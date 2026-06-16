@@ -230,7 +230,7 @@ app.whenReady().then(() => {
   // forwarded from the main renderer over IPC each frame (`hud-state`), so the
   // window needs no HID/Gamepad connection of its own.
   const HUD_WINDOWS = {
-    button: { file: 'button-hud-window.html', width: 300, height: 240 },
+    button: { file: 'button-hud-window.html', width: 300, height: 280 },
     gyro:   { file: 'gyro-window.html',        width: 260, height: 260 },
     axis:   { file: 'axis-window.html',        width: 280, height: 90 },
     roll:   { file: 'roll-window.html',        width: 240, height: 170 },

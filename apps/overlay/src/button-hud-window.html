@@ -76,7 +76,9 @@
     background: rgba(15, 15, 20, 0.85);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
-    -webkit-app-region: no-drag;
+    /* No `no-drag` here: app-region is union(drag) − union(no-drag) regardless
+       of z-index, so a no-drag panel would carve a non-draggable hole even
+       under the drag layer. The HUD is display-only, so leave it draggable. */
     z-index: 100;
   }
   #button-hud .bh-section {

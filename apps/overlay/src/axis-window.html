@@ -28,7 +28,9 @@
     -webkit-app-region: no-drag; background: rgba(255,255,255,0.12); border: none;
     border-radius: 50%; color: #ccc; font-size: 12px; line-height: 1; cursor: pointer;
     z-index: 20; display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.15s; /* shown only on hover */
   }
+  body:hover #close-btn { opacity: 1; }
   #close-btn:hover { background: rgba(255,255,255,0.25); color: #fff; }
 </style>
 </head>
