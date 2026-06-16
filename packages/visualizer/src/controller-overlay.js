@@ -2076,6 +2076,7 @@ export class ControllerOverlay {
       // largest setting is bounded by the handle.
       const thin = Math.min(spec.dimX, spec.dimY);
       let obj;
+      let yLift = 0;
       if (isCircle) {
         obj = new THREE.Sprite(new THREE.SpriteMaterial({
           map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
@@ -2103,9 +2104,12 @@ export class ControllerOverlay {
         // asin(2/3): with a centre pivot the end rises (height/2)·(2/3) = height/3.
         geo.rotateX(Math.PI / 2 + Math.asin(2 / 3));
         obj = new THREE.Mesh(geo, mat);
+        // Raise the whole bar on Y by ~25% of the DEFAULT (len 4) length.
+        yLift = 0.25 * (spec.dimZ * 1.35 * (4 / 5));
       }
       obj.renderOrder = 10; // draw after the model so it sits on top
       obj.position.copy(spec.pos);
+      obj.position.y += yLift;
       this.bodyGroup.add(obj);
       markers[side] = obj;
     }
