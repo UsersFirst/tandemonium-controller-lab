@@ -19,25 +19,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveTestReport: (json, suggestedName) =>
     ipcRenderer.invoke('save-test-report', { json, suggestedName }),
 
-  // ── Button HUD popout (a second BrowserWindow with just the HUD) ──
-  // Called from the main overlay's renderer to open / update / close the
-  // popout. The popout window receives profile updates via the
-  // 'popout-profile-changed' channel.
-  openButtonHudWindow: (profile) =>
-    ipcRenderer.invoke('open-button-hud-window', { profile }),
-  updateButtonHudProfile: (profile) =>
-    ipcRenderer.send('update-button-hud-profile', { profile }),
-  // Per-frame gamepad-state forward (main renderer → popout). Cheap; the
-  // state object is just {buttons:[{pressed,value}…], axes:[…]} so JSON
-  // serialization stays small even at 60+Hz.
-  sendButtonHudState: (state) =>
-    ipcRenderer.send('button-hud-state', state),
-  // Subscriptions used by the popout window only.
-  onPopoutProfileChange: (callback) =>
-    ipcRenderer.on('popout-profile-changed', (_, profile) => callback(profile)),
-  onButtonHudState: (callback) =>
-    ipcRenderer.on('button-hud-state-update', (_, state) => callback(state)),
-  // Used by the popout window's close button to close itself cleanly.
+  // ── Detached HUD windows (a second BrowserWindow per `kind`) ──
+  // The main overlay opens/updates a detached HUD window by kind
+  // ('button' | 'gyro'). The window receives profile changes via
+  // 'hud-profile-changed' and per-frame state via 'hud-state-update'.
+  openHudWindow: (kind, profile) =>
+    ipcRenderer.invoke('open-hud-window', { kind, profile }),
+  updateHudProfile: (profile) =>
+    ipcRenderer.send('update-hud-profile', { profile }),
+  // Per-frame state forward (main renderer → window). Cheap, small JSON:
+  // button → {buttons:[{pressed,value}…], axes:[…]}; gyro → {q:{x,y,z,w}, active}.
+  sendHudState: (kind, state) =>
+    ipcRenderer.send('hud-state', { kind, state }),
+  // Subscriptions used by the detached HUD windows.
+  onHudProfileChange: (callback) =>
+    ipcRenderer.on('hud-profile-changed', (_, profile) => callback(profile)),
+  onHudState: (callback) =>
+    ipcRenderer.on('hud-state-update', (_, state) => callback(state)),
+  // Used by a detached window's close button to close itself cleanly.
   closeWindow: () => ipcRenderer.send('close-this-window'),
 
   // ── Controller inventory ──

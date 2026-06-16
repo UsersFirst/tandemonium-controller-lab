@@ -286,8 +286,8 @@ function applyHudLabels(profileKey) {
   // Forward profile to the popout regardless of whether this profile has
   // hudLabels — popout uses the profile name + falls back to defaults too.
   // IPC handler in main is a no-op when no popout is open.
-  if (window.electronAPI?.updateButtonHudProfile) {
-    window.electronAPI.updateButtonHudProfile(profileKey);
+  if (window.electronAPI?.updateHudProfile) {
+    window.electronAPI.updateHudProfile(profileKey);
   }
   if (!profile?.hudLabels) return;
   const labels = profile.hudLabels;
@@ -1063,11 +1063,22 @@ function loop() {
   // isn't open — main process drops the message). Sending unconditionally
   // is simpler than tracking popout-open state in this renderer; the IPC
   // overhead is trivial for the ~16-byte serialized snapshot.
-  if (gamepad && window.electronAPI?.sendButtonHudState) {
-    window.electronAPI.sendButtonHudState({
+  if (gamepad && window.electronAPI?.sendHudState) {
+    window.electronAPI.sendHudState('button', {
       buttons: gamepad.buttons.map(b => ({ pressed: !!b.pressed, value: b.value || 0 })),
       axes: Array.from(gamepad.axes || []),
       grips: _lastGrips || undefined,
+    });
+  }
+
+  // Forward gyro orientation to the detached Gyro HUD window (no-op if closed).
+  // gyroFusion.orientation is a THREE.Quaternion → serialize to {x,y,z,w}.
+  if (window.electronAPI?.sendHudState) {
+    const o = gyroFusion.orientation;
+    window.electronAPI.sendHudState('gyro', {
+      q: { x: o.x, y: o.y, z: o.z, w: o.w },
+      active: gyroActive,
+      fullMode: gimbalFullCheck?.checked || false,
     });
   }
 
@@ -2049,13 +2060,20 @@ showRollHudCheck.addEventListener('change', applyDisplayToggles);
 showAxisReadoutCheck.addEventListener('change', applyDisplayToggles);
 showButtonHudCheck.addEventListener('change', applyDisplayToggles);
 buttonHudPositionSelect.addEventListener('change', applyDisplayToggles);
-// Pop out the Button HUD into its own draggable window. When already open
-// the IPC handler focuses the existing window and re-sends the current
-// profile, so clicking again is harmless.
+// Detach a HUD into its own draggable window. When already open the IPC
+// handler focuses the existing window and re-sends the current profile, so
+// clicking again is harmless.
 if (popoutButtonHudBtn) {
   popoutButtonHudBtn.addEventListener('click', async () => {
-    if (!window.electronAPI?.openButtonHudWindow) return;
-    await window.electronAPI.openButtonHudWindow(currentControllerType);
+    if (!window.electronAPI?.openHudWindow) return;
+    await window.electronAPI.openHudWindow('button', currentControllerType);
+  });
+}
+const detachGyroBtn = document.getElementById('detach-gyro-hud');
+if (detachGyroBtn) {
+  detachGyroBtn.addEventListener('click', async () => {
+    if (!window.electronAPI?.openHudWindow) return;
+    await window.electronAPI.openHudWindow('gyro', currentControllerType);
   });
 }
 applyDisplayToggles(); // apply defaults (all unchecked = all hidden)
