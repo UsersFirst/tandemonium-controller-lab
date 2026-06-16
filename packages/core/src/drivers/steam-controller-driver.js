@@ -70,6 +70,11 @@ const FEATURE_REPORT_ID_FALLBACK = 0x02;
 
 export class SteamControllerDriver extends ControllerDriver {
 
+  // Whether to suppress the Puck's lizard-mode keyboard/mouse emulation
+  // (default on). Toggled from overlay settings before/at connect; read in
+  // init(). Static so the setting can be applied without a driver instance.
+  static suppressLizardMode = true;
+
   // Steam Controller emits raw 3-axis gyro (bytes 39-44, ±2000 dps)
   // and 3-axis accel (bytes 33-38, ±2g) — same rate-based encoding as
   // DualSense, so it flows through the standard SensorFusion pipeline.
@@ -99,6 +104,16 @@ export class SteamControllerDriver extends ControllerDriver {
 
   async init() {
     if (this.device.productId !== PUCK_PID) return;
+
+    // Opt-out: when suppression is turned off (e.g. the user lets Steam Input
+    // own keyboard/mouse), skip the lizard-mode disable + heartbeat entirely
+    // and leave the firmware's keyboard/mouse emulation active. Note: without
+    // suppression the Puck may not emit STATE reports unless something else
+    // (Steam Input, USB-C) keeps the device active.
+    if (!SteamControllerDriver.suppressLizardMode) {
+      console.log('Steam Controller (Puck): kbd/mouse suppression OFF (setting) — leaving lizard mode active.');
+      return;
+    }
 
     // Puck path: disable lizard-mode (the firmware's default keyboard +
     // mouse + scroll emulation) by sending CLEAR_DIGITAL_MAPPINGS +

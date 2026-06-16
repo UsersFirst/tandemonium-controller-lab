@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { ControllerOverlay, detectControllerType, PROFILES, GyroGimbal } from '@usersfirst/controller-visualizer';
-import { ControllerRegistry, SensorFusion, analyzeImuStep } from '@usersfirst/controller-core';
+import { ControllerRegistry, SensorFusion, analyzeImuStep, SteamControllerDriver } from '@usersfirst/controller-core';
 import { recordStep, buildReport, exportReport, stepsForEntry, parseImuSamples,
   areasForSteps, filterStepsByAreas, AREA_LABELS, STEP_AREAS } from './test-report.js';
 
@@ -1848,6 +1848,19 @@ if (floatPartsCheck) {
   floatPartsCheck.addEventListener('change', (e) => {
     localStorage.setItem('overlay:floatParts', e.target.checked ? '1' : '0');
     if (overlay?.setFloatParts) overlay.setFloatParts(e.target.checked);
+  });
+}
+
+// Steam Controller: suppress lizard-mode keyboard/mouse emulation (default ON).
+// Set on the driver class before connect; a change takes effect on the next
+// (re)connect. Off = leave keyboard/mouse active (e.g. let Steam Input own it).
+SteamControllerDriver.suppressLizardMode = localStorage.getItem('overlay:suppressLizard') !== '0';
+const suppressLizardCheck = document.getElementById('suppress-lizard');
+if (suppressLizardCheck) {
+  suppressLizardCheck.checked = SteamControllerDriver.suppressLizardMode;
+  suppressLizardCheck.addEventListener('change', (e) => {
+    SteamControllerDriver.suppressLizardMode = e.target.checked;
+    localStorage.setItem('overlay:suppressLizard', e.target.checked ? '1' : '0');
   });
 }
 

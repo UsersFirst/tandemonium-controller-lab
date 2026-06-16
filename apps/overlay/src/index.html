@@ -856,6 +856,10 @@
     <label title="Float the triggers, bumpers & back paddles clear of the body so they're visible at any angle">Pop Out Controls</label>
     <input type="checkbox" id="float-parts" checked autocomplete="off">
   </div>
+  <div class="setting-row">
+    <label title="Steam Controller: suppress the firmware's keyboard/mouse (lizard-mode) emulation while the overlay runs. Turn OFF to keep keyboard/mouse (e.g. when Steam Input is running). Takes effect on the next controller connect.">Suppress Kbd/Mouse (Steam)</label>
+    <input type="checkbox" id="suppress-lizard" checked autocomplete="off">
+  </div>
 
   <div class="setting-row">
     <label>Roll HUD Position</label>
@@ -949,6 +953,10 @@
 
   <hr class="settings-divider">
   <h3>Shortcuts</h3>
+  <div class="build-stamp" style="text-align:left; white-space:normal; margin:0 0 8px; line-height:1.4;">
+    Mouse: <strong>Ctrl + Right-Click</strong> shows/hides settings ·
+    <strong>Ctrl + Left-Click drag</strong> moves the window (use if normal click-drag won't grab).
+  </div>
   <div class="setting-row">
     <label>Settings</label>
     <span class="combo-display" id="combo-label-settings">Select + Start</span>
