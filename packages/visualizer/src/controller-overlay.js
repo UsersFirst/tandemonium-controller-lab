@@ -2032,9 +2032,13 @@ export class ControllerOverlay {
         const d = thin * 0.9;
         obj.scale.set(d, d, 1);
       } else {
+        // NORMAL blending (not additive): additive adds the glow to whatever's
+        // behind it, so it washed out over the bright white body but popped over
+        // the dark trackpads. Normal blending shows the grip color consistently
+        // regardless of what's behind/in front (fully solid at full brightness).
         const mat = new THREE.MeshBasicMaterial({
           color: this._gripColor, transparent: true, opacity: 0,
-          blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
+          blending: THREE.NormalBlending, depthTest: false, depthWrite: false,
         });
         // Cylinder: radius ≤ half the handle's thin cross-section; height ≤ the
         // handle's Z length. Built along Y, rotated so its axis runs

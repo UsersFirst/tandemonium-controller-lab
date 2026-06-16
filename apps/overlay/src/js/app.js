@@ -1728,6 +1728,16 @@ document.getElementById('btn-close-settings').addEventListener('click', () => {
   setSettingsVisible(false, 'close-button');
 });
 
+// Reset every saved overlay setting (all `overlay:*` keys) and reload so the
+// app re-initializes from defaults.
+document.getElementById('btn-reset-defaults').addEventListener('click', () => {
+  if (!confirm('Reset ALL overlay settings to their defaults? This clears your saved customizations.')) return;
+  for (const k of Object.keys(localStorage)) {
+    if (k.startsWith('overlay:')) localStorage.removeItem(k);
+  }
+  location.reload();
+});
+
 // Exit application with confirmation
 const exitConfirm = document.getElementById('exit-confirm');
 

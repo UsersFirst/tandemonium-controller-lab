@@ -389,12 +389,11 @@ export const PROFILES = {
     // the gap past the side edge, in model widths.
     gripBarsToSides: true,
     gripBarSideGap: 0.02,
-    // Pin the on-top glow markers ON the handle (0 = grip center) rather than
-    // lifting them toward the top, so they sit within the handle and track it.
-    gripMarkerHeight: 0,
+    // Lift the glow up a little into the handle body (fraction toward the top).
+    gripMarkerHeight: 0.1,
     // Nudge each glow outward into the handle (away from the body center), as a
     // fraction of the model width.
-    gripMarkerSideOffset: 0.04,
+    gripMarkerSideOffset: 0.06,
     // Two-tone (ceski/Larf SC2 look, issue #61): light body = shells + grips
     // only. Everything else is dark accent — the trackpads, the system buttons
     // (view/menu/steam + the "…" quick-access), and the controls (sticks, face
@@ -412,8 +411,8 @@ export const PROFILES = {
       'left_shoulder', 'right_shoulder', 'left_trigger', 'right_trigger',
       'paddle1', 'paddle2', 'paddle3', 'paddle4',
     ],
-    defaultBodyColor: '#e8e8ec',
-    defaultAccentColor: '#2a2a2e',
+    defaultBodyColor: '#e6e6e6',   // rgb(230,230,230)
+    defaultAccentColor: '#555555', // rgb(85,85,85)
     themeOnLoad: true, // the bare GLB has no materials — theme it on load (#61)
     hudLabels: {
       0: 'A',  1: 'B',  2: 'X',  3: 'Y',
