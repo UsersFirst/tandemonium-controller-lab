@@ -394,9 +394,10 @@
     white-space: nowrap;
   }
   body.show-axis-readout #axis-readout { display: flex; }
-  #axis-readout .ax-pitch { color: #44dd66; }
-  #axis-readout .ax-roll { color: #ee4455; }
-  #axis-readout .ax-yaw { color: #4488ff; }
+  /* Per-axis (Pitch/Roll/Yaw) colors — configurable via CSS vars set from settings. */
+  #axis-readout .ax-pitch { color: var(--ax-pitch, #44dd66); }
+  #axis-readout .ax-roll  { color: var(--ax-roll,  #ee4455); }
+  #axis-readout .ax-yaw   { color: var(--ax-yaw,   #4488ff); }
 
   /* ── Gyro toggle button (emoji) ── */
   #gyro-toggle {
@@ -890,8 +891,24 @@
     <input type="checkbox" id="show-roll-hud" autocomplete="off">
   </div>
   <div class="setting-row">
+    <label title="Roll HUD needle/label colors by lean band (near-center / mid / high lean).">Roll Colors (Normal / Mid / High)</label>
+    <span style="display:flex; gap:4px;">
+      <input type="color" id="lean-color-normal" value="#ffffff" title="Normal (near center)">
+      <input type="color" id="lean-color-mid" value="#ffaa22" title="Mid lean">
+      <input type="color" id="lean-color-high" value="#ff4444" title="High lean">
+    </span>
+  </div>
+  <div class="setting-row">
     <label>Show Axis Values</label>
     <input type="checkbox" id="show-axis-readout">
+  </div>
+  <div class="setting-row">
+    <label title="Per-axis colors for the Pitch / Roll / Yaw readout.">Axis Colors (Pitch / Roll / Yaw)</label>
+    <span style="display:flex; gap:4px;">
+      <input type="color" id="axis-color-pitch" value="#44dd66" title="Pitch">
+      <input type="color" id="axis-color-roll" value="#ee4455" title="Roll">
+      <input type="color" id="axis-color-yaw" value="#4488ff" title="Yaw">
+    </span>
   </div>
   <div class="setting-row">
     <label>Show 3D Gyro</label>

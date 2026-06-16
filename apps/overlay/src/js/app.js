@@ -259,12 +259,18 @@ function initGyroHud() {
   arcTicks.innerHTML = ticksHtml;
 }
 
+// Lean-band colors (Normal / Mid / High) — by how far the value is from center.
+// Drives the Roll HUD needle/labels. Defaults: white / orange / red.
+const leanColors = {
+  normal: localStorage.getItem('overlay:leanColorNormal') || '#ffffff',
+  mid:    localStorage.getItem('overlay:leanColorMid')    || '#ffaa22',
+  high:   localStorage.getItem('overlay:leanColorHigh')   || '#ff4444',
+};
 function leanColor(t) {
-  // t: 0 (center) to 1 (max lean)
   const abs = Math.min(1, Math.abs(t));
-  if (abs < 0.5) return '#ffffff';
-  if (abs < 0.75) return '#ffaa22';
-  return '#ff4444';
+  if (abs < 0.5) return leanColors.normal;
+  if (abs < 0.75) return leanColors.mid;
+  return leanColors.high;
 }
 
 // ── Button HUD update ──
@@ -1945,6 +1951,29 @@ if (shineSlider) {
     if (overlay?.setShine) overlay.setShine(parseInt(e.target.value, 10) / 100);
   });
 }
+
+// ── Lean-band colors (Roll HUD): Normal / Mid / High ──
+// leanColors drives leanColor() live, so the next frame re-renders the HUD.
+[['lean-color-normal', 'normal', 'overlay:leanColorNormal'],
+ ['lean-color-mid', 'mid', 'overlay:leanColorMid'],
+ ['lean-color-high', 'high', 'overlay:leanColorHigh']].forEach(([id, key, ls]) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = leanColors[key];
+  el.addEventListener('input', (e) => { leanColors[key] = e.target.value; localStorage.setItem(ls, e.target.value); });
+});
+
+// ── Axis colors: Pitch / Roll / Yaw (CSS vars drive the readout + detached window) ──
+function applyAxisColor(varName, value) { document.documentElement.style.setProperty(varName, value); }
+[['axis-color-pitch', '--ax-pitch', 'overlay:axisColorPitch'],
+ ['axis-color-roll', '--ax-roll', 'overlay:axisColorRoll'],
+ ['axis-color-yaw', '--ax-yaw', 'overlay:axisColorYaw']].forEach(([id, varName, ls]) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const saved = localStorage.getItem(ls);
+  if (saved) { el.value = saved; applyAxisColor(varName, saved); }
+  el.addEventListener('input', (e) => { applyAxisColor(varName, e.target.value); localStorage.setItem(ls, e.target.value); });
+});
 
 // ── Green-screen background ────────────────────────────────────────────────
 // Paints a solid keyable color behind the (otherwise transparent) overlay so

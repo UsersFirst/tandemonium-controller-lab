@@ -14,13 +14,15 @@
     user-select: none;
   }
 
-  /* Whole window is draggable so the user can reposition it on any monitor;
-     the close button + HUD interactive bits opt out via no-drag. */
+  /* Whole window is draggable so the user can reposition it on any monitor.
+     The HUD is display-only, so the drag layer sits ABOVE it (z-index above the
+     HUD content) — grabbing anywhere moves the window. The close button opts
+     out via a higher z-index + no-drag. */
   #drag-region {
     position: fixed;
     inset: 0;
     -webkit-app-region: drag;
-    z-index: 1;
+    z-index: 150;
   }
 
   /* Close button — fixed top-right, no-drag so it's clickable */
