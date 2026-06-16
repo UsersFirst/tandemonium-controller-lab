@@ -1565,7 +1565,7 @@ const gripColorInput = document.getElementById('grip-color');
 if (gripColorInput) {
   const savedGrip = localStorage.getItem('overlay:gripColor');
   const savedHl = localStorage.getItem('overlay:highlightColor');
-  gripColorInput.value = savedGrip || savedHl || '#3388ff';
+  gripColorInput.value = savedGrip || savedHl || '#ff0000';
   if (savedGrip && overlay?.setGripColor) overlay.setGripColor(savedGrip);
   gripColorInput.addEventListener('input', (e) => {
     localStorage.setItem('overlay:gripColor', e.target.value);
@@ -1605,7 +1605,10 @@ function applyHighlightColor(hex) {
 }
 if (highlightColorInput) {
   const savedHl = localStorage.getItem('overlay:highlightColor');
-  if (savedHl) { highlightColorInput.value = savedHl; applyHighlightColor(savedHl); }
+  if (savedHl) highlightColorInput.value = savedHl;
+  // Apply on load (saved value, or the red default) so the HUD, press glow and
+  // grip all pick up the default highlight without needing a manual change.
+  applyHighlightColor(highlightColorInput.value);
   highlightColorInput.addEventListener('input', (e) => {
     localStorage.setItem('overlay:highlightColor', e.target.value);
     applyHighlightColor(e.target.value);

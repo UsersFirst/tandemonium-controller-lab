@@ -74,7 +74,7 @@ export class ControllerOverlay {
 
     // Emissive "press" glow color for digital buttons, stick clicks, and
     // triggers (pre-bottom). Defaults to yellow; override via setPressColor.
-    this._pressColor = 0xffcc00;
+    this._pressColor = 0xff0000; // default highlight: red
     this._touchpadBounds = null; // { minX, maxX, minZ, maxZ, topY, mesh }
     this._trackpads = null; // multi-pad controllers (Steam Controller): per-pad indicator config
     this._touchpadClickState = false;
@@ -103,7 +103,7 @@ export class ControllerOverlay {
     this._gripBrightness = 0.5; // on-top marker peak opacity (settings slider); subtle by default (#61)
     // Grip highlight color — shares the global highlight color (#45's
     // overlay:highlightColor / --hl-color). Default matches that picker.
-    this._gripColor = 0x3388ff;
+    this._gripColor = 0xff0000; // follows the highlight default: red
 
     // ── Layout editor (#51): click-drag + keyboard-rotate the floatable parts ──
     this._editMode = false;        // editing the pop-out layout right now
@@ -151,7 +151,7 @@ export class ControllerOverlay {
     // Shine setting — so at shine 0 the model is matte and unchanged. Loaded
     // dynamically + guarded so a missing/incompatible RoomEnvironment addon
     // disables Shine instead of breaking the whole overlay.
-    this._shine = 0; // 0..1: gloss (lower roughness) + reflection (envMapIntensity)
+    this._shine = 0.35; // 0..1: gloss (lower roughness) + reflection (envMapIntensity); default 35%
     this._initEnvironment();
 
     // Camera
