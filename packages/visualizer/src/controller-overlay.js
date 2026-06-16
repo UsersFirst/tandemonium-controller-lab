@@ -98,7 +98,7 @@ export class ControllerOverlay {
     // handle, length = front-to-back (model Z, the handle's long axis).
     // (1,1) renders a small circle; anything larger is a bar.
     this._gripGlowWidth = 2;
-    this._gripGlowLength = 3;
+    this._gripGlowLength = 4;
     this._gripMarkerSpecs = null; // per-side { pos, baseSize } for (re)building markers on size change
     this._gripBrightness = 0.5; // on-top marker peak opacity (settings slider); subtle by default (#61)
     // Grip highlight color — shares the global highlight color (#45's
@@ -2040,7 +2040,7 @@ export class ControllerOverlay {
         // handle's Z length. Built along Y, rotated so its axis runs
         // front-to-back (model Z, the handle's long axis).
         const radius = (thin * 0.45) * (w / 5);
-        const height = (spec.dimZ * 0.9) * (len / 5);
+        const height = (spec.dimZ * 1.35) * (len / 5); // ~50% longer than before
         const geo = new THREE.CylinderGeometry(radius, radius, height, 20);
         geo.rotateX(Math.PI / 2);
         obj = new THREE.Mesh(geo, mat);

@@ -1491,7 +1491,7 @@ function updateSyntheticFromParsed(parsed) {
 let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // on-top glow markers on/off
 let gripBarsVisible = localStorage.getItem('overlay:gripBars') !== '0'; // grip-sense bar meshes shown (default on)
 let gripGlowWidth = parseInt(localStorage.getItem('overlay:gripGlowWidth') || '2', 10); // across-handle, 1-5
-let gripGlowLength = parseInt(localStorage.getItem('overlay:gripGlowLength') || '3', 10); // front-to-back, 1-5
+let gripGlowLength = parseInt(localStorage.getItem('overlay:gripGlowLength') || '4', 10); // front-to-back, 1-5
 // Grip-sense HUD row — toggles the LG/RG cells in the Button HUD from
 // parsed.grips (dedicated path; grips aren't in the gamepad). Revealed via
 // body.has-grips the first time a controller reports grips.
