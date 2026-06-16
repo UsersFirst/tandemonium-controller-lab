@@ -478,9 +478,15 @@ async function init() {
     if (overlay.setGripColor) overlay.setGripColor(savedHighlight);
   }
 
-  // Apply the saved "pop-out controls" preference to the freshly-loaded model.
+  // Apply the model opacity (slider default 98%) to the freshly-loaded model.
+  if (overlay.setOpacity) {
+    const op = document.getElementById('opacity-slider');
+    overlay.setOpacity((op ? parseInt(op.value, 10) : 98) / 100);
+  }
+
+  // Apply the "pop-out controls" preference (default ON) to the new model.
   if (overlay.setFloatParts) {
-    overlay.setFloatParts(localStorage.getItem('overlay:floatParts') === '1');
+    overlay.setFloatParts(localStorage.getItem('overlay:floatParts') !== '0');
   }
 
   // Apply saved grip-sense display preferences.
@@ -1838,7 +1844,7 @@ document.getElementById('hud-position').addEventListener('change', () => applyHu
 // overlay eases them in/out; we just persist + forward the toggle.
 const floatPartsCheck = document.getElementById('float-parts');
 if (floatPartsCheck) {
-  floatPartsCheck.checked = localStorage.getItem('overlay:floatParts') === '1';
+  floatPartsCheck.checked = localStorage.getItem('overlay:floatParts') !== '0';
   floatPartsCheck.addEventListener('change', (e) => {
     localStorage.setItem('overlay:floatParts', e.target.checked ? '1' : '0');
     if (overlay?.setFloatParts) overlay.setFloatParts(e.target.checked);
