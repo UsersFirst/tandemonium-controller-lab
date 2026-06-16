@@ -12,7 +12,6 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // as an empty bounding box. Loaded lazily inside _loadModel so callers
 // without meshopt GLBs don't pay the import cost.
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { PROFILES } from './controller-profiles.js';
 import { normalizeTrackpad } from './trackpad-math.js';
 
@@ -149,15 +148,11 @@ export class ControllerOverlay {
 
     // Neutral studio environment for reflections (the "shine"). Materials only
     // use it when their envMapIntensity > 0, which _applyShine drives off the
-    // Shine setting — so at shine 0 the model is matte and unchanged.
+    // Shine setting — so at shine 0 the model is matte and unchanged. Loaded
+    // dynamically + guarded so a missing/incompatible RoomEnvironment addon
+    // disables Shine instead of breaking the whole overlay.
     this._shine = 0; // 0..1: gloss (lower roughness) + reflection (envMapIntensity)
-    try {
-      const pmrem = new THREE.PMREMGenerator(this.renderer);
-      this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-      pmrem.dispose();
-    } catch (err) {
-      console.warn('Environment map setup failed; shine reflections disabled.', err);
-    }
+    this._initEnvironment();
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(
@@ -1868,6 +1863,21 @@ export class ControllerOverlay {
   setShine(value) {
     this._shine = Math.max(0, Math.min(1, value));
     this._applyShine();
+  }
+
+  // Load the reflection environment lazily and defensively: a failure here only
+  // disables Shine, it never breaks model loading or the rest of the overlay.
+  async _initEnvironment() {
+    try {
+      const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
+      if (this._disposed || !this.renderer) return;
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      pmrem.dispose();
+      this._applyShine(); // a model may already be loaded
+    } catch (err) {
+      console.warn('Environment map unavailable; Shine reflections disabled.', err);
+    }
   }
 
   _applyShine() {
