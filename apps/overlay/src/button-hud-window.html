@@ -25,11 +25,17 @@
     z-index: 150;
   }
 
+  /* No-drag hover zone (the drag layer doesn't deliver mouse events, so
+     body:hover is unreliable). Large corner area reveals the × on hover. */
+  #close-zone {
+    position: fixed; top: 0; right: 0; width: 64px; height: 64px;
+    -webkit-app-region: no-drag; z-index: 199;
+  }
   /* Close button — fixed top-right, no-drag so it's clickable */
   #close-btn {
     position: fixed;
-    top: 4px; right: 4px;
-    width: 18px; height: 18px;
+    top: 6px; right: 6px;
+    width: 20px; height: 20px;
     background: rgba(255, 255, 255, 0.08);
     border: none;
     border-radius: 50%;
@@ -42,7 +48,7 @@
     opacity: 0;
     transition: opacity 120ms linear;
   }
-  body:hover #close-btn { opacity: 1; }
+  #close-zone:hover #close-btn { opacity: 1; }
   #close-btn:hover { background: rgba(255, 50, 50, 0.6); color: #fff; }
 
   /* Controller-name banner — bottom-center, only on hover so it doesn't
@@ -160,7 +166,7 @@
 <body>
 
 <div id="drag-region"></div>
-<button id="close-btn" title="Close">&times;</button>
+<div id="close-zone"><button id="close-btn" title="Close">&times;</button></div>
 <div id="profile-name">—</div>
 
 <div id="button-hud">
