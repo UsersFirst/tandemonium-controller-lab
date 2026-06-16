@@ -1993,10 +1993,11 @@ export class ControllerOverlay {
   // (Re)build the marker objects from the stored specs at the current size.
   //  - width 1 AND length 1: a camera-facing billboard sprite (a small circle;
   //    symmetric, so yaw is moot).
-  //  - otherwise: a 3D plane pinned to the handle's broad (Y–Z) face — length
-  //    runs FRONT-TO-BACK (model Z, the handle's long axis), width across it
-  //    (Y). As a real child of the body it foreshortens/turns with the
-  //    controller (follows yaw); DoubleSide + depthTest off keep it on top.
+  //  - otherwise: a 3D CYLINDER pinned to the handle, its axis running
+  //    FRONT-TO-BACK (model Z, the handle's long axis); length sets the height,
+  //    width sets the diameter. A cylinder has volume, so unlike a flat plane it
+  //    never collapses to a line/dot at grazing angles. depthTest off keeps it
+  //    on top; as a child of the body it turns with the controller (yaw).
   _buildGripMarkers() {
     this._disposeGripMarkers();
     const specs = this._gripMarkerSpecs;
@@ -2018,14 +2019,14 @@ export class ControllerOverlay {
         obj.scale.set(s, s, 1);
       } else {
         const mat = new THREE.MeshBasicMaterial({
-          map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
+          color: this._gripColor, transparent: true, opacity: 0,
           blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
-          side: THREE.DoubleSide,
         });
-        // Build in XY (X = length, Y = width), then rotateY so the length extent
-        // swings onto Z (front-to-back) and the normal onto X (handle's thin axis).
-        const geo = new THREE.PlaneGeometry(s * len, s * w);
-        geo.rotateY(Math.PI / 2);
+        // Cylinder: diameter = width, height = length. Built along Y, rotated so
+        // its axis runs front-to-back (model Z, the handle's long axis).
+        const radius = (s * w) / 2;
+        const geo = new THREE.CylinderGeometry(radius, radius, s * len, 20);
+        geo.rotateX(Math.PI / 2);
         obj = new THREE.Mesh(geo, mat);
       }
       obj.renderOrder = 10; // draw after the model so it sits on top
