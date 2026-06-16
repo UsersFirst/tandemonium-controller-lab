@@ -1130,7 +1130,11 @@ function loop() {
 // Ctrl+Right-Click is whitelisted too: it's a deliberate modified gesture the
 // lizard-mode phantom right-clicks never produce, so it's the reliable way to
 // open settings when the gear is hidden AND a Puck is connected.
-const PUCK_ALLOWED_SETTINGS_SOURCES = new Set(['gear-click', 'close-button', 'ctrl-contextmenu']);
+// gear-click / close-button / ctrl-contextmenu are deliberate UI gestures, and
+// 'ipc' is the tray "Show Settings" / global shortcut — all deliberate, so they
+// bypass the Puck guard (which only exists to swallow lizard-mode phantom
+// right-clicks). This guarantees a way into settings even with a Puck connected.
+const PUCK_ALLOWED_SETTINGS_SOURCES = new Set(['gear-click', 'close-button', 'ctrl-contextmenu', 'ipc']);
 
 function setSettingsVisible(visible, source) {
   if (puckConnected && !PUCK_ALLOWED_SETTINGS_SOURCES.has(source)) return;
@@ -2100,10 +2104,15 @@ if (window.electronAPI) {
   window.addEventListener('pointerdown', (e) => {
     // Left button only — right-click still opens settings (contextmenu).
     if (e.button !== 0 || clickThrough) return;
-    // While editing the pop-out layout, click-drag positions parts — never move
-    // the window (otherwise the OS window-move eats the drag).
-    if (layoutEditing) return;
-    if (e.target instanceof Element && e.target.closest(INTERACTIVE_SELECTOR)) return;
+    // CTRL+Left is an escape hatch: grab and move the window from ANYWHERE,
+    // even over interactive controls or while editing layout — a reliable way
+    // to reposition the overlay when the normal grab areas are covered.
+    if (!e.ctrlKey) {
+      // While editing the pop-out layout, click-drag positions parts — never
+      // move the window (otherwise the OS window-move eats the drag).
+      if (layoutEditing) return;
+      if (e.target instanceof Element && e.target.closest(INTERACTIVE_SELECTOR)) return;
+    }
 
     dragging = true;
     document.documentElement.classList.add('is-dragging');
