@@ -369,14 +369,16 @@ export const PROFILES = {
       right_shoulder: { back: 0.08, up: 0.12, tiltUp: 65 },
       left_trigger:   { back: 0.22, up: 0.24, tiltUp: 65 },
       right_trigger:  { back: 0.22, up: 0.24, tiltUp: 65 },
-      // Paddles pop toward the CENTER (X) and forward toward the camera (+Z),
-      // with a little drop, so from the top view they sit at the front-center
-      // between the handle ends and stay visible (not buried under the body).
-      // up<0 = down, back<0 = toward the camera/front, side<0 = inward to center.
-      paddle1: { up: -0.14, back: -0.34, side: -0.13 },
-      paddle2: { up: -0.14, back: -0.34, side: -0.13 },
-      paddle3: { up: -0.14, back: -0.34, side: -0.13 },
-      paddle4: { up: -0.14, back: -0.34, side: -0.13 },
+      // Paddles pop toward the CENTER (X) and along −Z, with a little drop, so
+      // from the top view they sit between the handle ends toward the bottom of
+      // the view and stay visible. Knobs (model-radius units):
+      //   up<0   = down (−Y)
+      //   back>0 = −Z, back<0 = +Z (toward camera). `offset.z = −radius·back`.
+      //   side<0 = inward toward center (X)
+      paddle1: { up: -0.14, back: 0.25, side: -0.13 },
+      paddle2: { up: -0.14, back: 0.25, side: -0.13 },
+      paddle3: { up: -0.14, back: 0.25, side: -0.13 },
+      paddle4: { up: -0.14, back: 0.25, side: -0.13 },
     },
     // Capacitive grip sensors (digital): glow these meshes while the grip is
     // held (driver parsed.grips). Highlighted via overlay.setGripState.
