@@ -93,7 +93,7 @@ export class ControllerOverlay {
     // Grip-sense highlighting (Steam Controller capacitive grips)
     this._gripMarkers = null;   // { left, right } billboard sprites, on top
     this._gripEnabled = true;   // on-top grip GLOW markers on/off; toggled from settings
-    this._gripBarsVisible = true; // grip-sense BAR meshes shown (and highlighting on touch); from settings
+    this._gripBarsVisible = false; // grip-sense side BAR meshes hidden by default; from settings
     // Grip glow marker size in 1..5 steps of the base unit. width = across the
     // handle, length = front-to-back (model Z, the handle's long axis).
     // (1,1) renders a small circle; anything larger is a bar.
