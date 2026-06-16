@@ -375,10 +375,10 @@ export const PROFILES = {
       //   up<0   = down (−Y)
       //   back>0 = −Z, back<0 = +Z (toward camera). `offset.z = −radius·back`.
       //   side<0 = inward toward center (X)
-      paddle1: { up: -0.14, back: -0.3, side: -0.13 },
-      paddle2: { up: -0.14, back: -0.3, side: -0.13 },
-      paddle3: { up: -0.14, back: -0.3, side: -0.13 },
-      paddle4: { up: -0.14, back: -0.3, side: -0.13 },
+      paddle1: { up: -0.14, back: -0.45, side: -0.13 },
+      paddle2: { up: -0.14, back: -0.45, side: -0.13 },
+      paddle3: { up: -0.14, back: -0.45, side: -0.13 },
+      paddle4: { up: -0.14, back: -0.45, side: -0.13 },
     },
     // Capacitive grip sensors (digital): glow these meshes while the grip is
     // held (driver parsed.grips). Highlighted via overlay.setGripState.

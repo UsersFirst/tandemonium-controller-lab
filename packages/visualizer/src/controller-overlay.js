@@ -12,6 +12,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // as an empty bounding box. Loaded lazily inside _loadModel so callers
 // without meshopt GLBs don't pay the import cost.
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { PROFILES } from './controller-profiles.js';
 import { normalizeTrackpad } from './trackpad-math.js';
 
@@ -145,6 +146,18 @@ export class ControllerOverlay {
 
     // Scene
     this.scene = new THREE.Scene();
+
+    // Neutral studio environment for reflections (the "shine"). Materials only
+    // use it when their envMapIntensity > 0, which _applyShine drives off the
+    // Shine setting — so at shine 0 the model is matte and unchanged.
+    this._shine = 0; // 0..1: gloss (lower roughness) + reflection (envMapIntensity)
+    try {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      pmrem.dispose();
+    } catch (err) {
+      console.warn('Environment map setup failed; shine reflections disabled.', err);
+    }
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(
@@ -318,6 +331,9 @@ export class ControllerOverlay {
           // over-metallic materials; properly-authored ones are left alone).
           const m = child.material;
           if ('metalness' in m) m.metalness = Math.min(m.metalness, 0.2);
+          // No reflection until the Shine setting raises it (scene.environment
+          // is always set, so default this to 0 to keep the matte baseline).
+          if ('envMapIntensity' in m) m.envMapIntensity = 0;
         }
       }
     });
@@ -555,6 +571,9 @@ export class ControllerOverlay {
       if (profile.defaultBodyColor) this.setBodyColor(profile.defaultBodyColor);
       if (profile.defaultAccentColor) this.setAccentColor(profile.defaultAccentColor);
     }
+
+    // Apply the current Shine setting to the freshly-loaded materials.
+    this._applyShine();
 
     // Wrap floatable parts for the "pop-off" feature (after aliasing so every
     // profile name resolves in this.meshes).
@@ -1838,6 +1857,29 @@ export class ControllerOverlay {
    */
   setBodyColor(hexColor) {
     this._setColorGroup('bodyColorMeshes', hexColor);
+  }
+
+  /**
+   * Surface "shine" 0..1: glossier (lower roughness) + more reflective
+   * (envMapIntensity) as it rises. 0 = matte (each material's authored look,
+   * unchanged). Modulates from each material's ORIGINAL roughness so other
+   * controllers aren't flattened.
+   */
+  setShine(value) {
+    this._shine = Math.max(0, Math.min(1, value));
+    this._applyShine();
+  }
+
+  _applyShine() {
+    if (!this.model) return;
+    const shine = this._shine;
+    this.model.traverse((c) => {
+      const m = c.material;
+      if (!m || !m.isMeshStandardMaterial) return;
+      if (m.userData._origRoughness === undefined) m.userData._origRoughness = m.roughness;
+      m.roughness = m.userData._origRoughness * (1 - shine * 0.85);
+      m.envMapIntensity = shine; // 0 = no reflection (matte); up = mirror-ish sheen
+    });
   }
 
   /**

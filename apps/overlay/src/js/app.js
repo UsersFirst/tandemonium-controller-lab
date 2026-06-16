@@ -1889,6 +1889,18 @@ const accentColorInput = document.getElementById('accent-color');
 bodyColorInput.addEventListener('input', (e) => overlay.setBodyColor(e.target.value));
 accentColorInput.addEventListener('input', (e) => overlay.setAccentColor(e.target.value));
 
+// Surface shine (0 = matte). Persisted; applied on each model load too.
+const shineSlider = document.getElementById('shine-slider');
+if (shineSlider) {
+  const savedShine = localStorage.getItem('overlay:shine');
+  if (savedShine !== null) shineSlider.value = savedShine;
+  if (overlay?.setShine) overlay.setShine(parseInt(shineSlider.value, 10) / 100);
+  shineSlider.addEventListener('input', (e) => {
+    localStorage.setItem('overlay:shine', e.target.value);
+    if (overlay?.setShine) overlay.setShine(parseInt(e.target.value, 10) / 100);
+  });
+}
+
 // ── Green-screen background ────────────────────────────────────────────────
 // Paints a solid keyable color behind the (otherwise transparent) overlay so
 // it can be chroma-keyed in editing/OBS. Off by default. BASE_BG restores the
