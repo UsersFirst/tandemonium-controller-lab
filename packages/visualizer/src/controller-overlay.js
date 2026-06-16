@@ -100,7 +100,7 @@ export class ControllerOverlay {
     this._gripGlowWidth = 2;
     this._gripGlowLength = 3;
     this._gripMarkerSpecs = null; // per-side { pos, baseSize } for (re)building markers on size change
-    this._gripBrightness = 0.95; // on-top marker peak opacity (settings slider)
+    this._gripBrightness = 0.5; // on-top marker peak opacity (settings slider); subtle by default (#61)
     // Grip highlight color — shares the global highlight color (#45's
     // overlay:highlightColor / --hl-color). Default matches that picker.
     this._gripColor = 0x3388ff;
@@ -135,7 +135,7 @@ export class ControllerOverlay {
     this.renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.2;
+    this.renderer.toneMappingExposure = 1.3;
     if (transparent) {
       this.renderer.setClearColor(0x000000, 0);
     }
@@ -164,14 +164,14 @@ export class ControllerOverlay {
     this.controls.maxDistance = 2;
 
     // Lighting — studio setup with strong front light
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.85);
     this.scene.add(ambient);
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.25);
     keyLight.position.set(2, 3, 2);
     this.scene.add(keyLight);
 
-    const frontLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    const frontLight = new THREE.DirectionalLight(0xffffff, 1.0);
     frontLight.position.set(0, 1, 3);
     this.scene.add(frontLight);
 
@@ -308,6 +308,13 @@ export class ControllerOverlay {
         // Clone material so each mesh can animate independently
         if (child.material) {
           child.material = child.material.clone();
+          // Models exported without materials get glTF's default (metalness 1,
+          // roughness 1). A fully-metallic surface with no environment map
+          // renders dark/gray — that's why the bare Steam GLB looked dim. Clamp
+          // metalness down so the lights actually read on the body (only lowers
+          // over-metallic materials; properly-authored ones are left alone).
+          const m = child.material;
+          if ('metalness' in m) m.metalness = Math.min(m.metalness, 0.2);
         }
       }
     });
@@ -538,6 +545,14 @@ export class ControllerOverlay {
       }
     }
 
+    // Apply the profile's default two-tone theme on load (opt-in per profile so
+    // controllers with already-correct GLB materials are left untouched). The
+    // bare Steam GLB has no materials, so it needs this to render two-tone.
+    if (profile.themeOnLoad) {
+      if (profile.defaultBodyColor) this.setBodyColor(profile.defaultBodyColor);
+      if (profile.defaultAccentColor) this.setAccentColor(profile.defaultAccentColor);
+    }
+
     // Wrap floatable parts for the "pop-off" feature (after aliasing so every
     // profile name resolves in this.meshes).
     this._setupFloatParts(profile);
@@ -758,12 +773,16 @@ export class ControllerOverlay {
         layout: null,                   // user override { offset:Vector3, euler:{x,y,z} } or null
       };
       // Tuned parts (triggers/bumpers) are deliberately placed relative to the
-      // body, so they should rotate WITH the body (no camera-facing counter-
+      // body, so they normally rotate WITH the body (no camera-facing counter-
       // rotation) — otherwise they appear to spin independently as the gyro
       // moves and swing out of place at steep angles. An optional `tiltUp`
       // (degrees) pivots the part about its own center toward the top, so it
-      // flips up rather than just translating.
-      if (tuning) {
+      // flips up rather than just translating. EXCEPTION: a part that is also in
+      // floatFaceCamera keeps facing the camera, so it can take a tuned offset
+      // (e.g. paddles popped DOWN under the body) while still turning its flat
+      // face to the viewer.
+      const wantsFaceCam = faceCamSet.has(name);
+      if (tuning && !wantsFaceCam) {
         wrapper.stayWithBody = true;
         if (tuning.tiltUp) {
           wrapper.tiltQuat = new THREE.Quaternion().setFromAxisAngle(
@@ -771,7 +790,7 @@ export class ControllerOverlay {
           );
         }
       }
-      if (faceCamSet.has(name)) {
+      if (wantsFaceCam) {
         const normal = this._partSurfaceNormal(obj);
         if (normal) {
           wrapper.faceCamera = true;
@@ -1860,7 +1879,7 @@ export class ControllerOverlay {
       const mat = mesh?.material;
       if (mat && 'emissive' in mat) {
         mat.emissive.set(this._gripColor); // set each frame so a color change applies live
-        mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, barOn ? 0.9 : 0, LERP_SPEED);
+        mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, barOn ? 0.6 : 0, LERP_SPEED);
       }
       // (2) always-on-top billboard glow marker (brightness = peak opacity)
       const marker = this._gripMarkers?.[side];

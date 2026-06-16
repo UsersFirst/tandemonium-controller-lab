@@ -353,22 +353,26 @@ export const PROFILES = {
     // Paddles sit edge-on at rest; turn their flat face to the camera when
     // popped so a press/highlight is obvious.
     floatFaceCamera: ['paddle1', 'paddle2', 'paddle3', 'paddle4'],
-    floatFactor: 0.6,         // radial spread for the auto-positioned parts (paddles)
-    // Per-part pop-off tuning for the triggers + bumpers only (the paddles keep
-    // the default radial fan-out, untouched). The goal: flip the pair UP to the
-    // top and EXTEND them out the back, like the top of the body extends
-    // rearward — stacked bumper-then-trigger (bumper closer to the body, trigger
-    // reaching further out). The trigger starts lower than the bumper, so it
-    // gets more `up` to reach the same top level, and more `back` to sit beyond
-    // the bumper. Knobs are in model-radius units:
+    floatFactor: 0.38,         // radial spread (tighter popouts, issue #61)
+    floatLateralBias: 1.1,     // less sideways push than the 1.6 default
+    // Per-part pop-off tuning. Triggers/bumpers flip UP to the top and extend
+    // out the back (tighter than before). The four back paddles pop DOWN under
+    // the body (negative `up`) instead of fanning out to the sides — they're in
+    // floatFaceCamera, so they keep turning their flat face to the viewer.
+    // Knobs are in model-radius units:
     //   back   — extend out the back, along the edge the parts sit on (−Z)
-    //   up     — flip up toward the top (+Y)
+    //   up     — toward the top (+Y); negative = down, under the body
+    //   side   — push out to its own side (±X)
     //   tiltUp — rotate the part about its own center toward the top (degrees)
     floatTuning: {
-      left_shoulder:  { back: 0.12, up: 0.16, tiltUp: 65 },
-      right_shoulder: { back: 0.12, up: 0.16, tiltUp: 65 },
-      left_trigger:   { back: 0.34, up: 0.34, tiltUp: 65 },
-      right_trigger:  { back: 0.34, up: 0.34, tiltUp: 65 },
+      left_shoulder:  { back: 0.08, up: 0.12, tiltUp: 65 },
+      right_shoulder: { back: 0.08, up: 0.12, tiltUp: 65 },
+      left_trigger:   { back: 0.22, up: 0.24, tiltUp: 65 },
+      right_trigger:  { back: 0.22, up: 0.24, tiltUp: 65 },
+      paddle1: { up: -0.42, side: 0.10 },
+      paddle2: { up: -0.42, side: 0.10 },
+      paddle3: { up: -0.42, side: 0.10 },
+      paddle4: { up: -0.42, side: 0.10 },
     },
     // Capacitive grip sensors (digital): glow these meshes while the grip is
     // held (driver parsed.grips). Highlighted via overlay.setGripState.
@@ -385,23 +389,25 @@ export const PROFILES = {
     // Nudge the markers outward (left farther left, right farther right), as a
     // fraction of the model width.
     gripMarkerSideOffset: 0.06,
-    // Single-color controller — every part shares the body theme color.
-    // Back paddles (paddle1-4) and trackpads are static (no standard
-    // gamepad index) but still themed.
+    // Two-tone (ceski/Larf SC2 look, issue #61): light body shell + trackpads +
+    // grips + system buttons; dark accent for the controls (sticks, face
+    // buttons, dpad, shoulders, triggers, paddles).
     bodyColorMeshes: [
       'top_shell', 'bottom_shell', 'misc1', 'misc2', 'left_gripsense', 'right_gripsense',
-      'south_button', 'east_button', 'west_button', 'north_button',
-      'left_shoulder', 'right_shoulder', 'left_trigger', 'right_trigger',
       'back_button', 'start_button', 'guide_button',
+      'touchpad', 'touch_point1', 'touch_point2',
+    ],
+    accentColorMeshes: [
+      'south_button', 'east_button', 'west_button', 'north_button',
+      'dpad_up', 'dpad_down', 'dpad_left', 'dpad_right',
       'left_stick_base', 'left_stick_ring', 'left_stick_cap',
       'right_stick_base', 'right_stick_ring', 'right_stick_cap',
-      'dpad_up', 'dpad_down', 'dpad_left', 'dpad_right',
-      'touchpad', 'touch_point1', 'touch_point2',
+      'left_shoulder', 'right_shoulder', 'left_trigger', 'right_trigger',
       'paddle1', 'paddle2', 'paddle3', 'paddle4',
     ],
-    accentColorMeshes: [],
-    defaultBodyColor: '#2a2a2e',
+    defaultBodyColor: '#e8e8ec',
     defaultAccentColor: '#2a2a2e',
+    themeOnLoad: true, // the bare GLB has no materials — theme it on load (#61)
     hudLabels: {
       0: 'A',  1: 'B',  2: 'X',  3: 'Y',
       4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT',
