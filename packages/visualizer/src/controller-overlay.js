@@ -2098,7 +2098,10 @@ export class ControllerOverlay {
         const radius = (thin * 0.45) * (w / 5);
         const height = (spec.dimZ * 1.35) * (len / 5); // ~50% longer than before
         const geo = new THREE.CylinderGeometry(radius, radius, height, 20);
-        geo.rotateX(Math.PI / 2);
+        // Lay the cylinder front-to-back (axis → Z), then tilt it so the back
+        // (−Z) end rises ~1/3 of its length, angling it inline with the handle.
+        // asin(2/3): with a centre pivot the end rises (height/2)·(2/3) = height/3.
+        geo.rotateX(Math.PI / 2 + Math.asin(2 / 3));
         obj = new THREE.Mesh(geo, mat);
       }
       obj.renderOrder = 10; // draw after the model so it sits on top
