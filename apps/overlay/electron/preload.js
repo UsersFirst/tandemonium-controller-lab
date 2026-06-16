@@ -23,10 +23,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // The main overlay opens/updates a detached HUD window by kind
   // ('button' | 'gyro'). The window receives profile changes via
   // 'hud-profile-changed' and per-frame state via 'hud-state-update'.
-  openHudWindow: (kind, profile) =>
-    ipcRenderer.invoke('open-hud-window', { kind, profile }),
+  openHudWindow: (kind, profile, greenScreen) =>
+    ipcRenderer.invoke('open-hud-window', { kind, profile, greenScreen }),
   updateHudProfile: (profile) =>
     ipcRenderer.send('update-hud-profile', { profile }),
+  // Green-screen (chroma-key bg) carry-over to detached HUD windows.
+  sendHudGreenScreen: (gs) => ipcRenderer.send('hud-greenscreen', gs),
+  onHudGreenScreen: (callback) =>
+    ipcRenderer.on('hud-greenscreen-update', (_, gs) => callback(gs)),
   // Per-frame state forward (main renderer → window). Cheap, small JSON:
   // button → {buttons:[{pressed,value}…], axes:[…]}; gyro → {q:{x,y,z,w}, active}.
   sendHudState: (kind, state) =>

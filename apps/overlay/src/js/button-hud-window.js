@@ -70,6 +70,13 @@ function applyProfile(profileKey) {
 const params = new URLSearchParams(window.location.search);
 applyProfile(params.get('profile') || 'dualsense');
 
+// ── Green-screen carry-over (initial via open query, live via broadcast) ──
+function applyGreenScreen(on, color) {
+  document.body.style.background = on ? (color || '#00b140') : 'transparent';
+}
+applyGreenScreen(params.get('gs') === '1', params.get('gsColor'));
+window.electronAPI?.onHudGreenScreen?.((gs) => applyGreenScreen(gs.on, gs.color));
+
 // Mid-session updates from the main window (controller-type dropdown
 // changed, IMU probe swapped profile, etc.) come through here.
 if (window.electronAPI?.onHudProfileChange) {

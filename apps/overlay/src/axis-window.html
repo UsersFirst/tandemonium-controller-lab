@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Axis Values</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: transparent;
+    user-select: none;
+    font-family: monospace;
+  }
+  #axis {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    gap: 16px; font-size: 28px; font-weight: 600;
+  }
+  /* Per-axis colors arrive as CSS vars (forwarded from the main overlay). */
+  #axis .ax-pitch { color: var(--ax-pitch, #44dd66); }
+  #axis .ax-roll  { color: var(--ax-roll,  #ee4455); }
+  #axis .ax-yaw   { color: var(--ax-yaw,   #4488ff); }
+  /* Display-only content; the drag layer sits on top so the whole window drags. */
+  #drag-region { position: fixed; inset: 0; -webkit-app-region: drag; z-index: 10; }
+  #close-btn {
+    position: fixed; top: 4px; right: 4px; width: 18px; height: 18px;
+    -webkit-app-region: no-drag; background: rgba(255,255,255,0.12); border: none;
+    border-radius: 50%; color: #ccc; font-size: 12px; line-height: 1; cursor: pointer;
+    z-index: 20; display: flex; align-items: center; justify-content: center;
+  }
+  #close-btn:hover { background: rgba(255,255,255,0.25); color: #fff; }
+</style>
+</head>
+<body>
+  <div id="axis">
+    <span class="ax-pitch" id="ax-pitch">0°</span>
+    <span class="ax-roll" id="ax-roll">0°</span>
+    <span class="ax-yaw" id="ax-yaw">0°</span>
+  </div>
+  <div id="drag-region"></div>
+  <button id="close-btn" title="Close">&times;</button>
+  <script type="module" src="js/axis-window.js"></script>
+</body>
+</html>

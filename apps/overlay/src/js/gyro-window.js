@@ -20,6 +20,14 @@ try {
   new ResizeObserver(() => gimbal.resize()).observe(canvas);
 } catch (_) { /* ResizeObserver unavailable — fixed-size window still works */ }
 
+// ── Green-screen carry-over (initial via open query, live via broadcast) ──
+function applyGreenScreen(on, color) {
+  document.body.style.background = on ? (color || '#00b140') : 'transparent';
+}
+const params = new URLSearchParams(window.location.search);
+applyGreenScreen(params.get('gs') === '1', params.get('gsColor'));
+window.electronAPI?.onHudGreenScreen?.((gs) => applyGreenScreen(gs.on, gs.color));
+
 // Initial paint so the gimbal is visible before the first state arrives.
 gimbal.update(null);
 

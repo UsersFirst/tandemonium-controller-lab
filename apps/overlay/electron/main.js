@@ -232,9 +232,11 @@ app.whenReady().then(() => {
   const HUD_WINDOWS = {
     button: { file: 'button-hud-window.html', width: 300, height: 240 },
     gyro:   { file: 'gyro-window.html',        width: 260, height: 260 },
+    axis:   { file: 'axis-window.html',        width: 280, height: 90 },
+    roll:   { file: 'roll-window.html',        width: 240, height: 170 },
   };
 
-  ipcMain.handle('open-hud-window', async (_event, { kind, profile }) => {
+  ipcMain.handle('open-hud-window', async (_event, { kind, profile, greenScreen }) => {
     const cfg = HUD_WINDOWS[kind];
     if (!cfg) return { opened: false, reason: 'unknown kind' };
     const existing = hudWindows[kind];
@@ -255,13 +257,30 @@ app.whenReady().then(() => {
         preload: path.join(__dirname, 'preload.js'),
       },
     });
+    // Pass the current green-screen state in the query so the window can paint
+    // the keyable background immediately on load (live changes come via
+    // 'hud-greenscreen-update').
     win.loadFile(
       path.join(__dirname, '..', 'src', cfg.file),
-      { query: { kind, profile: profile || '' } }
+      { query: {
+        kind,
+        profile: profile || '',
+        gs: greenScreen?.on ? '1' : '0',
+        gsColor: greenScreen?.color || '',
+      } }
     );
     win.on('closed', () => { hudWindows[kind] = null; });
     hudWindows[kind] = win;
     return { opened: true, alreadyOpen: false };
+  });
+
+  // Green-screen on/off + color → broadcast to every open HUD window so they
+  // chroma-key consistently with the main overlay.
+  ipcMain.on('hud-greenscreen', (_event, gs) => {
+    for (const k of Object.keys(hudWindows)) {
+      const w = hudWindows[k];
+      if (w && !w.isDestroyed()) w.webContents.send('hud-greenscreen-update', gs);
+    }
   });
 
   // Profile change → forward to every open HUD window so labels track the

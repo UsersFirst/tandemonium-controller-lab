@@ -273,6 +273,14 @@ function leanColor(t) {
   return leanColors.high;
 }
 
+// Per-axis (Pitch / Roll / Yaw) colors — drive the readout (via CSS vars) and
+// the detached Axis window (forwarded). Defaults match the CSS fallbacks.
+const axisColors = {
+  pitch: localStorage.getItem('overlay:axisColorPitch') || '#44dd66',
+  roll:  localStorage.getItem('overlay:axisColorRoll')  || '#ee4455',
+  yaw:   localStorage.getItem('overlay:axisColorYaw')   || '#4488ff',
+};
+
 // ── Button HUD update ──
 // Cached DOM refs so the per-frame update doesn't query the DOM repeatedly.
 // Built lazily on first call so the script doesn't crash if the HUD markup
@@ -1093,8 +1101,9 @@ function loop() {
     gimbal.update(gyroActive ? gyroFusion.orientation : null);
   }
 
-  // Live axis readout (pitch/yaw/roll in degrees, swing-twist per axis)
-  if (document.body.classList.contains('show-axis-readout')) {
+  // Axis values (pitch/roll/yaw degrees, swing-twist per axis) \u2014 drive the
+  // in-overlay readout and forward to the detached Axis window.
+  {
     const q = gyroActive ? gyroFusion.orientation : null;
     const toDeg = 180 / Math.PI;
     const twist = (ax, ay, az) => {
@@ -1102,9 +1111,17 @@ function loop() {
       const d = q.x * ax + q.y * ay + q.z * az;
       return 2 * Math.atan2(d, q.w) * toDeg;
     };
-    axPitchVal.textContent = Math.round(twist(1, 0, 0)) + '\u00B0';
-    axRollVal.textContent = Math.round(twist(0, 0, 1)) + '\u00B0';
-    axYawVal.textContent = Math.round(twist(0, 1, 0)) + '\u00B0';
+    const pitch = Math.round(twist(1, 0, 0));
+    const roll = Math.round(twist(0, 0, 1));
+    const yaw = Math.round(twist(0, 1, 0));
+    if (document.body.classList.contains('show-axis-readout')) {
+      axPitchVal.textContent = pitch + '\u00B0';
+      axRollVal.textContent = roll + '\u00B0';
+      axYawVal.textContent = yaw + '\u00B0';
+    }
+    if (window.electronAPI?.sendHudState) {
+      window.electronAPI.sendHudState('axis', { pitch, roll, yaw, active: gyroActive, colors: axisColors });
+    }
   }
 
   // Update gyro HUD
@@ -1127,6 +1144,16 @@ function loop() {
         driftCheckAccum = 0;
       }
     }
+  }
+
+  // Forward roll state to the detached Roll HUD window (no-op if closed).
+  if (window.electronAPI?.sendHudState) {
+    let leanDeg = 0;
+    if (gyroActive) {
+      _hudEuler.setFromQuaternion(gyroFusion.orientation, 'XYZ');
+      leanDeg = -_hudEuler.z * (180 / Math.PI);
+    }
+    window.electronAPI.sendHudState('roll', { leanDeg, active: gyroActive, colors: leanColors });
   }
 }
 
@@ -1963,16 +1990,21 @@ if (shineSlider) {
   el.addEventListener('input', (e) => { leanColors[key] = e.target.value; localStorage.setItem(ls, e.target.value); });
 });
 
-// ── Axis colors: Pitch / Roll / Yaw (CSS vars drive the readout + detached window) ──
+// ── Axis colors: Pitch / Roll / Yaw (CSS vars drive the readout; axisColors is
+// forwarded to the detached Axis window) ──
 function applyAxisColor(varName, value) { document.documentElement.style.setProperty(varName, value); }
-[['axis-color-pitch', '--ax-pitch', 'overlay:axisColorPitch'],
- ['axis-color-roll', '--ax-roll', 'overlay:axisColorRoll'],
- ['axis-color-yaw', '--ax-yaw', 'overlay:axisColorYaw']].forEach(([id, varName, ls]) => {
+[['axis-color-pitch', 'pitch', '--ax-pitch', 'overlay:axisColorPitch'],
+ ['axis-color-roll', 'roll', '--ax-roll', 'overlay:axisColorRoll'],
+ ['axis-color-yaw', 'yaw', '--ax-yaw', 'overlay:axisColorYaw']].forEach(([id, key, varName, ls]) => {
   const el = document.getElementById(id);
   if (!el) return;
-  const saved = localStorage.getItem(ls);
-  if (saved) { el.value = saved; applyAxisColor(varName, saved); }
-  el.addEventListener('input', (e) => { applyAxisColor(varName, e.target.value); localStorage.setItem(ls, e.target.value); });
+  el.value = axisColors[key];
+  applyAxisColor(varName, axisColors[key]);
+  el.addEventListener('input', (e) => {
+    axisColors[key] = e.target.value;
+    applyAxisColor(varName, e.target.value);
+    localStorage.setItem(ls, e.target.value);
+  });
 });
 
 // ── Green-screen background ────────────────────────────────────────────────
@@ -1983,11 +2015,17 @@ function applyAxisColor(varName, value) { document.documentElement.style.setProp
 const greenScreenToggle = document.getElementById('green-screen-toggle');
 const greenScreenColorInput = document.getElementById('green-screen-color');
 const BASE_BG = isDesktop ? '' : '#1a1a2e';
+// Current green-screen state, shared with detached HUD windows.
+function currentGreenScreen() {
+  return { on: greenScreenToggle.checked, color: greenScreenColorInput.value };
+}
 function applyGreenScreen() {
   const on = greenScreenToggle.checked;
   document.body.style.background = on ? greenScreenColorInput.value : BASE_BG;
   localStorage.setItem('overlay:greenScreen', on ? '1' : '0');
   localStorage.setItem('overlay:greenScreenColor', greenScreenColorInput.value);
+  // Mirror to any open detached HUD windows so they key the same.
+  if (window.electronAPI?.sendHudGreenScreen) window.electronAPI.sendHudGreenScreen(currentGreenScreen());
 }
 {
   const savedColor = localStorage.getItem('overlay:greenScreenColor');
@@ -2092,19 +2130,18 @@ buttonHudPositionSelect.addEventListener('change', applyDisplayToggles);
 // Detach a HUD into its own draggable window. When already open the IPC
 // handler focuses the existing window and re-sends the current profile, so
 // clicking again is harmless.
-if (popoutButtonHudBtn) {
-  popoutButtonHudBtn.addEventListener('click', async () => {
+function wireDetachButton(btnId, kind) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
     if (!window.electronAPI?.openHudWindow) return;
-    await window.electronAPI.openHudWindow('button', currentControllerType);
+    await window.electronAPI.openHudWindow(kind, currentControllerType, currentGreenScreen());
   });
 }
-const detachGyroBtn = document.getElementById('detach-gyro-hud');
-if (detachGyroBtn) {
-  detachGyroBtn.addEventListener('click', async () => {
-    if (!window.electronAPI?.openHudWindow) return;
-    await window.electronAPI.openHudWindow('gyro', currentControllerType);
-  });
-}
+wireDetachButton('popout-button-hud', 'button');
+wireDetachButton('detach-gyro-hud', 'gyro');
+wireDetachButton('detach-axis-hud', 'axis');
+wireDetachButton('detach-roll-hud', 'roll');
 applyDisplayToggles(); // apply defaults (all unchecked = all hidden)
 
 // Right-click opens settings (needed when gear icon is hidden). Plain
