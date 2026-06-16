@@ -1973,9 +1973,15 @@ export class ControllerOverlay {
       // gripMarkerHeight: 0 = grip center, 1 = controller top.
       const h = profile.gripMarkerHeight ?? 0.5;
       pos.y = pos.y + (modelBox.max.y - pos.y) * h;
-      const baseSize = Math.max(gb.max.x - gb.min.x, gb.max.z - gb.min.z) * 1.3;
-      // world == bodyGroup-local at setup (no gyro yet, bodyGroup unscaled)
-      specs[side] = { pos, baseSize };
+      // Store the handle's actual extents so the glow can be sized to stay
+      // CONTAINED inside the handle (cross-section from the thin X/Y, length
+      // from Z). world == bodyGroup-local at setup (bodyGroup unrotated).
+      specs[side] = {
+        pos,
+        dimX: gb.max.x - gb.min.x,
+        dimY: gb.max.y - gb.min.y,
+        dimZ: gb.max.z - gb.min.z,
+      };
     }
     this._gripMarkerSpecs = specs;
     this._buildGripMarkers();
@@ -2012,24 +2018,30 @@ export class ControllerOverlay {
     for (const side of ['left', 'right']) {
       const spec = specs[side];
       if (!spec) continue;
-      const s = spec.baseSize;
+      // Size everything from the handle's own extents so the glow stays INSIDE
+      // the handle. The cross-section uses the thin X/Y; the length uses Z. The
+      // 1..5 sliders map to a fraction (v/5) of these maxima, so even the
+      // largest setting is bounded by the handle.
+      const thin = Math.min(spec.dimX, spec.dimY);
       let obj;
       if (isCircle) {
         obj = new THREE.Sprite(new THREE.SpriteMaterial({
           map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
           blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
         }));
-        obj.scale.set(s, s, 1);
+        const d = thin * 0.9;
+        obj.scale.set(d, d, 1);
       } else {
         const mat = new THREE.MeshBasicMaterial({
           color: this._gripColor, transparent: true, opacity: 0,
           blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
         });
-        // Cylinder: diameter = width, height = length. Built along Y, rotated so
-        // its axis runs front-to-back (model Z, the handle's long axis). The
-        // 0.65 factor keeps the longest setting from spanning the whole handle.
-        const radius = (s * w) / 2;
-        const geo = new THREE.CylinderGeometry(radius, radius, s * len * 0.65, 20);
+        // Cylinder: radius ≤ half the handle's thin cross-section; height ≤ the
+        // handle's Z length. Built along Y, rotated so its axis runs
+        // front-to-back (model Z, the handle's long axis).
+        const radius = (thin * 0.45) * (w / 5);
+        const height = (spec.dimZ * 0.9) * (len / 5);
+        const geo = new THREE.CylinderGeometry(radius, radius, height, 20);
         geo.rotateX(Math.PI / 2);
         obj = new THREE.Mesh(geo, mat);
       }
