@@ -1,5 +1,5 @@
 // ============================================================
-// button-hud-window.js — standalone popout for the 2D button HUD
+// button-hud-window.js — detached window for the 2D Button HUD
 // ============================================================
 //
 // Runs in its own BrowserWindow (spawned by Electron main on user demand
@@ -7,8 +7,8 @@
 // overlay window every animation frame — not via its own Gamepad API
 // polling, because:
 //   - Chromium's Gamepad API requires per-document user activation
-//     (click/keypress inside the popout window) before reporting state,
-//     which is invisible UX for a frameless transparent popout.
+//     (click/keypress inside the detached window) before reporting state,
+//     which is invisible UX for a frameless transparent window.
 //   - The main overlay already has the gamepad working; forwarding state
 //     is cheaper than re-establishing it in a second context.
 //
@@ -19,7 +19,7 @@
 
 // Direct relative-path import — does NOT pull in @usersfirst/controller-visualizer's
 // index.js barrel, which would transitively load ControllerOverlay + GyroGimbal
-// and require `three` in the importmap. The popout has no 3D scene; it only
+// and require `three` in the importmap. This window has no 3D scene; it only
 // needs PROFILES for the hudLabels block.
 import { PROFILES } from '../lib/controller-visualizer/controller-profiles.js';
 
@@ -121,7 +121,7 @@ function applyState(state) {
 if (window.electronAPI?.onHudState) {
   window.electronAPI.onHudState(applyState);
 } else {
-  console.warn('[button-hud popout] electronAPI.onHudState is undefined — preload script did not bind; popout will not receive button updates.');
+  console.warn('[button-hud window] electronAPI.onHudState is undefined — preload script did not bind; window will not receive button updates.');
 }
 
 // ── Close button (frameless window has no titlebar close) ────────────
@@ -129,7 +129,7 @@ closeBtn.addEventListener('click', () => {
   if (window.electronAPI?.closeWindow) window.electronAPI.closeWindow();
   else window.close();
 });
-// ESC also closes — handy when the popout has focus.
+// ESC also closes — handy when the window has focus.
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeBtn.click();
 });

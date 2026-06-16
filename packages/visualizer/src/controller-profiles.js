@@ -353,7 +353,7 @@ export const PROFILES = {
     // Paddles sit edge-on at rest; turn their flat face to the camera when
     // popped so a press/highlight is obvious.
     floatFaceCamera: ['paddle1', 'paddle2', 'paddle3', 'paddle4'],
-    floatFactor: 0.38,         // radial spread (tighter popouts, issue #61)
+    floatFactor: 0.38,         // radial spread (tighter float, issue #61)
     floatLateralBias: 1.1,     // less sideways push than the 1.6 default
     // Per-part pop-off tuning. Triggers/bumpers flip UP to the top and extend
     // out the back (tighter than before). The four back paddles pop DOWN under

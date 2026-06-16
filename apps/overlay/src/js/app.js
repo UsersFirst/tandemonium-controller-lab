@@ -328,9 +328,9 @@ let _bhRefs = null;
  */
 function applyHudLabels(profileKey) {
   const profile = PROFILES[profileKey];
-  // Forward profile to the popout regardless of whether this profile has
-  // hudLabels — popout uses the profile name + falls back to defaults too.
-  // IPC handler in main is a no-op when no popout is open.
+  // Forward profile to the detached HUD windows regardless of whether this
+  // profile has hudLabels — they use the profile name + fall back to defaults
+  // too. The IPC handler in main is a no-op when no window is open.
   if (window.electronAPI?.updateHudProfile) {
     window.electronAPI.updateHudProfile(profileKey);
   }
@@ -530,9 +530,9 @@ async function init() {
     overlay.setOpacity((op ? parseInt(op.value, 10) : 98) / 100);
   }
 
-  // Apply the "pop-out controls" preference (default ON) to the new model.
+  // Apply the "Float Controls" preference (default ON) to the new model.
   if (overlay.setFloatParts) {
-    overlay.setFloatParts(localStorage.getItem('overlay:floatParts') !== '0');
+    overlay.setFloatParts(localStorage.getItem('overlay:floatControls') !== '0');
   }
 
   // Apply saved grip-sense display preferences.
@@ -1105,9 +1105,9 @@ function loop() {
     updateButtonHud(gamepad);
   }
 
-  // Forward gamepad state to the popout HUD window (no-op when popout
+  // Forward gamepad state to the detached Button HUD window (no-op when it
   // isn't open — main process drops the message). Sending unconditionally
-  // is simpler than tracking popout-open state in this renderer; the IPC
+  // is simpler than tracking window-open state in this renderer; the IPC
   // overhead is trivial for the ~16-byte serialized snapshot.
   if (gamepad && window.electronAPI?.sendHudState) {
     window.electronAPI.sendHudState('button', {
@@ -1124,13 +1124,13 @@ function loop() {
     window.electronAPI.sendHudState('gyro', {
       q: { x: o.x, y: o.y, z: o.z, w: o.w },
       active: gyroActive,
-      fullMode: gimbalFullCheck?.checked || false,
+      fullMode: gyroHudFullCheck?.checked || false,
       colors: axisColors, // ring colors track the Axis (Pitch/Roll/Yaw) colors
     });
   }
 
-  // Drive the 3D gimbal widget when visible
-  if (gimbal && document.body.classList.contains('show-gimbal')) {
+  // Drive the Gyro HUD (3D gimbal widget) when visible
+  if (gimbal && document.body.classList.contains('show-gyro-hud')) {
     gimbal.update(gyroActive ? gyroFusion.orientation : null);
   }
 
@@ -1586,7 +1586,7 @@ let gripGlowLength = parseInt(localStorage.getItem('overlay:gripGlowLength') || 
 // parsed.grips (dedicated path; grips aren't in the gamepad). Revealed via
 // body.has-grips the first time a controller reports grips.
 let _gripHudRefs = null;
-let _lastGrips = null; // latest grip state, forwarded to the popout HUD
+let _lastGrips = null; // latest grip state, forwarded to the Button HUD window
 function updateGripHud(grips) {
   if (!_gripHudRefs) {
     const l = document.querySelector('#button-hud [data-grip="l"]');
@@ -1725,7 +1725,7 @@ function handleInputReport(event) {
   }
 
   if (parsed.grips) {
-    _lastGrips = parsed.grips;                                    // forwarded to the popout HUD
+    _lastGrips = parsed.grips;                                    // forwarded to the Button HUD window
     if (overlay.setGripState) overlay.setGripState(parsed.grips); // 3D handle glow (toggleable)
     updateGripHud(parsed.grips);                                  // grip cells in the Button HUD
   }
@@ -1917,13 +1917,18 @@ connectGyroBtn.addEventListener('click', async () => {
 
 document.getElementById('hud-position').addEventListener('change', () => applyHudPosition());
 
-// Pop-out controls — float triggers/bumpers/paddles clear of the body. The
+// Float Controls — float triggers/bumpers/paddles clear of the body. The
 // overlay eases them in/out; we just persist + forward the toggle.
-const floatPartsCheck = document.getElementById('float-parts');
-if (floatPartsCheck) {
-  floatPartsCheck.checked = localStorage.getItem('overlay:floatParts') !== '0';
-  floatPartsCheck.addEventListener('change', (e) => {
-    localStorage.setItem('overlay:floatParts', e.target.checked ? '1' : '0');
+// Migrate the pre-rename persistence key (overlay:floatParts → :floatControls).
+if (localStorage.getItem('overlay:floatControls') === null) {
+  const legacy = localStorage.getItem('overlay:floatParts');
+  if (legacy !== null) localStorage.setItem('overlay:floatControls', legacy);
+}
+const floatControlsCheck = document.getElementById('float-controls');
+if (floatControlsCheck) {
+  floatControlsCheck.checked = localStorage.getItem('overlay:floatControls') !== '0';
+  floatControlsCheck.addEventListener('change', (e) => {
+    localStorage.setItem('overlay:floatControls', e.target.checked ? '1' : '0');
     if (overlay?.setFloatParts) overlay.setFloatParts(e.target.checked);
   });
 }
@@ -2113,13 +2118,13 @@ selectCameraPreset('player');
 const showTitleCheck = document.getElementById('show-title');
 const showGyroCheck = document.getElementById('show-gyro');
 const showGearCheck = document.getElementById('show-gear');
-const showGimbalCheck = document.getElementById('show-gimbal');
-const gimbalFullCheck = document.getElementById('gimbal-full-mode');
+const showGyroHudCheck = document.getElementById('show-gyro-hud');
+const gyroHudFullCheck = document.getElementById('gyro-hud-full-mode');
 const showRollHudCheck = document.getElementById('show-roll-hud');
 const showAxisReadoutCheck = document.getElementById('show-axis-readout');
 const showButtonHudCheck = document.getElementById('show-button-hud');
 const buttonHudPositionSelect = document.getElementById('button-hud-position');
-const popoutButtonHudBtn = document.getElementById('popout-button-hud');
+const detachButtonHudBtn = document.getElementById('detach-button-hud');
 const axPitchVal = document.getElementById('ax-pitch-val');
 const axRollVal = document.getElementById('ax-roll-val');
 const axYawVal = document.getElementById('ax-yaw-val');
@@ -2127,8 +2132,11 @@ const axYawVal = document.getElementById('ax-yaw-val');
 const DISPLAY_PREFS_KEY = 'overlay-display-prefs';
 try {
   const saved = JSON.parse(localStorage.getItem(DISPLAY_PREFS_KEY) || '{}');
-  if (typeof saved.gimbal === 'boolean') showGimbalCheck.checked = saved.gimbal;
-  if (typeof saved.gimbalFull === 'boolean') gimbalFullCheck.checked = saved.gimbalFull;
+  // Back-compat: the Gyro HUD prefs were `gimbal`/`gimbalFull` before the rename.
+  const gyroHudPref = typeof saved.gyroHud === 'boolean' ? saved.gyroHud : saved.gimbal;
+  if (typeof gyroHudPref === 'boolean') showGyroHudCheck.checked = gyroHudPref;
+  const gyroHudFullPref = typeof saved.gyroHudFull === 'boolean' ? saved.gyroHudFull : saved.gimbalFull;
+  if (typeof gyroHudFullPref === 'boolean') gyroHudFullCheck.checked = gyroHudFullPref;
   if (typeof saved.rollHud === 'boolean') showRollHudCheck.checked = saved.rollHud;
   if (typeof saved.axisReadout === 'boolean') showAxisReadoutCheck.checked = saved.axisReadout;
   if (typeof saved.buttonHud === 'boolean') showButtonHudCheck.checked = saved.buttonHud;
@@ -2139,7 +2147,7 @@ function applyDisplayToggles() {
   document.body.classList.toggle('show-title', showTitleCheck.checked);
   document.body.classList.toggle('show-gyro', showGyroCheck.checked);
   document.body.classList.toggle('show-gear', showGearCheck.checked);
-  document.body.classList.toggle('show-gimbal', showGimbalCheck.checked);
+  document.body.classList.toggle('show-gyro-hud', showGyroHudCheck.checked);
   document.body.classList.toggle('hide-roll-hud', !showRollHudCheck.checked);
   document.body.classList.toggle('show-axis-readout', showAxisReadoutCheck.checked);
   document.body.classList.toggle('show-button-hud', showButtonHudCheck.checked);
@@ -2149,12 +2157,12 @@ function applyDisplayToggles() {
     buttonHud.classList.remove('pos-bottom-left', 'pos-bottom-right', 'pos-top-left', 'pos-top-right');
     buttonHud.classList.add('pos-' + (buttonHudPositionSelect.value || 'bottom-left'));
   }
-  if (showGimbalCheck.checked) ensureGimbal();
-  if (gimbal) gimbal.fullMode = gimbalFullCheck.checked;
+  if (showGyroHudCheck.checked) ensureGimbal();
+  if (gimbal) gimbal.fullMode = gyroHudFullCheck.checked;
   try {
     localStorage.setItem(DISPLAY_PREFS_KEY, JSON.stringify({
-      gimbal: showGimbalCheck.checked,
-      gimbalFull: gimbalFullCheck.checked,
+      gyroHud: showGyroHudCheck.checked,
+      gyroHudFull: gyroHudFullCheck.checked,
       rollHud: showRollHudCheck.checked,
       axisReadout: showAxisReadoutCheck.checked,
       buttonHud: showButtonHudCheck.checked,
@@ -2166,7 +2174,7 @@ function applyDisplayToggles() {
 let gimbal = null;
 function ensureGimbal() {
   if (gimbal) return;
-  const gimbalCanvas = document.getElementById('gimbal-canvas');
+  const gimbalCanvas = document.getElementById('gyro-hud-canvas');
   if (!gimbalCanvas) return;
   gimbal = new GyroGimbal(gimbalCanvas);
   gimbal.setRingColors(axisColors); // rings track the Axis (Pitch/Roll/Yaw) colors
@@ -2176,8 +2184,8 @@ function ensureGimbal() {
 showTitleCheck.addEventListener('change', applyDisplayToggles);
 showGyroCheck.addEventListener('change', applyDisplayToggles);
 showGearCheck.addEventListener('change', applyDisplayToggles);
-showGimbalCheck.addEventListener('change', applyDisplayToggles);
-gimbalFullCheck.addEventListener('change', applyDisplayToggles);
+showGyroHudCheck.addEventListener('change', applyDisplayToggles);
+gyroHudFullCheck.addEventListener('change', applyDisplayToggles);
 showRollHudCheck.addEventListener('change', applyDisplayToggles);
 showAxisReadoutCheck.addEventListener('change', applyDisplayToggles);
 showButtonHudCheck.addEventListener('change', applyDisplayToggles);
@@ -2193,7 +2201,7 @@ function wireDetachButton(btnId, kind) {
     await window.electronAPI.openHudWindow(kind, currentControllerType, currentGreenScreen());
   });
 }
-wireDetachButton('popout-button-hud', 'button');
+wireDetachButton('detach-button-hud', 'button');
 wireDetachButton('detach-gyro-hud', 'gyro');
 wireDetachButton('detach-axis-hud', 'axis');
 wireDetachButton('detach-roll-hud', 'roll');
@@ -2269,7 +2277,7 @@ if (window.electronAPI) {
     // even over interactive controls or while editing layout — a reliable way
     // to reposition the overlay when the normal grab areas are covered.
     if (!e.ctrlKey) {
-      // While editing the pop-out layout, click-drag positions parts — never
+      // While editing the float layout, click-drag positions parts — never
       // move the window (otherwise the OS window-move eats the drag).
       if (layoutEditing) return;
       if (e.target instanceof Element && e.target.closest(INTERACTIVE_SELECTOR)) return;
