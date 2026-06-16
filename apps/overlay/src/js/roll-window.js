@@ -70,13 +70,7 @@ function update(leanDeg) {
   arrowRight.style.color = t > 0.05 ? color : '#888';
 }
 
-// ── Green-screen carry-over ──
-function applyGreenScreen(on, color) {
-  document.body.style.background = on ? (color || '#00b140') : 'transparent';
-}
-const params = new URLSearchParams(window.location.search);
-applyGreenScreen(params.get('gs') === '1', params.get('gsColor'));
-window.electronAPI?.onHudGreenScreen?.((gs) => applyGreenScreen(gs.on, gs.color));
+// Window chrome (drag / close / green-screen) is handled by hud-window-chrome.js.
 
 initArc();
 update(0);
@@ -88,6 +82,3 @@ if (window.electronAPI?.onHudState) {
     update(s.active ? (s.leanDeg || 0) : 0);
   });
 }
-
-const closeBtn = document.getElementById('close-btn');
-if (closeBtn) closeBtn.addEventListener('click', () => window.electronAPI?.closeWindow?.());

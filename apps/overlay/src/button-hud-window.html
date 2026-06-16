@@ -14,24 +14,8 @@
     user-select: none;
   }
 
-  /* Whole window is draggable so the user can reposition it on any monitor.
-     The HUD is display-only, so the drag layer sits ABOVE it (z-index above the
-     HUD content) — grabbing anywhere moves the window. The close button opts
-     out via a higher z-index + no-drag. */
-  #drag-region {
-    position: fixed;
-    inset: 0;
-    -webkit-app-region: drag;
-    z-index: 150;
-  }
-
-  /* No-drag hover zone (the drag layer doesn't deliver mouse events, so
-     body:hover is unreliable). Large corner area reveals the × on hover. */
-  #close-zone {
-    position: fixed; top: 0; right: 0; width: 64px; height: 64px;
-    -webkit-app-region: no-drag; z-index: 199;
-  }
-  /* Close button — fixed top-right, no-drag so it's clickable */
+  /* Dragging is JS-based (hud-window-chrome.js) so mouse events still reach the
+     DOM — the whole window drags AND the close × shows on hovering anywhere. */
   #close-btn {
     position: fixed;
     top: 6px; right: 6px;
@@ -43,12 +27,11 @@
     font-size: 12px;
     line-height: 1;
     cursor: pointer;
-    -webkit-app-region: no-drag;
     z-index: 200;
     opacity: 0;
     transition: opacity 120ms linear;
   }
-  #close-zone:hover #close-btn { opacity: 1; }
+  body:hover #close-btn { opacity: 1; }
   #close-btn:hover { background: rgba(255, 50, 50, 0.6); color: #fff; }
 
   /* Controller-name banner — bottom-center, only on hover so it doesn't
@@ -165,8 +148,7 @@
 </head>
 <body>
 
-<div id="drag-region"></div>
-<div id="close-zone"><button id="close-btn" title="Close">&times;</button></div>
+<button id="close-btn" title="Close">&times;</button>
 <div id="profile-name">—</div>
 
 <div id="button-hud">
@@ -219,6 +201,7 @@
      rather than the @usersfirst/controller-visualizer barrel, which
      would transitively need `three` in the importmap. The popout has
      no 3D scene; the bare specifier just isn't needed here. -->
+<script src="js/hud-window-chrome.js"></script>
 <script type="module" src="js/button-hud-window.js"></script>
 </body>
 </html>

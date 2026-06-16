@@ -20,13 +20,7 @@ try {
   new ResizeObserver(() => gimbal.resize()).observe(canvas);
 } catch (_) { /* ResizeObserver unavailable — fixed-size window still works */ }
 
-// ── Green-screen carry-over (initial via open query, live via broadcast) ──
-function applyGreenScreen(on, color) {
-  document.body.style.background = on ? (color || '#00b140') : 'transparent';
-}
-const params = new URLSearchParams(window.location.search);
-applyGreenScreen(params.get('gs') === '1', params.get('gsColor'));
-window.electronAPI?.onHudGreenScreen?.((gs) => applyGreenScreen(gs.on, gs.color));
+// Window chrome (drag / close / green-screen) is handled by hud-window-chrome.js.
 
 // Initial paint so the gimbal is visible before the first state arrives.
 gimbal.update(null);
@@ -44,11 +38,4 @@ if (window.electronAPI?.onHudState) {
   });
 } else {
   console.warn('[gyro window] electronAPI.onHudState is undefined — preload did not bind; gyro will not update.');
-}
-
-const closeBtn = document.getElementById('close-btn');
-if (closeBtn) {
-  closeBtn.addEventListener('click', () => {
-    if (window.electronAPI?.closeWindow) window.electronAPI.closeWindow();
-  });
 }

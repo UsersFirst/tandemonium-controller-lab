@@ -14,24 +14,17 @@
   /* The gimbal renders on this canvas; the transparent drag layer sits on top
      so the whole (frameless) window can be repositioned on any monitor. */
   #gyro-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
-  #drag-region { position: fixed; inset: 0; -webkit-app-region: drag; z-index: 1; }
-  /* No-drag hover zone in the top-right corner. A drag layer doesn't deliver
-     mouse events to the DOM, so we need a no-drag area to sense the hover; make
-     it generously larger than the button so it's easy to find. */
-  #close-zone {
-    position: fixed; top: 0; right: 0; width: 64px; height: 64px;
-    -webkit-app-region: no-drag; z-index: 50;
-  }
+  /* Dragging is JS-based (hud-window-chrome.js), so mouse events still reach the
+     DOM — the close × is revealed by hovering ANYWHERE in the window. */
   #close-btn {
     position: fixed; top: 6px; right: 6px;
     width: 20px; height: 20px;
-    -webkit-app-region: no-drag;
     background: rgba(255,255,255,0.12); border: none; border-radius: 50%;
     color: #ccc; font-size: 12px; line-height: 1; cursor: pointer; z-index: 51;
     display: flex; align-items: center; justify-content: center;
-    opacity: 0; transition: opacity 0.15s; /* shown only on hover of the zone */
+    opacity: 0; transition: opacity 0.15s;
   }
-  #close-zone:hover #close-btn { opacity: 1; }
+  body:hover #close-btn { opacity: 1; }
   #close-btn:hover { background: rgba(255,255,255,0.25); color: #fff; }
 </style>
 <script>
@@ -59,8 +52,8 @@
 </head>
 <body>
   <canvas id="gyro-canvas"></canvas>
-  <div id="drag-region"></div>
-  <div id="close-zone"><button id="close-btn" title="Close">&times;</button></div>
+  <button id="close-btn" title="Close">&times;</button>
+  <script src="js/hud-window-chrome.js"></script>
   <script type="module" src="js/gyro-window.js"></script>
 </body>
 </html>

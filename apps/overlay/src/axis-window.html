@@ -21,22 +21,16 @@
   #axis .ax-pitch { color: var(--ax-pitch, #44dd66); }
   #axis .ax-roll  { color: var(--ax-roll,  #ee4455); }
   #axis .ax-yaw   { color: var(--ax-yaw,   #4488ff); }
-  /* Display-only content; the drag layer sits on top so the whole window drags. */
-  #drag-region { position: fixed; inset: 0; -webkit-app-region: drag; z-index: 10; }
-  /* No-drag hover zone (drag layers don't deliver mouse events) — large enough
-     to find easily; reveals the × on hover. */
-  #close-zone {
-    position: fixed; top: 0; right: 0; width: 64px; height: 64px;
-    -webkit-app-region: no-drag; z-index: 50;
-  }
+  /* Dragging is JS-based (hud-window-chrome.js); the × shows on hovering
+     anywhere in the window. */
   #close-btn {
     position: fixed; top: 6px; right: 6px; width: 20px; height: 20px;
-    -webkit-app-region: no-drag; background: rgba(255,255,255,0.12); border: none;
+    background: rgba(255,255,255,0.12); border: none;
     border-radius: 50%; color: #ccc; font-size: 12px; line-height: 1; cursor: pointer;
     z-index: 51; display: flex; align-items: center; justify-content: center;
     opacity: 0; transition: opacity 0.15s;
   }
-  #close-zone:hover #close-btn { opacity: 1; }
+  body:hover #close-btn { opacity: 1; }
   #close-btn:hover { background: rgba(255,255,255,0.25); color: #fff; }
 </style>
 </head>
@@ -46,8 +40,8 @@
     <span class="ax-roll" id="ax-roll">0°</span>
     <span class="ax-yaw" id="ax-yaw">0°</span>
   </div>
-  <div id="drag-region"></div>
-  <div id="close-zone"><button id="close-btn" title="Close">&times;</button></div>
+  <button id="close-btn" title="Close">&times;</button>
+  <script src="js/hud-window-chrome.js"></script>
   <script type="module" src="js/axis-window.js"></script>
 </body>
 </html>

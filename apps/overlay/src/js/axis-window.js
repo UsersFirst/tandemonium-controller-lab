@@ -12,13 +12,7 @@ const elR = document.getElementById('ax-roll');
 const elY = document.getElementById('ax-yaw');
 const root = document.documentElement;
 
-// ── Green-screen carry-over ──
-function applyGreenScreen(on, color) {
-  document.body.style.background = on ? (color || '#00b140') : 'transparent';
-}
-const params = new URLSearchParams(window.location.search);
-applyGreenScreen(params.get('gs') === '1', params.get('gsColor'));
-window.electronAPI?.onHudGreenScreen?.((gs) => applyGreenScreen(gs.on, gs.color));
+// Window chrome (drag / close / green-screen) is handled by hud-window-chrome.js.
 
 if (window.electronAPI?.onHudState) {
   window.electronAPI.onHudState((s) => {
@@ -33,6 +27,3 @@ if (window.electronAPI?.onHudState) {
     elY.textContent = Math.round(s.yaw || 0) + '°';
   });
 }
-
-const closeBtn = document.getElementById('close-btn');
-if (closeBtn) closeBtn.addEventListener('click', () => window.electronAPI?.closeWindow?.());
