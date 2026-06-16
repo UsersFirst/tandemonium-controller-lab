@@ -1,5 +1,11 @@
 # tandemonium-controller-lab
 
+<p align="center">
+  <a href="https://youtu.be/2cL5fkGg2FA" title="Watch the demo on YouTube">
+    <img src="https://img.youtube.com/vi/2cL5fkGg2FA/hqdefault.jpg" alt="tandemonium-controller-lab demo — click to watch on YouTube" width="640">
+  </a>
+</p>
+
 Controller driver lab extracted from [Tandemonium](https://github.com/petegordon/Tandemonium). Vendor-agnostic gamepad drivers, a 3D visualizer, and a slot/claim manager for multi-controller coordination.
 
 Pre-1.0 — the API will change.
