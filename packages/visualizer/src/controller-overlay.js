@@ -134,8 +134,11 @@ export class ControllerOverlay {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.3;
+    // No tone mapping: ACES Filmic desaturated/hue-shifted the picked highlight
+    // color (the press/grip emissive read muted). Linear output keeps colors at
+    // full saturation; brightness comes from the metalness fix + lights rather
+    // than exposure (which NoToneMapping ignores).
+    this.renderer.toneMapping = THREE.NoToneMapping;
     if (transparent) {
       this.renderer.setClearColor(0x000000, 0);
     }
@@ -164,14 +167,14 @@ export class ControllerOverlay {
     this.controls.maxDistance = 2;
 
     // Lighting — studio setup with strong front light
-    const ambient = new THREE.AmbientLight(0xffffff, 0.85);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
     this.scene.add(ambient);
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.25);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
     keyLight.position.set(2, 3, 2);
     this.scene.add(keyLight);
 
-    const frontLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    const frontLight = new THREE.DirectionalLight(0xffffff, 0.8);
     frontLight.position.set(0, 1, 3);
     this.scene.add(frontLight);
 
@@ -2023,9 +2026,10 @@ export class ControllerOverlay {
           blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
         });
         // Cylinder: diameter = width, height = length. Built along Y, rotated so
-        // its axis runs front-to-back (model Z, the handle's long axis).
+        // its axis runs front-to-back (model Z, the handle's long axis). The
+        // 0.65 factor keeps the longest setting from spanning the whole handle.
         const radius = (s * w) / 2;
-        const geo = new THREE.CylinderGeometry(radius, radius, s * len, 20);
+        const geo = new THREE.CylinderGeometry(radius, radius, s * len * 0.65, 20);
         geo.rotateX(Math.PI / 2);
         obj = new THREE.Mesh(geo, mat);
       }
