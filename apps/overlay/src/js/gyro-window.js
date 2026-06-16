@@ -26,9 +26,14 @@ try {
 gimbal.update(null);
 
 const q = new THREE.Quaternion();
+let lastRingColors = ''; // skip setRingColors unless the colors actually changed
 if (window.electronAPI?.onHudState) {
   window.electronAPI.onHudState((s) => {
     if (s && typeof s.fullMode === 'boolean') gimbal.fullMode = s.fullMode;
+    if (s && s.colors) {
+      const key = s.colors.pitch + '|' + s.colors.roll + '|' + s.colors.yaw;
+      if (key !== lastRingColors) { lastRingColors = key; gimbal.setRingColors(s.colors); }
+    }
     if (s && s.active && s.q) {
       q.set(s.q.x, s.q.y, s.q.z, s.q.w);
       gimbal.update(q);

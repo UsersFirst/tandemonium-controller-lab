@@ -12,7 +12,9 @@ const GYRO_HUD_MAX_DEG = 40; // ±40°, matches the main overlay
 
 const arcBand = document.getElementById('arc-band');
 const arcTicks = document.getElementById('arc-ticks');
+const arcLabels = document.getElementById('arc-labels');
 const arcNeedle = document.getElementById('arc-needle');
+const rootStyle = document.body.style;
 const arrowLeft = document.getElementById('lean-arrow-left');
 const arrowRight = document.getElementById('lean-arrow-right');
 
@@ -50,6 +52,21 @@ function initArc() {
     }
   }
   arcTicks.innerHTML = ticks;
+
+  // Degree labels at 0 / ±20 / ±40, just inside the band (mirrors the main
+  // overlay). Colored + dimmed via the --roll-label-* CSS vars on <body>.
+  let labels = '';
+  const Rlabel = 80;
+  for (const pct of [0, 0.5, 1.0]) {
+    for (const sign of (pct === 0 ? [1] : [-1, 1])) {
+      const a = sign * pct * maxRad;
+      const lx = (Math.sin(a) * Rlabel).toFixed(2);
+      const ly = (-Math.cos(a) * Rlabel).toFixed(2);
+      const deg = Math.round(pct * GYRO_HUD_MAX_DEG);
+      labels += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-size="11">${deg}</text>`;
+    }
+  }
+  arcLabels.innerHTML = labels;
 }
 
 function update(leanDeg) {
@@ -78,7 +95,14 @@ update(0);
 if (window.electronAPI?.onHudState) {
   window.electronAPI.onHudState((s) => {
     if (!s) return;
-    if (s.colors) leanColors = s.colors;
+    if (s.colors) {
+      leanColors = s.colors;
+      // Normal is also the band/tick/label color (mirrors the main overlay).
+      rootStyle.setProperty('--roll-label-color', s.colors.normal || '#ffffff');
+    }
+    if (typeof s.labelBright === 'number') {
+      rootStyle.setProperty('--roll-label-bright', String(s.labelBright));
+    }
     update(s.active ? (s.leanDeg || 0) : 0);
   });
 }

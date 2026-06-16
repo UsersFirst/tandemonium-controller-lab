@@ -257,6 +257,37 @@ function initGyroHud() {
     }
   }
   arcTicks.innerHTML = ticksHtml;
+
+  // Degree labels at 0 / ±20 / ±40, just inside the arc band. Colored and
+  // dimmed together with the band + ticks via the --roll-label-* CSS vars
+  // (see applyRollLabelStyle / index.html #arc-labels styling).
+  const arcLabels = document.getElementById('arc-labels');
+  if (arcLabels) {
+    const Rlabel = 80;
+    let labelsHtml = '';
+    for (const pct of [0, 0.5, 1.0]) {
+      for (const sign of (pct === 0 ? [1] : [-1, 1])) {
+        const a = sign * pct * maxRad;
+        const lx = (Math.sin(a) * Rlabel).toFixed(2);
+        const ly = (-Math.cos(a) * Rlabel).toFixed(2);
+        const deg = Math.round(pct * GYRO_HUD_MAX_DEG);
+        labelsHtml += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-size="11">${deg}</text>`;
+      }
+    }
+    arcLabels.innerHTML = labelsHtml;
+  }
+}
+
+// Color (= Roll "Normal" lean color) and brightness for the Roll HUD's static
+// markings — arc band, tick marks, and degree labels — driven by CSS vars on
+// #gyro-hud. The needle/arrows stay lean-banded; only the gauge furniture is
+// styled here. rollLabelBright is a 0–1 opacity multiplier.
+const _rlbSaved = localStorage.getItem('overlay:rollLabelBrightness');
+let rollLabelBright = _rlbSaved !== null ? parseInt(_rlbSaved, 10) / 100 : 1;
+function applyRollLabelStyle() {
+  if (!gyroHud) return;
+  gyroHud.style.setProperty('--roll-label-color', leanColors.normal);
+  gyroHud.style.setProperty('--roll-label-bright', String(rollLabelBright));
 }
 
 // Lean-band colors (Normal / Mid / High) — by how far the value is from center.
@@ -462,6 +493,7 @@ function hideCalibHint() {
 }
 
 initGyroHud();
+applyRollLabelStyle();
 applyHudPosition();
 
 // In browser (not Electron), set a light background since transparency isn't available
@@ -1093,6 +1125,7 @@ function loop() {
       q: { x: o.x, y: o.y, z: o.z, w: o.w },
       active: gyroActive,
       fullMode: gimbalFullCheck?.checked || false,
+      colors: axisColors, // ring colors track the Axis (Pitch/Roll/Yaw) colors
     });
   }
 
@@ -1153,7 +1186,7 @@ function loop() {
       _hudEuler.setFromQuaternion(gyroFusion.orientation, 'XYZ');
       leanDeg = -_hudEuler.z * (180 / Math.PI);
     }
-    window.electronAPI.sendHudState('roll', { leanDeg, active: gyroActive, colors: leanColors });
+    window.electronAPI.sendHudState('roll', { leanDeg, active: gyroActive, colors: leanColors, labelBright: rollLabelBright });
   }
 }
 
@@ -1987,8 +2020,26 @@ if (shineSlider) {
   const el = document.getElementById(id);
   if (!el) return;
   el.value = leanColors[key];
-  el.addEventListener('input', (e) => { leanColors[key] = e.target.value; localStorage.setItem(ls, e.target.value); });
+  el.addEventListener('input', (e) => {
+    leanColors[key] = e.target.value;
+    localStorage.setItem(ls, e.target.value);
+    // Normal is also the Roll HUD label/tick/band color — refresh the gauge.
+    if (key === 'normal') applyRollLabelStyle();
+  });
 });
+
+// ── Roll HUD label/tick brightness ──
+// One slider dims the Roll HUD's static markings (band + ticks + degree
+// labels) together; forwarded to the detached Roll window via its IPC state.
+const rollLabelBrightSlider = document.getElementById('roll-label-brightness');
+if (rollLabelBrightSlider) {
+  rollLabelBrightSlider.value = String(Math.round(rollLabelBright * 100));
+  rollLabelBrightSlider.addEventListener('input', (e) => {
+    rollLabelBright = parseInt(e.target.value, 10) / 100;
+    localStorage.setItem('overlay:rollLabelBrightness', e.target.value);
+    applyRollLabelStyle();
+  });
+}
 
 // ── Axis colors: Pitch / Roll / Yaw (CSS vars drive the readout; axisColors is
 // forwarded to the detached Axis window) ──
@@ -2004,6 +2055,9 @@ function applyAxisColor(varName, value) { document.documentElement.style.setProp
     axisColors[key] = e.target.value;
     applyAxisColor(varName, e.target.value);
     localStorage.setItem(ls, e.target.value);
+    // Keep the 3D gimbal rings in sync (the detached gyro window picks the
+    // new colors up via the per-frame `colors` field in its IPC state).
+    if (gimbal) gimbal.setRingColors(axisColors);
   });
 });
 
@@ -2115,6 +2169,7 @@ function ensureGimbal() {
   const gimbalCanvas = document.getElementById('gimbal-canvas');
   if (!gimbalCanvas) return;
   gimbal = new GyroGimbal(gimbalCanvas);
+  gimbal.setRingColors(axisColors); // rings track the Axis (Pitch/Roll/Yaw) colors
   new ResizeObserver(() => gimbal.resize()).observe(gimbalCanvas);
 }
 

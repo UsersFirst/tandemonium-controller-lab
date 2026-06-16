@@ -698,6 +698,23 @@
   #gyro-hud.pos-below { bottom: 4%; }
   #gyro-hud.pos-above { top: 4%; }
 
+  /* Roll HUD static markings (band + ticks + degree labels) share one color
+     (the Roll "Normal" lean color) and one brightness multiplier, both set as
+     CSS vars from app.js. The needle/arrows stay lean-banded. CSS presentation
+     properties here override the SVG fill/stroke attributes in the markup. */
+  #gyro-hud { --roll-label-color: #ffffff; --roll-label-bright: 1; }
+  #gyro-hud #arc-band {
+    fill: var(--roll-label-color); stroke: var(--roll-label-color);
+    fill-opacity: calc(0.08 * var(--roll-label-bright));
+    stroke-opacity: calc(0.25 * var(--roll-label-bright));
+  }
+  #gyro-hud #arc-ticks { stroke: var(--roll-label-color); opacity: var(--roll-label-bright); }
+  #gyro-hud #arc-labels {
+    fill: var(--roll-label-color); opacity: var(--roll-label-bright);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-weight: 600;
+  }
+
   #arc-svg {
     display: block;
     width: min(55vw, 240px);
@@ -897,6 +914,10 @@
       <input type="color" id="lean-color-mid" value="#ffaa22" title="Mid lean">
       <input type="color" id="lean-color-high" value="#ff4444" title="High lean">
     </span>
+  </div>
+  <div class="setting-row">
+    <label title="Brightness of the Roll HUD's band, tick marks, and degree labels (uses the Normal color).">Roll Labels Brightness</label>
+    <input type="range" id="roll-label-brightness" min="0" max="100" value="100" style="width:90px;accent-color:#3388ff;">
   </div>
   <div class="setting-row">
     <label>Show Axis HUD</label>
@@ -1105,6 +1126,8 @@
     <path id="arc-band" d="" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
     <!-- Tick marks -->
     <g id="arc-ticks" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"></g>
+    <!-- Degree labels (0 / ±20 / ±40) -->
+    <g id="arc-labels"></g>
     <!-- Needle -->
     <line id="arc-needle" x1="0" y1="-4" x2="0" y2="-22" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
     <!-- Center dot -->

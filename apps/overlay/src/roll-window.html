@@ -31,6 +31,17 @@
   }
   body:hover #close-btn { opacity: 1; }
   #close-btn:hover { background: rgba(255,255,255,0.25); color: #fff; }
+
+  /* Roll HUD static markings — color + brightness forwarded from the main
+     overlay (Roll "Normal" color, label brightness). Mirrors index.html. */
+  body { --roll-label-color: #ffffff; --roll-label-bright: 1; }
+  #arc-band {
+    fill: var(--roll-label-color); stroke: var(--roll-label-color);
+    fill-opacity: calc(0.08 * var(--roll-label-bright));
+    stroke-opacity: calc(0.25 * var(--roll-label-bright));
+  }
+  #arc-ticks { stroke: var(--roll-label-color); opacity: var(--roll-label-bright); }
+  #arc-labels { fill: var(--roll-label-color); opacity: var(--roll-label-bright); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -38,6 +49,7 @@
     <svg id="arc-svg" viewBox="-120 -105 240 115">
       <path id="arc-band" d="" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
       <g id="arc-ticks" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"></g>
+      <g id="arc-labels"></g>
       <line id="arc-needle" x1="0" y1="-4" x2="0" y2="-22" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
       <circle cx="0" cy="0" r="2" fill="rgba(255,255,255,0.4)"/>
     </svg>
