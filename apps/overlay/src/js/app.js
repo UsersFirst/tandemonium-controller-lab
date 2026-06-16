@@ -1127,7 +1127,10 @@ function loop() {
 // (or toggleSettings, which delegates). Direct settingsPanel.classList
 // changes are forbidden — they bypass this guard.
 
-const PUCK_ALLOWED_SETTINGS_SOURCES = new Set(['gear-click', 'close-button']);
+// Ctrl+Right-Click is whitelisted too: it's a deliberate modified gesture the
+// lizard-mode phantom right-clicks never produce, so it's the reliable way to
+// open settings when the gear is hidden AND a Puck is connected.
+const PUCK_ALLOWED_SETTINGS_SOURCES = new Set(['gear-click', 'close-button', 'ctrl-contextmenu']);
 
 function setSettingsVisible(visible, source) {
   if (puckConnected && !PUCK_ALLOWED_SETTINGS_SOURCES.has(source)) return;
@@ -1732,9 +1735,14 @@ document.getElementById('btn-close-settings').addEventListener('click', () => {
 // app re-initializes from defaults.
 document.getElementById('btn-reset-defaults').addEventListener('click', () => {
   if (!confirm('Reset ALL overlay settings to their defaults? This clears your saved customizations.')) return;
+  // Clear every overlay key — both the `overlay:` settings and the
+  // `overlay-display-prefs` blob (note: no colon, so a `overlay:` filter misses it).
   for (const k of Object.keys(localStorage)) {
-    if (k.startsWith('overlay:')) localStorage.removeItem(k);
+    if (k.startsWith('overlay')) localStorage.removeItem(k);
   }
+  // Force the settings gear visible so a reset can never strand the user with a
+  // hidden gear (the in-handle Ctrl+Right-Click is the other way back in).
+  try { localStorage.removeItem('overlay-display-prefs'); } catch (e) { /* ignore */ }
   location.reload();
 });
 
@@ -2026,14 +2034,15 @@ if (popoutButtonHudBtn) {
 }
 applyDisplayToggles(); // apply defaults (all unchecked = all hidden)
 
-// Right-click opens settings (needed when gear icon is hidden). When
-// Puck is connected this is silently ignored by setSettingsVisible —
-// the lizard-mode firmware fires phantom right-clicks at unpredictable
-// intervals that no rate-limit can hold off.
+// Right-click opens settings (needed when gear icon is hidden). Plain
+// right-click is silently ignored while a Puck is connected — the lizard-mode
+// firmware fires phantom right-clicks at unpredictable intervals that no
+// rate-limit can hold off. CTRL+Right-Click is whitelisted past that guard, so
+// it always opens settings even with a Puck connected and the gear hidden.
 window.addEventListener('contextmenu', (e) => {
   if (settingsPanel.contains(e.target)) return;
   e.preventDefault();
-  toggleSettings('contextmenu');
+  toggleSettings(e.ctrlKey ? 'ctrl-contextmenu' : 'contextmenu');
 });
 
 if (window.electronAPI) {

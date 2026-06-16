@@ -877,7 +877,9 @@
   </div>
   <div class="setting-row">
     <label>Show Gear Icon</label>
-    <input type="checkbox" id="show-gear" checked>
+    <!-- autocomplete=off so a reload can't restore a stale "unchecked" state and
+         strand the user with a hidden gear; it honors the `checked` default. -->
+    <input type="checkbox" id="show-gear" checked autocomplete="off">
   </div>
   <div class="setting-row">
     <label>Show Roll HUD</label>
