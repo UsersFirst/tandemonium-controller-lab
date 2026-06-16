@@ -369,10 +369,13 @@ export const PROFILES = {
       right_shoulder: { back: 0.08, up: 0.12, tiltUp: 65 },
       left_trigger:   { back: 0.22, up: 0.24, tiltUp: 65 },
       right_trigger:  { back: 0.22, up: 0.24, tiltUp: 65 },
-      paddle1: { up: -0.42, side: 0.10 },
-      paddle2: { up: -0.42, side: 0.10 },
-      paddle3: { up: -0.42, side: 0.10 },
-      paddle4: { up: -0.42, side: 0.10 },
+      // Paddles pop toward the CENTER and down/forward, so from the top view
+      // they sit at the bottom-center, between the handle ends, and stay
+      // visible. up<0 = down, back<0 = toward the front, side<0 = inward.
+      paddle1: { up: -0.18, back: -0.16, side: -0.06 },
+      paddle2: { up: -0.18, back: -0.16, side: -0.06 },
+      paddle3: { up: -0.18, back: -0.16, side: -0.06 },
+      paddle4: { up: -0.18, back: -0.16, side: -0.06 },
     },
     // Capacitive grip sensors (digital): glow these meshes while the grip is
     // held (driver parsed.grips). Highlighted via overlay.setGripState.
@@ -389,15 +392,16 @@ export const PROFILES = {
     // Nudge the markers outward (left farther left, right farther right), as a
     // fraction of the model width.
     gripMarkerSideOffset: 0.06,
-    // Two-tone (ceski/Larf SC2 look, issue #61): light body shell + trackpads +
-    // grips + system buttons; dark accent for the controls (sticks, face
+    // Two-tone (ceski/Larf SC2 look, issue #61): light body = shells + grips
+    // only. Everything else is dark accent — the trackpads, the system buttons
+    // (view/menu/steam + the "…" quick-access), and the controls (sticks, face
     // buttons, dpad, shoulders, triggers, paddles).
     bodyColorMeshes: [
-      'top_shell', 'bottom_shell', 'misc1', 'misc2', 'left_gripsense', 'right_gripsense',
-      'back_button', 'start_button', 'guide_button',
-      'touchpad', 'touch_point1', 'touch_point2',
+      'top_shell', 'bottom_shell', 'left_gripsense', 'right_gripsense',
     ],
     accentColorMeshes: [
+      'misc1', 'misc2', 'touchpad', 'touch_point1', 'touch_point2',
+      'back_button', 'start_button', 'guide_button',
       'south_button', 'east_button', 'west_button', 'north_button',
       'dpad_up', 'dpad_down', 'dpad_left', 'dpad_right',
       'left_stick_base', 'left_stick_ring', 'left_stick_cap',

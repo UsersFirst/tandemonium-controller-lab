@@ -1879,7 +1879,10 @@ export class ControllerOverlay {
       const mat = mesh?.material;
       if (mat && 'emissive' in mat) {
         mat.emissive.set(this._gripColor); // set each frame so a color change applies live
-        mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, barOn ? 0.6 : 0, LERP_SPEED);
+        // Bar glow scales with the brightness slider too, so it can reach full
+        // brightness at max (and stays subtle at the lower default).
+        const barTarget = barOn ? this._gripBrightness * 1.5 : 0;
+        mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, barTarget, LERP_SPEED);
       }
       // (2) always-on-top billboard glow marker (brightness = peak opacity)
       const marker = this._gripMarkers?.[side];
