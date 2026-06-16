@@ -1134,19 +1134,6 @@
   </div>
 </div>
 
-<!-- Steam Controller Puck status banner. Shown only when a Puck is
-     actively connected. Informational, not a warning — our heartbeat
-     suppresses the firmware's mouse/keyboard emulation while the
-     overlay runs. Closing the overlay restores default Puck behavior
-     (mouse + keyboard) on the desktop. Click × to dismiss for the session. -->
-<div id="puck-status-banner" hidden>
-  <span class="banner-text">
-    <strong>Steam Controller Puck</strong> mode active — mouse/keyboard emulation suppressed while overlay runs.
-    Closing the overlay restores default Puck behavior. <a href="https://github.com/UsersFirst/tandemonium-controller-lab/issues/8" target="_blank">Details</a>
-  </span>
-  <button id="puck-status-dismiss" type="button" aria-label="Dismiss">&times;</button>
-</div>
-
 <!-- No-controller splash (shown until a gamepad connects) -->
 <div id="no-controller">
   <div class="splash-icon">
