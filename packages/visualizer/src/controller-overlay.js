@@ -74,7 +74,7 @@ export class ControllerOverlay {
 
     // Emissive "press" glow color for digital buttons, stick clicks, and
     // triggers (pre-bottom). Defaults to yellow; override via setPressColor.
-    this._pressColor = 0xffcc00;
+    this._pressColor = 0xff0000; // default highlight: red
     this._touchpadBounds = null; // { minX, maxX, minZ, maxZ, topY, mesh }
     this._trackpads = null; // multi-pad controllers (Steam Controller): per-pad indicator config
     this._touchpadClickState = false;
@@ -93,17 +93,17 @@ export class ControllerOverlay {
     // Grip-sense highlighting (Steam Controller capacitive grips)
     this._gripMarkers = null;   // { left, right } billboard sprites, on top
     this._gripEnabled = true;   // on-top grip GLOW markers on/off; toggled from settings
-    this._gripBarsVisible = true; // grip-sense BAR meshes shown (and highlighting on touch); from settings
+    this._gripBarsVisible = false; // grip-sense side BAR meshes hidden by default; from settings
     // Grip glow marker size in 1..5 steps of the base unit. width = across the
     // handle, length = front-to-back (model Z, the handle's long axis).
     // (1,1) renders a small circle; anything larger is a bar.
     this._gripGlowWidth = 2;
-    this._gripGlowLength = 3;
+    this._gripGlowLength = 4;
     this._gripMarkerSpecs = null; // per-side { pos, baseSize } for (re)building markers on size change
-    this._gripBrightness = 0.95; // on-top marker peak opacity (settings slider)
+    this._gripBrightness = 0.5; // on-top marker peak opacity (settings slider); subtle by default (#61)
     // Grip highlight color — shares the global highlight color (#45's
     // overlay:highlightColor / --hl-color). Default matches that picker.
-    this._gripColor = 0x3388ff;
+    this._gripColor = 0xff0000; // follows the highlight default: red
 
     // ── Layout editor (#51): click-drag + keyboard-rotate the floatable parts ──
     this._editMode = false;        // editing the pop-out layout right now
@@ -134,14 +134,25 @@ export class ControllerOverlay {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.2;
+    // No tone mapping: ACES Filmic desaturated/hue-shifted the picked highlight
+    // color (the press/grip emissive read muted). Linear output keeps colors at
+    // full saturation; brightness comes from the metalness fix + lights rather
+    // than exposure (which NoToneMapping ignores).
+    this.renderer.toneMapping = THREE.NoToneMapping;
     if (transparent) {
       this.renderer.setClearColor(0x000000, 0);
     }
 
     // Scene
     this.scene = new THREE.Scene();
+
+    // Neutral studio environment for reflections (the "shine"). Materials only
+    // use it when their envMapIntensity > 0, which _applyShine drives off the
+    // Shine setting — so at shine 0 the model is matte and unchanged. Loaded
+    // dynamically + guarded so a missing/incompatible RoomEnvironment addon
+    // disables Shine instead of breaking the whole overlay.
+    this._shine = 0.35; // 0..1: gloss (lower roughness) + reflection (envMapIntensity); default 35%
+    this._initEnvironment();
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(
@@ -308,6 +319,16 @@ export class ControllerOverlay {
         // Clone material so each mesh can animate independently
         if (child.material) {
           child.material = child.material.clone();
+          // Models exported without materials get glTF's default (metalness 1,
+          // roughness 1). A fully-metallic surface with no environment map
+          // renders dark/gray — that's why the bare Steam GLB looked dim. Clamp
+          // metalness down so the lights actually read on the body (only lowers
+          // over-metallic materials; properly-authored ones are left alone).
+          const m = child.material;
+          if ('metalness' in m) m.metalness = Math.min(m.metalness, 0.2);
+          // No reflection until the Shine setting raises it (scene.environment
+          // is always set, so default this to 0 to keep the matte baseline).
+          if ('envMapIntensity' in m) m.envMapIntensity = 0;
         }
       }
     });
@@ -538,6 +559,17 @@ export class ControllerOverlay {
       }
     }
 
+    // Apply the profile's default two-tone theme on load (opt-in per profile so
+    // controllers with already-correct GLB materials are left untouched). The
+    // bare Steam GLB has no materials, so it needs this to render two-tone.
+    if (profile.themeOnLoad) {
+      if (profile.defaultBodyColor) this.setBodyColor(profile.defaultBodyColor);
+      if (profile.defaultAccentColor) this.setAccentColor(profile.defaultAccentColor);
+    }
+
+    // Apply the current Shine setting to the freshly-loaded materials.
+    this._applyShine();
+
     // Wrap floatable parts for the "pop-off" feature (after aliasing so every
     // profile name resolves in this.meshes).
     this._setupFloatParts(profile);
@@ -758,12 +790,16 @@ export class ControllerOverlay {
         layout: null,                   // user override { offset:Vector3, euler:{x,y,z} } or null
       };
       // Tuned parts (triggers/bumpers) are deliberately placed relative to the
-      // body, so they should rotate WITH the body (no camera-facing counter-
+      // body, so they normally rotate WITH the body (no camera-facing counter-
       // rotation) — otherwise they appear to spin independently as the gyro
       // moves and swing out of place at steep angles. An optional `tiltUp`
       // (degrees) pivots the part about its own center toward the top, so it
-      // flips up rather than just translating.
-      if (tuning) {
+      // flips up rather than just translating. EXCEPTION: a part that is also in
+      // floatFaceCamera keeps facing the camera, so it can take a tuned offset
+      // (e.g. paddles popped DOWN under the body) while still turning its flat
+      // face to the viewer.
+      const wantsFaceCam = faceCamSet.has(name);
+      if (tuning && !wantsFaceCam) {
         wrapper.stayWithBody = true;
         if (tuning.tiltUp) {
           wrapper.tiltQuat = new THREE.Quaternion().setFromAxisAngle(
@@ -771,7 +807,7 @@ export class ControllerOverlay {
           );
         }
       }
-      if (faceCamSet.has(name)) {
+      if (wantsFaceCam) {
         const normal = this._partSurfaceNormal(obj);
         if (normal) {
           wrapper.faceCamera = true;
@@ -1819,6 +1855,44 @@ export class ControllerOverlay {
   }
 
   /**
+   * Surface "shine" 0..1: glossier (lower roughness) + more reflective
+   * (envMapIntensity) as it rises. 0 = matte (each material's authored look,
+   * unchanged). Modulates from each material's ORIGINAL roughness so other
+   * controllers aren't flattened.
+   */
+  setShine(value) {
+    this._shine = Math.max(0, Math.min(1, value));
+    this._applyShine();
+  }
+
+  // Load the reflection environment lazily and defensively: a failure here only
+  // disables Shine, it never breaks model loading or the rest of the overlay.
+  async _initEnvironment() {
+    try {
+      const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
+      if (this._disposed || !this.renderer) return;
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      pmrem.dispose();
+      this._applyShine(); // a model may already be loaded
+    } catch (err) {
+      console.warn('Environment map unavailable; Shine reflections disabled.', err);
+    }
+  }
+
+  _applyShine() {
+    if (!this.model) return;
+    const shine = this._shine;
+    this.model.traverse((c) => {
+      const m = c.material;
+      if (!m || !m.isMeshStandardMaterial) return;
+      if (m.userData._origRoughness === undefined) m.userData._origRoughness = m.roughness;
+      m.roughness = m.userData._origRoughness * (1 - shine * 0.85);
+      m.envMapIntensity = shine; // 0 = no reflection (matte); up = mirror-ish sheen
+    });
+  }
+
+  /**
    * Set the color of "accent" meshes (dark parts).
    * @param {string} hexColor — CSS hex color e.g. '#1a1a1e'
    */
@@ -1860,7 +1934,10 @@ export class ControllerOverlay {
       const mat = mesh?.material;
       if (mat && 'emissive' in mat) {
         mat.emissive.set(this._gripColor); // set each frame so a color change applies live
-        mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, barOn ? 0.9 : 0, LERP_SPEED);
+        // Bar glow scales with the brightness slider too, so it can reach full
+        // brightness at max (and stays subtle at the lower default).
+        const barTarget = barOn ? this._gripBrightness * 1.5 : 0;
+        mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, barTarget, LERP_SPEED);
       }
       // (2) always-on-top billboard glow marker (brightness = peak opacity)
       const marker = this._gripMarkers?.[side];
@@ -1948,9 +2025,15 @@ export class ControllerOverlay {
       // gripMarkerHeight: 0 = grip center, 1 = controller top.
       const h = profile.gripMarkerHeight ?? 0.5;
       pos.y = pos.y + (modelBox.max.y - pos.y) * h;
-      const baseSize = Math.max(gb.max.x - gb.min.x, gb.max.z - gb.min.z) * 1.3;
-      // world == bodyGroup-local at setup (no gyro yet, bodyGroup unscaled)
-      specs[side] = { pos, baseSize };
+      // Store the handle's actual extents so the glow can be sized to stay
+      // CONTAINED inside the handle (cross-section from the thin X/Y, length
+      // from Z). world == bodyGroup-local at setup (bodyGroup unrotated).
+      specs[side] = {
+        pos,
+        dimX: gb.max.x - gb.min.x,
+        dimY: gb.max.y - gb.min.y,
+        dimZ: gb.max.z - gb.min.z,
+      };
     }
     this._gripMarkerSpecs = specs;
     this._buildGripMarkers();
@@ -1971,10 +2054,11 @@ export class ControllerOverlay {
   // (Re)build the marker objects from the stored specs at the current size.
   //  - width 1 AND length 1: a camera-facing billboard sprite (a small circle;
   //    symmetric, so yaw is moot).
-  //  - otherwise: a 3D plane pinned to the handle's broad (Y–Z) face — length
-  //    runs FRONT-TO-BACK (model Z, the handle's long axis), width across it
-  //    (Y). As a real child of the body it foreshortens/turns with the
-  //    controller (follows yaw); DoubleSide + depthTest off keep it on top.
+  //  - otherwise: a 3D CYLINDER pinned to the handle, its axis running
+  //    FRONT-TO-BACK (model Z, the handle's long axis); length sets the height,
+  //    width sets the diameter. A cylinder has volume, so unlike a flat plane it
+  //    never collapses to a line/dot at grazing angles. depthTest off keeps it
+  //    on top; as a child of the body it turns with the controller (yaw).
   _buildGripMarkers() {
     this._disposeGripMarkers();
     const specs = this._gripMarkerSpecs;
@@ -1986,28 +2070,46 @@ export class ControllerOverlay {
     for (const side of ['left', 'right']) {
       const spec = specs[side];
       if (!spec) continue;
-      const s = spec.baseSize;
+      // Size everything from the handle's own extents so the glow stays INSIDE
+      // the handle. The cross-section uses the thin X/Y; the length uses Z. The
+      // 1..5 sliders map to a fraction (v/5) of these maxima, so even the
+      // largest setting is bounded by the handle.
+      const thin = Math.min(spec.dimX, spec.dimY);
       let obj;
+      let yLift = 0;
       if (isCircle) {
         obj = new THREE.Sprite(new THREE.SpriteMaterial({
           map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
           blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
         }));
-        obj.scale.set(s, s, 1);
+        const d = thin * 0.9;
+        obj.scale.set(d, d, 1);
       } else {
+        // NORMAL blending (not additive): additive adds the glow to whatever's
+        // behind it, so it washed out over the bright white body but popped over
+        // the dark trackpads. Normal blending shows the grip color consistently
+        // regardless of what's behind/in front (fully solid at full brightness).
         const mat = new THREE.MeshBasicMaterial({
-          map: this._glowTexture, color: this._gripColor, transparent: true, opacity: 0,
-          blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
-          side: THREE.DoubleSide,
+          color: this._gripColor, transparent: true, opacity: 0,
+          blending: THREE.NormalBlending, depthTest: false, depthWrite: false,
         });
-        // Build in XY (X = length, Y = width), then rotateY so the length extent
-        // swings onto Z (front-to-back) and the normal onto X (handle's thin axis).
-        const geo = new THREE.PlaneGeometry(s * len, s * w);
-        geo.rotateY(Math.PI / 2);
+        // Cylinder: radius ≤ half the handle's thin cross-section; height ≤ the
+        // handle's Z length. Built along Y, rotated so its axis runs
+        // front-to-back (model Z, the handle's long axis).
+        const radius = (thin * 0.45) * (w / 5);
+        const height = (spec.dimZ * 1.35) * (len / 5); // ~50% longer than before
+        const geo = new THREE.CylinderGeometry(radius, radius, height, 20);
+        // Lay the cylinder front-to-back (axis → Z), then tilt it so the back
+        // (−Z) end rises ~1/3 of its length, angling it inline with the handle.
+        // asin(2/3): with a centre pivot the end rises (height/2)·(2/3) = height/3.
+        geo.rotateX(Math.PI / 2 + Math.asin(2 / 3));
         obj = new THREE.Mesh(geo, mat);
+        // Raise the whole bar on Y by ~25% of the DEFAULT (len 4) length.
+        yLift = 0.25 * (spec.dimZ * 1.35 * (4 / 5));
       }
       obj.renderOrder = 10; // draw after the model so it sits on top
       obj.position.copy(spec.pos);
+      obj.position.y += yLift;
       this.bodyGroup.add(obj);
       markers[side] = obj;
     }

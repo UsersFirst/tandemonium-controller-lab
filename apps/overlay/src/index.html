@@ -811,8 +811,8 @@
 
   <div class="setting-row">
     <label>Opacity</label>
-    <input type="range" id="opacity-slider" min="10" max="100" value="100" style="width:90px;accent-color:#3388ff;">
-    <span id="opacity-value" style="min-width:28px;text-align:right;font-size:11px;">100%</span>
+    <input type="range" id="opacity-slider" min="10" max="100" value="98" style="width:90px;accent-color:#3388ff;">
+    <span id="opacity-value" style="min-width:28px;text-align:right;font-size:11px;">98%</span>
   </div>
 
   <div class="setting-row">
@@ -825,12 +825,17 @@
     <input type="color" id="accent-color" value="#1a1a1e">
   </div>
 
+  <div class="setting-row">
+    <label title="Glossy reflective sheen on the controller. 0 = matte.">Shine</label>
+    <input type="range" id="shine-slider" min="0" max="100" value="35" style="width:90px;accent-color:#3388ff;">
+  </div>
+
   <!-- Single shared highlight-color picker. Drives the 2D HUD .pressed states
        (--hl-color), the 3D button/trigger press glow (setPressColor, #45), and
        the 3D grip-sense markers/glow (setGripColor, #49) — see applyHighlightColor. -->
   <div class="setting-row">
     <label>Highlight Color</label>
-    <input type="color" id="highlight-color" value="#3388ff">
+    <input type="color" id="highlight-color" value="#ff0000">
   </div>
 
   <div class="setting-row">
@@ -849,7 +854,11 @@
 
   <div class="setting-row">
     <label title="Float the triggers, bumpers & back paddles clear of the body so they're visible at any angle">Pop Out Controls</label>
-    <input type="checkbox" id="float-parts">
+    <input type="checkbox" id="float-parts" checked autocomplete="off">
+  </div>
+  <div class="setting-row">
+    <label title="Steam Controller: suppress the firmware's keyboard/mouse (lizard-mode) emulation while the overlay runs. Turn OFF to keep keyboard/mouse (e.g. when Steam Input is running). Takes effect on the next controller connect.">Suppress Kbd/Mouse (Steam)</label>
+    <input type="checkbox" id="suppress-lizard" checked autocomplete="off">
   </div>
 
   <div class="setting-row">
@@ -872,11 +881,13 @@
   </div>
   <div class="setting-row">
     <label>Show Gear Icon</label>
-    <input type="checkbox" id="show-gear" checked>
+    <!-- autocomplete=off so a reload can't restore a stale "unchecked" state and
+         strand the user with a hidden gear; it honors the `checked` default. -->
+    <input type="checkbox" id="show-gear" checked autocomplete="off">
   </div>
   <div class="setting-row">
     <label>Show Roll HUD</label>
-    <input type="checkbox" id="show-roll-hud" checked>
+    <input type="checkbox" id="show-roll-hud" autocomplete="off">
   </div>
   <div class="setting-row">
     <label>Show Axis Values</label>
@@ -904,19 +915,19 @@
   </div>
   <div class="setting-row">
     <label title="Front-to-back length of the grip glow along the handle (1–5). Width 1 + Length 1 = a small circle.">Grip Sense Glow Length</label>
-    <input type="range" id="grip-glow-length" min="1" max="5" step="1" value="3" style="width:90px;accent-color:#33ddaa;">
+    <input type="range" id="grip-glow-length" min="1" max="5" step="1" value="4" style="width:90px;accent-color:#33ddaa;">
   </div>
   <div class="setting-row">
     <label title="Show the grip-sense bars on the controller's left/right sides (Steam Controller). When shown, the bars highlight on touch.">Show Grip Sense Bars</label>
-    <input type="checkbox" id="grip-bars-toggle" checked>
+    <input type="checkbox" id="grip-bars-toggle" autocomplete="off">
   </div>
   <div class="setting-row">
     <label>Grip Brightness</label>
-    <input type="range" id="grip-brightness" min="10" max="100" value="95" style="width:90px;accent-color:#33ddaa;">
+    <input type="range" id="grip-brightness" min="10" max="100" value="50" style="width:90px;accent-color:#33ddaa;">
   </div>
   <div class="setting-row">
     <label title="Color of the grip-sense glow + bar highlight. Defaults to the Highlight Color; set here to override it.">Grip Sense Color</label>
-    <input type="color" id="grip-color" value="#3388ff">
+    <input type="color" id="grip-color" value="#ff0000">
   </div>
   <div class="setting-row">
     <label>Button HUD position</label>
@@ -942,6 +953,10 @@
 
   <hr class="settings-divider">
   <h3>Shortcuts</h3>
+  <div class="build-stamp" style="text-align:left; white-space:normal; margin:0 0 8px; line-height:1.4;">
+    Mouse: <strong>Ctrl + Right-Click</strong> shows/hides settings ·
+    <strong>Ctrl + Left-Click drag</strong> moves the window (use if normal click-drag won't grab).
+  </div>
   <div class="setting-row">
     <label>Settings</label>
     <span class="combo-display" id="combo-label-settings">Select + Start</span>
@@ -986,6 +1001,11 @@
   <h3>Diagnostics</h3>
   <div class="setting-row">
     <button class="settings-action-btn capture" id="btn-capture-report">CAPTURE HID REPORT</button>
+  </div>
+
+  <hr class="settings-divider">
+  <div class="setting-row">
+    <button class="settings-action-btn" id="btn-reset-defaults" title="Clear all saved overlay settings and reload with defaults">RESET TO ALL DEFAULTS</button>
   </div>
 
   <hr class="settings-divider">
@@ -1120,19 +1140,6 @@
     <div class="bh-btn bh-sm bh-grip" data-grip="l">LG</div>
     <div class="bh-btn bh-sm bh-grip" data-grip="r">RG</div>
   </div>
-</div>
-
-<!-- Steam Controller Puck status banner. Shown only when a Puck is
-     actively connected. Informational, not a warning — our heartbeat
-     suppresses the firmware's mouse/keyboard emulation while the
-     overlay runs. Closing the overlay restores default Puck behavior
-     (mouse + keyboard) on the desktop. Click × to dismiss for the session. -->
-<div id="puck-status-banner" hidden>
-  <span class="banner-text">
-    <strong>Steam Controller Puck</strong> mode active — mouse/keyboard emulation suppressed while overlay runs.
-    Closing the overlay restores default Puck behavior. <a href="https://github.com/UsersFirst/tandemonium-controller-lab/issues/8" target="_blank">Details</a>
-  </span>
-  <button id="puck-status-dismiss" type="button" aria-label="Dismiss">&times;</button>
 </div>
 
 <!-- No-controller splash (shown until a gamepad connects) -->

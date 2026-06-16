@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { ControllerOverlay, detectControllerType, PROFILES, GyroGimbal } from '@usersfirst/controller-visualizer';
-import { ControllerRegistry, SensorFusion, analyzeImuStep } from '@usersfirst/controller-core';
+import { ControllerRegistry, SensorFusion, analyzeImuStep, SteamControllerDriver } from '@usersfirst/controller-core';
 import { recordStep, buildReport, exportReport, stepsForEntry, parseImuSamples,
   areasForSteps, filterStepsByAreas, AREA_LABELS, STEP_AREAS } from './test-report.js';
 
@@ -478,9 +478,15 @@ async function init() {
     if (overlay.setGripColor) overlay.setGripColor(savedHighlight);
   }
 
-  // Apply the saved "pop-out controls" preference to the freshly-loaded model.
+  // Apply the model opacity (slider default 98%) to the freshly-loaded model.
+  if (overlay.setOpacity) {
+    const op = document.getElementById('opacity-slider');
+    overlay.setOpacity((op ? parseInt(op.value, 10) : 98) / 100);
+  }
+
+  // Apply the "pop-out controls" preference (default ON) to the new model.
   if (overlay.setFloatParts) {
-    overlay.setFloatParts(localStorage.getItem('overlay:floatParts') === '1');
+    overlay.setFloatParts(localStorage.getItem('overlay:floatParts') !== '0');
   }
 
   // Apply saved grip-sense display preferences.
@@ -1127,7 +1133,14 @@ function loop() {
 // (or toggleSettings, which delegates). Direct settingsPanel.classList
 // changes are forbidden — they bypass this guard.
 
-const PUCK_ALLOWED_SETTINGS_SOURCES = new Set(['gear-click', 'close-button']);
+// Ctrl+Right-Click is whitelisted too: it's a deliberate modified gesture the
+// lizard-mode phantom right-clicks never produce, so it's the reliable way to
+// open settings when the gear is hidden AND a Puck is connected.
+// gear-click / close-button / ctrl-contextmenu are deliberate UI gestures, and
+// 'ipc' is the tray "Show Settings" / global shortcut — all deliberate, so they
+// bypass the Puck guard (which only exists to swallow lizard-mode phantom
+// right-clicks). This guarantees a way into settings even with a Puck connected.
+const PUCK_ALLOWED_SETTINGS_SOURCES = new Set(['gear-click', 'close-button', 'ctrl-contextmenu', 'ipc']);
 
 function setSettingsVisible(visible, source) {
   if (puckConnected && !PUCK_ALLOWED_SETTINGS_SOURCES.has(source)) return;
@@ -1489,9 +1502,9 @@ function updateSyntheticFromParsed(parsed) {
 // are on the back of the controller and usually occluded). Lazily revealed the
 // first time grip data arrives, then tracks left/right state.
 let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // on-top glow markers on/off
-let gripBarsVisible = localStorage.getItem('overlay:gripBars') !== '0'; // grip-sense bar meshes shown (default on)
+let gripBarsVisible = localStorage.getItem('overlay:gripBars') === '1'; // grip-sense side bars (default OFF)
 let gripGlowWidth = parseInt(localStorage.getItem('overlay:gripGlowWidth') || '2', 10); // across-handle, 1-5
-let gripGlowLength = parseInt(localStorage.getItem('overlay:gripGlowLength') || '3', 10); // front-to-back, 1-5
+let gripGlowLength = parseInt(localStorage.getItem('overlay:gripGlowLength') || '4', 10); // front-to-back, 1-5
 // Grip-sense HUD row — toggles the LG/RG cells in the Button HUD from
 // parsed.grips (dedicated path; grips aren't in the gamepad). Revealed via
 // body.has-grips the first time a controller reports grips.
@@ -1558,7 +1571,7 @@ const gripColorInput = document.getElementById('grip-color');
 if (gripColorInput) {
   const savedGrip = localStorage.getItem('overlay:gripColor');
   const savedHl = localStorage.getItem('overlay:highlightColor');
-  gripColorInput.value = savedGrip || savedHl || '#3388ff';
+  gripColorInput.value = savedGrip || savedHl || '#ff0000';
   if (savedGrip && overlay?.setGripColor) overlay.setGripColor(savedGrip);
   gripColorInput.addEventListener('input', (e) => {
     localStorage.setItem('overlay:gripColor', e.target.value);
@@ -1598,7 +1611,10 @@ function applyHighlightColor(hex) {
 }
 if (highlightColorInput) {
   const savedHl = localStorage.getItem('overlay:highlightColor');
-  if (savedHl) { highlightColorInput.value = savedHl; applyHighlightColor(savedHl); }
+  if (savedHl) highlightColorInput.value = savedHl;
+  // Apply on load (saved value, or the red default) so the HUD, press glow and
+  // grip all pick up the default highlight without needing a manual change.
+  applyHighlightColor(highlightColorInput.value);
   highlightColorInput.addEventListener('input', (e) => {
     localStorage.setItem('overlay:highlightColor', e.target.value);
     applyHighlightColor(e.target.value);
@@ -1728,6 +1744,21 @@ document.getElementById('btn-close-settings').addEventListener('click', () => {
   setSettingsVisible(false, 'close-button');
 });
 
+// Reset every saved overlay setting (all `overlay:*` keys) and reload so the
+// app re-initializes from defaults.
+document.getElementById('btn-reset-defaults').addEventListener('click', () => {
+  if (!confirm('Reset ALL overlay settings to their defaults? This clears your saved customizations.')) return;
+  // Clear every overlay key — both the `overlay:` settings and the
+  // `overlay-display-prefs` blob (note: no colon, so a `overlay:` filter misses it).
+  for (const k of Object.keys(localStorage)) {
+    if (k.startsWith('overlay')) localStorage.removeItem(k);
+  }
+  // Force the settings gear visible so a reset can never strand the user with a
+  // hidden gear (the in-handle Ctrl+Right-Click is the other way back in).
+  try { localStorage.removeItem('overlay-display-prefs'); } catch (e) { /* ignore */ }
+  location.reload();
+});
+
 // Exit application with confirmation
 const exitConfirm = document.getElementById('exit-confirm');
 
@@ -1813,10 +1844,23 @@ document.getElementById('hud-position').addEventListener('change', () => applyHu
 // overlay eases them in/out; we just persist + forward the toggle.
 const floatPartsCheck = document.getElementById('float-parts');
 if (floatPartsCheck) {
-  floatPartsCheck.checked = localStorage.getItem('overlay:floatParts') === '1';
+  floatPartsCheck.checked = localStorage.getItem('overlay:floatParts') !== '0';
   floatPartsCheck.addEventListener('change', (e) => {
     localStorage.setItem('overlay:floatParts', e.target.checked ? '1' : '0');
     if (overlay?.setFloatParts) overlay.setFloatParts(e.target.checked);
+  });
+}
+
+// Steam Controller: suppress lizard-mode keyboard/mouse emulation (default ON).
+// Set on the driver class before connect; a change takes effect on the next
+// (re)connect. Off = leave keyboard/mouse active (e.g. let Steam Input own it).
+SteamControllerDriver.suppressLizardMode = localStorage.getItem('overlay:suppressLizard') !== '0';
+const suppressLizardCheck = document.getElementById('suppress-lizard');
+if (suppressLizardCheck) {
+  suppressLizardCheck.checked = SteamControllerDriver.suppressLizardMode;
+  suppressLizardCheck.addEventListener('change', (e) => {
+    SteamControllerDriver.suppressLizardMode = e.target.checked;
+    localStorage.setItem('overlay:suppressLizard', e.target.checked ? '1' : '0');
   });
 }
 
@@ -1878,6 +1922,18 @@ const bodyColorInput = document.getElementById('body-color');
 const accentColorInput = document.getElementById('accent-color');
 bodyColorInput.addEventListener('input', (e) => overlay.setBodyColor(e.target.value));
 accentColorInput.addEventListener('input', (e) => overlay.setAccentColor(e.target.value));
+
+// Surface shine (0 = matte). Persisted; applied on each model load too.
+const shineSlider = document.getElementById('shine-slider');
+if (shineSlider) {
+  const savedShine = localStorage.getItem('overlay:shine');
+  if (savedShine !== null) shineSlider.value = savedShine;
+  if (overlay?.setShine) overlay.setShine(parseInt(shineSlider.value, 10) / 100);
+  shineSlider.addEventListener('input', (e) => {
+    localStorage.setItem('overlay:shine', e.target.value);
+    if (overlay?.setShine) overlay.setShine(parseInt(e.target.value, 10) / 100);
+  });
+}
 
 // ── Green-screen background ────────────────────────────────────────────────
 // Paints a solid keyable color behind the (otherwise transparent) overlay so
@@ -2004,14 +2060,15 @@ if (popoutButtonHudBtn) {
 }
 applyDisplayToggles(); // apply defaults (all unchecked = all hidden)
 
-// Right-click opens settings (needed when gear icon is hidden). When
-// Puck is connected this is silently ignored by setSettingsVisible —
-// the lizard-mode firmware fires phantom right-clicks at unpredictable
-// intervals that no rate-limit can hold off.
+// Right-click opens settings (needed when gear icon is hidden). Plain
+// right-click is silently ignored while a Puck is connected — the lizard-mode
+// firmware fires phantom right-clicks at unpredictable intervals that no
+// rate-limit can hold off. CTRL+Right-Click is whitelisted past that guard, so
+// it always opens settings even with a Puck connected and the gear hidden.
 window.addEventListener('contextmenu', (e) => {
   if (settingsPanel.contains(e.target)) return;
   e.preventDefault();
-  toggleSettings('contextmenu');
+  toggleSettings(e.ctrlKey ? 'ctrl-contextmenu' : 'contextmenu');
 });
 
 if (window.electronAPI) {
@@ -2069,10 +2126,15 @@ if (window.electronAPI) {
   window.addEventListener('pointerdown', (e) => {
     // Left button only — right-click still opens settings (contextmenu).
     if (e.button !== 0 || clickThrough) return;
-    // While editing the pop-out layout, click-drag positions parts — never move
-    // the window (otherwise the OS window-move eats the drag).
-    if (layoutEditing) return;
-    if (e.target instanceof Element && e.target.closest(INTERACTIVE_SELECTOR)) return;
+    // CTRL+Left is an escape hatch: grab and move the window from ANYWHERE,
+    // even over interactive controls or while editing layout — a reliable way
+    // to reposition the overlay when the normal grab areas are covered.
+    if (!e.ctrlKey) {
+      // While editing the pop-out layout, click-drag positions parts — never
+      // move the window (otherwise the OS window-move eats the drag).
+      if (layoutEditing) return;
+      if (e.target instanceof Element && e.target.closest(INTERACTIVE_SELECTOR)) return;
+    }
 
     dragging = true;
     document.documentElement.classList.add('is-dragging');

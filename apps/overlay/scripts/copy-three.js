@@ -62,6 +62,7 @@ const addons = [
   'loaders/MTLLoader.js',
   'loaders/FBXLoader.js',
   'controls/OrbitControls.js',
+  'environments/RoomEnvironment.js', // neutral env for the Shine reflection (#61)
   'exporters/GLTFExporter.js',
   'libs/fflate.module.js',
   // Required for GLBs using EXT_meshopt_compression (the default in
