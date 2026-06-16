@@ -257,15 +257,60 @@ function initGyroHud() {
     }
   }
   arcTicks.innerHTML = ticksHtml;
+
+  // Degree labels at 0 / ±20 / ±40, just inside the arc band. Colored and
+  // dimmed together with the band + ticks via the --roll-label-* CSS vars
+  // (see applyRollLabelStyle / index.html #arc-labels styling).
+  const arcLabels = document.getElementById('arc-labels');
+  if (arcLabels) {
+    const Rlabel = 80;
+    let labelsHtml = '';
+    for (const pct of [0, 0.5, 1.0]) {
+      for (const sign of (pct === 0 ? [1] : [-1, 1])) {
+        const a = sign * pct * maxRad;
+        const lx = (Math.sin(a) * Rlabel).toFixed(2);
+        const ly = (-Math.cos(a) * Rlabel).toFixed(2);
+        const deg = Math.round(pct * GYRO_HUD_MAX_DEG);
+        labelsHtml += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-size="11">${deg}</text>`;
+      }
+    }
+    arcLabels.innerHTML = labelsHtml;
+  }
 }
 
-function leanColor(t) {
-  // t: 0 (center) to 1 (max lean)
-  const abs = Math.min(1, Math.abs(t));
-  if (abs < 0.5) return '#ffffff';
-  if (abs < 0.75) return '#ffaa22';
-  return '#ff4444';
+// Color (= Roll "Normal" lean color) and brightness for the Roll HUD's static
+// markings — arc band, tick marks, and degree labels — driven by CSS vars on
+// #gyro-hud. The needle/arrows stay lean-banded; only the gauge furniture is
+// styled here. rollLabelBright is a 0–1 opacity multiplier.
+const _rlbSaved = localStorage.getItem('overlay:rollLabelBrightness');
+let rollLabelBright = _rlbSaved !== null ? parseInt(_rlbSaved, 10) / 100 : 1;
+function applyRollLabelStyle() {
+  if (!gyroHud) return;
+  gyroHud.style.setProperty('--roll-label-color', leanColors.normal);
+  gyroHud.style.setProperty('--roll-label-bright', String(rollLabelBright));
 }
+
+// Lean-band colors (Normal / Mid / High) — by how far the value is from center.
+// Drives the Roll HUD needle/labels. Defaults: white / orange / red.
+const leanColors = {
+  normal: localStorage.getItem('overlay:leanColorNormal') || '#ffffff',
+  mid:    localStorage.getItem('overlay:leanColorMid')    || '#ffaa22',
+  high:   localStorage.getItem('overlay:leanColorHigh')   || '#ff4444',
+};
+function leanColor(t) {
+  const abs = Math.min(1, Math.abs(t));
+  if (abs < 0.5) return leanColors.normal;
+  if (abs < 0.75) return leanColors.mid;
+  return leanColors.high;
+}
+
+// Per-axis (Pitch / Roll / Yaw) colors — drive the readout (via CSS vars) and
+// the detached Axis window (forwarded). Defaults match the CSS fallbacks.
+const axisColors = {
+  pitch: localStorage.getItem('overlay:axisColorPitch') || '#44dd66',
+  roll:  localStorage.getItem('overlay:axisColorRoll')  || '#ee4455',
+  yaw:   localStorage.getItem('overlay:axisColorYaw')   || '#4488ff',
+};
 
 // ── Button HUD update ──
 // Cached DOM refs so the per-frame update doesn't query the DOM repeatedly.
@@ -286,8 +331,8 @@ function applyHudLabels(profileKey) {
   // Forward profile to the popout regardless of whether this profile has
   // hudLabels — popout uses the profile name + falls back to defaults too.
   // IPC handler in main is a no-op when no popout is open.
-  if (window.electronAPI?.updateButtonHudProfile) {
-    window.electronAPI.updateButtonHudProfile(profileKey);
+  if (window.electronAPI?.updateHudProfile) {
+    window.electronAPI.updateHudProfile(profileKey);
   }
   if (!profile?.hudLabels) return;
   const labels = profile.hudLabels;
@@ -448,6 +493,7 @@ function hideCalibHint() {
 }
 
 initGyroHud();
+applyRollLabelStyle();
 applyHudPosition();
 
 // In browser (not Electron), set a light background since transparency isn't available
@@ -1063,11 +1109,23 @@ function loop() {
   // isn't open — main process drops the message). Sending unconditionally
   // is simpler than tracking popout-open state in this renderer; the IPC
   // overhead is trivial for the ~16-byte serialized snapshot.
-  if (gamepad && window.electronAPI?.sendButtonHudState) {
-    window.electronAPI.sendButtonHudState({
+  if (gamepad && window.electronAPI?.sendHudState) {
+    window.electronAPI.sendHudState('button', {
       buttons: gamepad.buttons.map(b => ({ pressed: !!b.pressed, value: b.value || 0 })),
       axes: Array.from(gamepad.axes || []),
       grips: _lastGrips || undefined,
+    });
+  }
+
+  // Forward gyro orientation to the detached Gyro HUD window (no-op if closed).
+  // gyroFusion.orientation is a THREE.Quaternion → serialize to {x,y,z,w}.
+  if (window.electronAPI?.sendHudState) {
+    const o = gyroFusion.orientation;
+    window.electronAPI.sendHudState('gyro', {
+      q: { x: o.x, y: o.y, z: o.z, w: o.w },
+      active: gyroActive,
+      fullMode: gimbalFullCheck?.checked || false,
+      colors: axisColors, // ring colors track the Axis (Pitch/Roll/Yaw) colors
     });
   }
 
@@ -1076,8 +1134,9 @@ function loop() {
     gimbal.update(gyroActive ? gyroFusion.orientation : null);
   }
 
-  // Live axis readout (pitch/yaw/roll in degrees, swing-twist per axis)
-  if (document.body.classList.contains('show-axis-readout')) {
+  // Axis values (pitch/roll/yaw degrees, swing-twist per axis) \u2014 drive the
+  // in-overlay readout and forward to the detached Axis window.
+  {
     const q = gyroActive ? gyroFusion.orientation : null;
     const toDeg = 180 / Math.PI;
     const twist = (ax, ay, az) => {
@@ -1085,9 +1144,17 @@ function loop() {
       const d = q.x * ax + q.y * ay + q.z * az;
       return 2 * Math.atan2(d, q.w) * toDeg;
     };
-    axPitchVal.textContent = Math.round(twist(1, 0, 0)) + '\u00B0';
-    axRollVal.textContent = Math.round(twist(0, 0, 1)) + '\u00B0';
-    axYawVal.textContent = Math.round(twist(0, 1, 0)) + '\u00B0';
+    const pitch = Math.round(twist(1, 0, 0));
+    const roll = Math.round(twist(0, 0, 1));
+    const yaw = Math.round(twist(0, 1, 0));
+    if (document.body.classList.contains('show-axis-readout')) {
+      axPitchVal.textContent = pitch + '\u00B0';
+      axRollVal.textContent = roll + '\u00B0';
+      axYawVal.textContent = yaw + '\u00B0';
+    }
+    if (window.electronAPI?.sendHudState) {
+      window.electronAPI.sendHudState('axis', { pitch, roll, yaw, active: gyroActive, colors: axisColors });
+    }
   }
 
   // Update gyro HUD
@@ -1110,6 +1177,16 @@ function loop() {
         driftCheckAccum = 0;
       }
     }
+  }
+
+  // Forward roll state to the detached Roll HUD window (no-op if closed).
+  if (window.electronAPI?.sendHudState) {
+    let leanDeg = 0;
+    if (gyroActive) {
+      _hudEuler.setFromQuaternion(gyroFusion.orientation, 'XYZ');
+      leanDeg = -_hudEuler.z * (180 / Math.PI);
+    }
+    window.electronAPI.sendHudState('roll', { leanDeg, active: gyroActive, colors: leanColors, labelBright: rollLabelBright });
   }
 }
 
@@ -1935,6 +2012,55 @@ if (shineSlider) {
   });
 }
 
+// ── Lean-band colors (Roll HUD): Normal / Mid / High ──
+// leanColors drives leanColor() live, so the next frame re-renders the HUD.
+[['lean-color-normal', 'normal', 'overlay:leanColorNormal'],
+ ['lean-color-mid', 'mid', 'overlay:leanColorMid'],
+ ['lean-color-high', 'high', 'overlay:leanColorHigh']].forEach(([id, key, ls]) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = leanColors[key];
+  el.addEventListener('input', (e) => {
+    leanColors[key] = e.target.value;
+    localStorage.setItem(ls, e.target.value);
+    // Normal is also the Roll HUD label/tick/band color — refresh the gauge.
+    if (key === 'normal') applyRollLabelStyle();
+  });
+});
+
+// ── Roll HUD label/tick brightness ──
+// One slider dims the Roll HUD's static markings (band + ticks + degree
+// labels) together; forwarded to the detached Roll window via its IPC state.
+const rollLabelBrightSlider = document.getElementById('roll-label-brightness');
+if (rollLabelBrightSlider) {
+  rollLabelBrightSlider.value = String(Math.round(rollLabelBright * 100));
+  rollLabelBrightSlider.addEventListener('input', (e) => {
+    rollLabelBright = parseInt(e.target.value, 10) / 100;
+    localStorage.setItem('overlay:rollLabelBrightness', e.target.value);
+    applyRollLabelStyle();
+  });
+}
+
+// ── Axis colors: Pitch / Roll / Yaw (CSS vars drive the readout; axisColors is
+// forwarded to the detached Axis window) ──
+function applyAxisColor(varName, value) { document.documentElement.style.setProperty(varName, value); }
+[['axis-color-pitch', 'pitch', '--ax-pitch', 'overlay:axisColorPitch'],
+ ['axis-color-roll', 'roll', '--ax-roll', 'overlay:axisColorRoll'],
+ ['axis-color-yaw', 'yaw', '--ax-yaw', 'overlay:axisColorYaw']].forEach(([id, key, varName, ls]) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = axisColors[key];
+  applyAxisColor(varName, axisColors[key]);
+  el.addEventListener('input', (e) => {
+    axisColors[key] = e.target.value;
+    applyAxisColor(varName, e.target.value);
+    localStorage.setItem(ls, e.target.value);
+    // Keep the 3D gimbal rings in sync (the detached gyro window picks the
+    // new colors up via the per-frame `colors` field in its IPC state).
+    if (gimbal) gimbal.setRingColors(axisColors);
+  });
+});
+
 // ── Green-screen background ────────────────────────────────────────────────
 // Paints a solid keyable color behind the (otherwise transparent) overlay so
 // it can be chroma-keyed in editing/OBS. Off by default. BASE_BG restores the
@@ -1943,11 +2069,17 @@ if (shineSlider) {
 const greenScreenToggle = document.getElementById('green-screen-toggle');
 const greenScreenColorInput = document.getElementById('green-screen-color');
 const BASE_BG = isDesktop ? '' : '#1a1a2e';
+// Current green-screen state, shared with detached HUD windows.
+function currentGreenScreen() {
+  return { on: greenScreenToggle.checked, color: greenScreenColorInput.value };
+}
 function applyGreenScreen() {
   const on = greenScreenToggle.checked;
   document.body.style.background = on ? greenScreenColorInput.value : BASE_BG;
   localStorage.setItem('overlay:greenScreen', on ? '1' : '0');
   localStorage.setItem('overlay:greenScreenColor', greenScreenColorInput.value);
+  // Mirror to any open detached HUD windows so they key the same.
+  if (window.electronAPI?.sendHudGreenScreen) window.electronAPI.sendHudGreenScreen(currentGreenScreen());
 }
 {
   const savedColor = localStorage.getItem('overlay:greenScreenColor');
@@ -2037,6 +2169,7 @@ function ensureGimbal() {
   const gimbalCanvas = document.getElementById('gimbal-canvas');
   if (!gimbalCanvas) return;
   gimbal = new GyroGimbal(gimbalCanvas);
+  gimbal.setRingColors(axisColors); // rings track the Axis (Pitch/Roll/Yaw) colors
   new ResizeObserver(() => gimbal.resize()).observe(gimbalCanvas);
 }
 
@@ -2049,15 +2182,21 @@ showRollHudCheck.addEventListener('change', applyDisplayToggles);
 showAxisReadoutCheck.addEventListener('change', applyDisplayToggles);
 showButtonHudCheck.addEventListener('change', applyDisplayToggles);
 buttonHudPositionSelect.addEventListener('change', applyDisplayToggles);
-// Pop out the Button HUD into its own draggable window. When already open
-// the IPC handler focuses the existing window and re-sends the current
-// profile, so clicking again is harmless.
-if (popoutButtonHudBtn) {
-  popoutButtonHudBtn.addEventListener('click', async () => {
-    if (!window.electronAPI?.openButtonHudWindow) return;
-    await window.electronAPI.openButtonHudWindow(currentControllerType);
+// Detach a HUD into its own draggable window. When already open the IPC
+// handler focuses the existing window and re-sends the current profile, so
+// clicking again is harmless.
+function wireDetachButton(btnId, kind) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (!window.electronAPI?.openHudWindow) return;
+    await window.electronAPI.openHudWindow(kind, currentControllerType, currentGreenScreen());
   });
 }
+wireDetachButton('popout-button-hud', 'button');
+wireDetachButton('detach-gyro-hud', 'gyro');
+wireDetachButton('detach-axis-hud', 'axis');
+wireDetachButton('detach-roll-hud', 'roll');
 applyDisplayToggles(); // apply defaults (all unchecked = all hidden)
 
 // Right-click opens settings (needed when gear icon is hidden). Plain

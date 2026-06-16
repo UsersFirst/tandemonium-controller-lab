@@ -12,10 +12,10 @@
 //   - The main overlay already has the gamepad working; forwarding state
 //     is cheaper than re-establishing it in a second context.
 //
-// IPC channels (via window.electronAPI from preload.js):
-//   - onPopoutProfileChange — fires when the main window's controller
+// IPC channels (via window.electronAPI from preload.js — generic HUD-window API):
+//   - onHudProfileChange — fires when the main window's controller
 //     profile changes (dropdown / IMU probe), so labels track
-//   - onButtonHudState — fires every frame with {buttons, axes} snapshot
+//   - onHudState — fires every frame with the {buttons, axes} snapshot
 
 // Direct relative-path import — does NOT pull in @usersfirst/controller-visualizer's
 // index.js barrel, which would transitively load ControllerOverlay + GyroGimbal
@@ -70,10 +70,12 @@ function applyProfile(profileKey) {
 const params = new URLSearchParams(window.location.search);
 applyProfile(params.get('profile') || 'dualsense');
 
+// Window chrome (drag / close / green-screen) is handled by hud-window-chrome.js.
+
 // Mid-session updates from the main window (controller-type dropdown
 // changed, IMU probe swapped profile, etc.) come through here.
-if (window.electronAPI?.onPopoutProfileChange) {
-  window.electronAPI.onPopoutProfileChange((profile) => applyProfile(profile));
+if (window.electronAPI?.onHudProfileChange) {
+  window.electronAPI.onHudProfileChange((profile) => applyProfile(profile));
 }
 
 // ── HUD state update (driven by IPC frames from main) ────────────────
@@ -116,10 +118,10 @@ function applyState(state) {
   if (refs.sticks.r.wrap) refs.sticks.r.wrap.classList.toggle('pressed', !!buttons[11]?.pressed);
 }
 
-if (window.electronAPI?.onButtonHudState) {
-  window.electronAPI.onButtonHudState(applyState);
+if (window.electronAPI?.onHudState) {
+  window.electronAPI.onHudState(applyState);
 } else {
-  console.warn('[button-hud popout] electronAPI.onButtonHudState is undefined — preload script did not bind; popout will not receive button updates.');
+  console.warn('[button-hud popout] electronAPI.onHudState is undefined — preload script did not bind; popout will not receive button updates.');
 }
 
 // ── Close button (frameless window has no titlebar close) ────────────

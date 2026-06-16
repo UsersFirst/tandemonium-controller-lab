@@ -60,19 +60,27 @@ export class GyroGimbal {
       emissive: hex, emissiveIntensity: 0.25,
     });
 
-    // Outer ring (Y/yaw) — green, lying flat (rotated around X by 90°)
-    const ringY = new THREE.Mesh(ringGeo(1.4), mat(0x44dd66));
+    // Outer ring — green default; carries the PITCH axis (see update()).
+    const pitchMat = mat(0x44dd66);
+    const ringY = new THREE.Mesh(ringGeo(1.4), pitchMat);
     ringY.rotation.x = Math.PI / 2;
     this.outer.add(ringY);
 
-    // Middle ring (X/pitch) — red, vertical front-facing
-    const ringX = new THREE.Mesh(ringGeo(1.15), mat(0xee4455));
+    // Middle ring — red default; carries the ROLL axis.
+    const rollMat = mat(0xee4455);
+    const ringX = new THREE.Mesh(ringGeo(1.15), rollMat);
     ringX.rotation.y = Math.PI / 2;
     this.middle.add(ringX);
 
-    // Inner ring (Z/roll) — blue, vertical side-facing
-    const ringZ = new THREE.Mesh(ringGeo(0.9), mat(0x4488ff));
+    // Inner ring — blue default; carries the YAW axis.
+    const yawMat = mat(0x4488ff);
+    const ringZ = new THREE.Mesh(ringGeo(0.9), yawMat);
     this.inner.add(ringZ);
+
+    // Keyed by axis so setRingColors() can be driven straight from the
+    // overlay's {pitch, roll, yaw} axis-color settings — keeping the gimbal
+    // rings in lockstep with the Axis readout colors.
+    this._ringMats = { pitch: pitchMat, roll: rollMat, yaw: yawMat };
 
     // Center indicator: a small arrow pointing forward so orientation is readable
     // Silver center indicator — three axis bars with an arrow on the Z bar
@@ -125,6 +133,21 @@ export class GyroGimbal {
     this.fullMode = false; // false = mechanical nested gimbal, true = all rings share full orientation
 
     this.resize();
+  }
+
+  // Recolor the gimbal rings from {pitch, roll, yaw} hex strings (any subset).
+  // Sets both base and emissive so the rings read the same lit or glowing.
+  // Re-renders so the change shows even when the gimbal is otherwise idle.
+  setRingColors(colors) {
+    if (!colors) return;
+    for (const axis of ['pitch', 'roll', 'yaw']) {
+      const hex = colors[axis];
+      const m = this._ringMats[axis];
+      if (!hex || !m) continue;
+      m.color.set(hex);
+      m.emissive.set(hex);
+    }
+    this.renderer.render(this.scene, this.camera);
   }
 
   resize() {

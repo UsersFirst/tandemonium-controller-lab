@@ -19,7 +19,7 @@ let clickThrough = false;
 // Button HUD popout window — at most one open at a time. Tracked so the
 // main renderer can forward profile-change events to it via IPC without
 // re-opening or duplicating.
-let buttonHudWindow = null;
+const hudWindows = {}; // detached HUD windows keyed by kind ('button' | 'gyro')
 let inventoryWindow = null;
 
 // ── Frameless window dragging ──
@@ -224,23 +224,29 @@ app.whenReady().then(() => {
   ipcMain.handle('open-inventory-window', () => { openInventoryWindow(); return { opened: true }; });
   ipcMain.handle('list-hid-controllers', () => hidControllerList());
 
-  // Open the Button HUD popout window — spawns a small frameless,
-  // transparent, always-on-top BrowserWindow that loads
-  // src/button-hud-window.html. Only one popout at a time; if already
-  // open, focus it instead of opening a duplicate.
-  //
-  // The popout polls navigator.getGamepads() in its own renderer (Gamepad
-  // API is window-scoped but sees the same physical pads), so no
-  // per-frame IPC traffic is needed. Profile is passed via URL query.
-  ipcMain.handle('open-button-hud-window', async (_event, { profile }) => {
-    if (buttonHudWindow && !buttonHudWindow.isDestroyed()) {
-      buttonHudWindow.focus();
-      // Update profile in case the caller passed a different one this time
-      buttonHudWindow.webContents.send('popout-profile-changed', profile);
+  // Detached HUD windows — a generic mechanism (issue #64). Each `kind` opens a
+  // small frameless/transparent/always-on-top BrowserWindow loading its own
+  // renderer HTML. One window per kind; re-focus if already open. State is
+  // forwarded from the main renderer over IPC each frame (`hud-state`), so the
+  // window needs no HID/Gamepad connection of its own.
+  const HUD_WINDOWS = {
+    button: { file: 'button-hud-window.html', width: 300, height: 280 },
+    gyro:   { file: 'gyro-window.html',        width: 260, height: 260 },
+    axis:   { file: 'axis-window.html',        width: 280, height: 90 },
+    roll:   { file: 'roll-window.html',        width: 240, height: 170 },
+  };
+
+  ipcMain.handle('open-hud-window', async (_event, { kind, profile, greenScreen }) => {
+    const cfg = HUD_WINDOWS[kind];
+    if (!cfg) return { opened: false, reason: 'unknown kind' };
+    const existing = hudWindows[kind];
+    if (existing && !existing.isDestroyed()) {
+      existing.focus();
+      existing.webContents.send('hud-profile-changed', profile);
       return { opened: true, alreadyOpen: true };
     }
-    buttonHudWindow = new BrowserWindow({
-      width: 300, height: 240,
+    const win = new BrowserWindow({
+      width: cfg.width, height: cfg.height,
       transparent: true, frame: false,
       alwaysOnTop: true, resizable: true,
       hasShadow: false, skipTaskbar: false,
@@ -251,35 +257,47 @@ app.whenReady().then(() => {
         preload: path.join(__dirname, 'preload.js'),
       },
     });
-    // loadFile handles Windows path quirks (loadURL with raw `file://` +
-    // backslashes is malformed on Windows) and the query option is the
-    // documented way to pass URL parameters.
-    buttonHudWindow.loadFile(
-      path.join(__dirname, '..', 'src', 'button-hud-window.html'),
-      { query: { profile: profile || '' } }
+    // Pass the current green-screen state in the query so the window can paint
+    // the keyable background immediately on load (live changes come via
+    // 'hud-greenscreen-update').
+    win.loadFile(
+      path.join(__dirname, '..', 'src', cfg.file),
+      { query: {
+        kind,
+        profile: profile || '',
+        gs: greenScreen?.on ? '1' : '0',
+        gsColor: greenScreen?.color || '',
+      } }
     );
-    buttonHudWindow.on('closed', () => { buttonHudWindow = null; });
+    win.on('closed', () => { hudWindows[kind] = null; });
+    hudWindows[kind] = win;
     return { opened: true, alreadyOpen: false };
   });
 
-  // Main renderer forwards a profile change to the popout (if any) so its
-  // labels track the active controller without the user reopening it.
-  ipcMain.on('update-button-hud-profile', (_event, { profile }) => {
-    if (buttonHudWindow && !buttonHudWindow.isDestroyed()) {
-      buttonHudWindow.webContents.send('popout-profile-changed', profile);
+  // Green-screen on/off + color → broadcast to every open HUD window so they
+  // chroma-key consistently with the main overlay.
+  ipcMain.on('hud-greenscreen', (_event, gs) => {
+    for (const k of Object.keys(hudWindows)) {
+      const w = hudWindows[k];
+      if (w && !w.isDestroyed()) w.webContents.send('hud-greenscreen-update', gs);
     }
   });
 
-  // Per-frame gamepad-state forwarding to the popout. Main renderer sends
-  // a small {buttons, axes} snapshot every animation frame; we no-op when
-  // no popout is open. Forwarding state in this direction (rather than
-  // having the popout poll its own Gamepad API) sidesteps Chromium's
-  // per-document user-activation requirement — the popout would otherwise
-  // see all-null gamepads until the user clicked inside its window.
-  ipcMain.on('button-hud-state', (_event, state) => {
-    if (buttonHudWindow && !buttonHudWindow.isDestroyed()) {
-      buttonHudWindow.webContents.send('button-hud-state-update', state);
+  // Profile change → forward to every open HUD window so labels track the
+  // active controller without reopening.
+  ipcMain.on('update-hud-profile', (_event, { profile }) => {
+    for (const k of Object.keys(hudWindows)) {
+      const w = hudWindows[k];
+      if (w && !w.isDestroyed()) w.webContents.send('hud-profile-changed', profile);
     }
+  });
+
+  // Per-frame state forwarding to a specific HUD window (no-op if not open).
+  // Forwarding from the main renderer (rather than the window polling its own
+  // Gamepad API) sidesteps Chromium's per-document user-activation requirement.
+  ipcMain.on('hud-state', (_event, { kind, state }) => {
+    const w = hudWindows[kind];
+    if (w && !w.isDestroyed()) w.webContents.send('hud-state-update', state);
   });
 
   // Popout's close button uses this to close itself (frameless windows

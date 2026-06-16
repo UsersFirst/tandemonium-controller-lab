@@ -394,9 +394,10 @@
     white-space: nowrap;
   }
   body.show-axis-readout #axis-readout { display: flex; }
-  #axis-readout .ax-pitch { color: #44dd66; }
-  #axis-readout .ax-roll { color: #ee4455; }
-  #axis-readout .ax-yaw { color: #4488ff; }
+  /* Per-axis (Pitch/Roll/Yaw) colors — configurable via CSS vars set from settings. */
+  #axis-readout .ax-pitch { color: var(--ax-pitch, #44dd66); }
+  #axis-readout .ax-roll  { color: var(--ax-roll,  #ee4455); }
+  #axis-readout .ax-yaw   { color: var(--ax-yaw,   #4488ff); }
 
   /* ── Gyro toggle button (emoji) ── */
   #gyro-toggle {
@@ -697,6 +698,23 @@
   #gyro-hud.pos-below { bottom: 4%; }
   #gyro-hud.pos-above { top: 4%; }
 
+  /* Roll HUD static markings (band + ticks + degree labels) share one color
+     (the Roll "Normal" lean color) and one brightness multiplier, both set as
+     CSS vars from app.js. The needle/arrows stay lean-banded. CSS presentation
+     properties here override the SVG fill/stroke attributes in the markup. */
+  #gyro-hud { --roll-label-color: #ffffff; --roll-label-bright: 1; }
+  #gyro-hud #arc-band {
+    fill: var(--roll-label-color); stroke: var(--roll-label-color);
+    fill-opacity: calc(0.08 * var(--roll-label-bright));
+    stroke-opacity: calc(0.25 * var(--roll-label-bright));
+  }
+  #gyro-hud #arc-ticks { stroke: var(--roll-label-color); opacity: var(--roll-label-bright); }
+  #gyro-hud #arc-labels {
+    fill: var(--roll-label-color); opacity: var(--roll-label-bright);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-weight: 600;
+  }
+
   #arc-svg {
     display: block;
     width: min(55vw, 240px);
@@ -853,7 +871,7 @@
   </div>
 
   <div class="setting-row">
-    <label title="Float the triggers, bumpers & back paddles clear of the body so they're visible at any angle">Pop Out Controls</label>
+    <label title="Float the triggers, bumpers & back paddles clear of the body so they're visible at any angle">Float Controls</label>
     <input type="checkbox" id="float-parts" checked autocomplete="off">
   </div>
   <div class="setting-row">
@@ -890,15 +908,35 @@
     <input type="checkbox" id="show-roll-hud" autocomplete="off">
   </div>
   <div class="setting-row">
-    <label>Show Axis Values</label>
+    <label title="Roll HUD needle/label colors by lean band (near-center / mid / high lean).">Roll Colors (Normal / Mid / High)</label>
+    <span style="display:flex; gap:4px;">
+      <input type="color" id="lean-color-normal" value="#ffffff" title="Normal (near center)">
+      <input type="color" id="lean-color-mid" value="#ffaa22" title="Mid lean">
+      <input type="color" id="lean-color-high" value="#ff4444" title="High lean">
+    </span>
+  </div>
+  <div class="setting-row">
+    <label title="Brightness of the Roll HUD's band, tick marks, and degree labels (uses the Normal color).">Roll Labels Brightness</label>
+    <input type="range" id="roll-label-brightness" min="0" max="100" value="100" style="width:90px;accent-color:#3388ff;">
+  </div>
+  <div class="setting-row">
+    <label>Show Axis HUD</label>
     <input type="checkbox" id="show-axis-readout">
   </div>
   <div class="setting-row">
-    <label>Show 3D Gyro</label>
+    <label title="Per-axis colors for the Pitch / Roll / Yaw readout.">Axis Colors (Pitch / Roll / Yaw)</label>
+    <span style="display:flex; gap:4px;">
+      <input type="color" id="axis-color-pitch" value="#44dd66" title="Pitch">
+      <input type="color" id="axis-color-roll" value="#ee4455" title="Roll">
+      <input type="color" id="axis-color-yaw" value="#4488ff" title="Yaw">
+    </span>
+  </div>
+  <div class="setting-row">
+    <label>Show Gyro HUD</label>
     <input type="checkbox" id="show-gimbal">
   </div>
   <div class="setting-row">
-    <label>Gimbal: full orientation</label>
+    <label>Gyro HUD: full orientation</label>
     <input type="checkbox" id="gimbal-full-mode">
   </div>
   <div class="setting-row">
@@ -939,8 +977,20 @@
     </select>
   </div>
   <div class="setting-row">
-    <label>Pop out Button HUD</label>
-    <button id="popout-button-hud" title="Open Button HUD in its own draggable window">Pop Out</button>
+    <label>Button HUD window</label>
+    <button id="popout-button-hud" title="Open the Button HUD in its own draggable window">Detach</button>
+  </div>
+  <div class="setting-row">
+    <label title="Open the Gyro HUD (3D gyro) in its own transparent, always-on-top window">Gyro HUD window</label>
+    <button id="detach-gyro-hud" title="Open the 3D Gyro in its own draggable window">Detach</button>
+  </div>
+  <div class="setting-row">
+    <label title="Open the Axis HUD (pitch/roll/yaw readout) in its own transparent window">Axis HUD window</label>
+    <button id="detach-axis-hud" title="Open the Axis Values in its own draggable window">Detach</button>
+  </div>
+  <div class="setting-row">
+    <label title="Open the Roll HUD in its own transparent window">Roll HUD window</label>
+    <button id="detach-roll-hud" title="Open the Roll HUD in its own draggable window">Detach</button>
   </div>
   <div class="setting-row">
     <label title="Paint a solid keyable color behind the overlay for chroma-key compositing">Green-Screen Background</label>
@@ -1076,6 +1126,8 @@
     <path id="arc-band" d="" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
     <!-- Tick marks -->
     <g id="arc-ticks" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"></g>
+    <!-- Degree labels (0 / ±20 / ±40) -->
+    <g id="arc-labels"></g>
     <!-- Needle -->
     <line id="arc-needle" x1="0" y1="-4" x2="0" y2="-22" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
     <!-- Center dot -->

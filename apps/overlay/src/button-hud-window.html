@@ -14,20 +14,12 @@
     user-select: none;
   }
 
-  /* Whole window is draggable so the user can reposition it on any monitor;
-     the close button + HUD interactive bits opt out via no-drag. */
-  #drag-region {
-    position: fixed;
-    inset: 0;
-    -webkit-app-region: drag;
-    z-index: 1;
-  }
-
-  /* Close button — fixed top-right, no-drag so it's clickable */
+  /* Dragging is JS-based (hud-window-chrome.js) so mouse events still reach the
+     DOM — the whole window drags AND the close × shows on hovering anywhere. */
   #close-btn {
     position: fixed;
-    top: 4px; right: 4px;
-    width: 18px; height: 18px;
+    top: 6px; right: 6px;
+    width: 20px; height: 20px;
     background: rgba(255, 255, 255, 0.08);
     border: none;
     border-radius: 50%;
@@ -35,7 +27,6 @@
     font-size: 12px;
     line-height: 1;
     cursor: pointer;
-    -webkit-app-region: no-drag;
     z-index: 200;
     opacity: 0;
     transition: opacity 120ms linear;
@@ -74,7 +65,9 @@
     background: rgba(15, 15, 20, 0.85);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
-    -webkit-app-region: no-drag;
+    /* No `no-drag` here: app-region is union(drag) − union(no-drag) regardless
+       of z-index, so a no-drag panel would carve a non-draggable hole even
+       under the drag layer. The HUD is display-only, so leave it draggable. */
     z-index: 100;
   }
   #button-hud .bh-section {
@@ -155,7 +148,6 @@
 </head>
 <body>
 
-<div id="drag-region"></div>
 <button id="close-btn" title="Close">&times;</button>
 <div id="profile-name">—</div>
 
@@ -209,6 +201,7 @@
      rather than the @usersfirst/controller-visualizer barrel, which
      would transitively need `three` in the importmap. The popout has
      no 3D scene; the bare specifier just isn't needed here. -->
+<script src="js/hud-window-chrome.js"></script>
 <script type="module" src="js/button-hud-window.js"></script>
 </body>
 </html>
