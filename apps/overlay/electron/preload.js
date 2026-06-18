@@ -5,6 +5,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onToggleSettings: (callback) => ipcRenderer.on('toggle-settings', () => callback()),
   quit: () => ipcRenderer.send('quit-app'),
 
+  // ── Window size readout/editor (settings panel width×height fields) ──
+  // getWindowSize() → { width, height } current size.
+  // setWindowSize(w, h) resizes the overlay window (clamped in main).
+  // onWindowSizeChanged(cb) fires whenever the window is resized (drag or set)
+  // so the fields track the live size.
+  getWindowSize: () => ipcRenderer.invoke('get-window-size'),
+  setWindowSize: (width, height) => ipcRenderer.send('set-window-size', { width, height }),
+  onWindowSizeChanged: (callback) =>
+    ipcRenderer.on('window-size-changed', (_, size) => callback(size)),
+
   // ── Frameless window drag ──
   // The renderer detects a grab on a non-interactive area and drives the
   // window move through the main process (which reads the live cursor for

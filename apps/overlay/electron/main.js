@@ -186,6 +186,11 @@ function createWindow() {
     writeWindowState(state);
   };
   mainWindow.on('resize', () => {
+    // Live-update the settings panel's width×height fields as the user drags.
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const [w, h] = mainWindow.getSize();
+      mainWindow.webContents.send('window-size-changed', { width: w, height: h });
+    }
     if (saveWindowSizeTimer) clearTimeout(saveWindowSizeTimer);
     saveWindowSizeTimer = setTimeout(persistSize, 400);
   });
@@ -266,6 +271,27 @@ app.whenReady().then(() => {
 
   // Handle quit from renderer
   ipcMain.on('quit-app', () => app.quit());
+
+  // ── Window size readout/editor (issue #69 follow-up) ──
+  // The settings panel shows the live width×height and lets the user type an
+  // exact size. getSize is the source of truth; setSize drives the window
+  // (clamped to sane bounds so a stray keystroke can't shrink it to nothing
+  // or blow it up off-screen). The matching 'window-size-changed' broadcast
+  // (see createWindow) keeps the fields in sync when the user drag-resizes.
+  ipcMain.handle('get-window-size', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return null;
+    const [width, height] = mainWindow.getSize();
+    return { width, height };
+  });
+  ipcMain.on('set-window-size', (_event, { width, height }) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const w = Math.round(Number(width));
+    const h = Math.round(Number(height));
+    if (!Number.isFinite(w) || !Number.isFinite(h)) return;
+    const clampedW = Math.max(200, Math.min(8000, w));
+    const clampedH = Math.max(200, Math.min(8000, h));
+    mainWindow.setSize(clampedW, clampedH);
+  });
 
   // ── Frameless window drag (renderer grabs a non-interactive area) ──
   // Renderer signals start/move/end; we compute position from the live

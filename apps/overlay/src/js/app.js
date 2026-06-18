@@ -2131,6 +2131,49 @@ cameraPresetBtns.forEach((btn) => {
 // view once the overlay exists.
 selectCameraPreset(selectedCameraPreset);
 
+// ── Window size fields (issue #69 follow-up) ──
+// Two numeric inputs in the settings panel mirror the live overlay window
+// size: they update as the user drag-resizes the window, and typing a value
+// resizes the window to match. Electron-only (the web build has no window to
+// resize), so the whole block no-ops when electronAPI is absent.
+const windowWidthInput = document.getElementById('window-width');
+const windowHeightInput = document.getElementById('window-height');
+if (windowWidthInput && windowHeightInput && window.electronAPI?.getWindowSize) {
+  let suppressSizeApply = false; // guard against echo while we set field values
+
+  const setSizeFields = ({ width, height }) => {
+    suppressSizeApply = true;
+    // Don't stomp on a field the user is mid-edit in.
+    if (document.activeElement !== windowWidthInput) windowWidthInput.value = width;
+    if (document.activeElement !== windowHeightInput) windowHeightInput.value = height;
+    suppressSizeApply = false;
+  };
+
+  // Seed the fields with the current size.
+  window.electronAPI.getWindowSize().then((size) => { if (size) setSizeFields(size); });
+
+  // Track live drag-resizes from the main process.
+  window.electronAPI.onWindowSizeChanged?.((size) => { if (size) setSizeFields(size); });
+
+  // Push edits to the window. 'change' (commit on blur/Enter) keeps us from
+  // resizing on every intermediate keystroke; the main process clamps to
+  // 200–8000 px so an out-of-range value can't break the window.
+  const applySize = () => {
+    if (suppressSizeApply) return;
+    const w = parseInt(windowWidthInput.value, 10);
+    const h = parseInt(windowHeightInput.value, 10);
+    if (Number.isFinite(w) && Number.isFinite(h)) {
+      window.electronAPI.setWindowSize?.(w, h);
+    }
+  };
+  windowWidthInput.addEventListener('change', applySize);
+  windowHeightInput.addEventListener('change', applySize);
+} else if (windowWidthInput) {
+  // No window to resize (web build) — hide the row so it isn't a dead control.
+  const row = windowWidthInput.closest('.setting-row');
+  if (row) row.style.display = 'none';
+}
+
 // ── Window display toggles (cosmetic only — never affects functionality) ──
 const showTitleCheck = document.getElementById('show-title');
 const showGyroCheck = document.getElementById('show-gyro');
