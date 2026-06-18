@@ -106,7 +106,7 @@ export class ControllerOverlay {
     this._gripColor = 0xff0000; // follows the highlight default: red
 
     // ── Layout editor (#51): click-drag + keyboard-rotate the floatable parts ──
-    this._editMode = false;        // editing the pop-out layout right now
+    this._editMode = false;        // editing the float layout right now
     this._layoutMode = 'relative'; // 'relative' (rides with body) | 'absolute' (world-fixed)
     this._selectedWrapper = null;  // the wrapper currently being edited
     this._selectionBox = null;     // THREE.BoxHelper around the selection

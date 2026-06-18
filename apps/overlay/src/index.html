@@ -747,8 +747,8 @@
   }
   #calib-hint.hidden { opacity: 0; }
 
-  /* ── 3D gyro gimbal widget (above controller) ── */
-  #gimbal-canvas {
+  /* ── Gyro HUD — 3D nested-ring gyro widget (above controller) ── */
+  #gyro-hud-canvas {
     position: fixed;
     top: 4%;
     left: 50%;
@@ -759,7 +759,7 @@
     z-index: 45;
     display: none;
   }
-  body.show-gimbal #gimbal-canvas { display: block; }
+  body.show-gyro-hud #gyro-hud-canvas { display: block; }
 
   /* ── Click-through indicator ── */
   #click-through-indicator {
@@ -872,7 +872,7 @@
 
   <div class="setting-row">
     <label title="Float the triggers, bumpers & back paddles clear of the body so they're visible at any angle">Float Controls</label>
-    <input type="checkbox" id="float-parts" checked autocomplete="off">
+    <input type="checkbox" id="float-controls" checked autocomplete="off">
   </div>
   <div class="setting-row">
     <label title="Steam Controller: suppress the firmware's keyboard/mouse (lizard-mode) emulation while the overlay runs. Turn OFF to keep keyboard/mouse (e.g. when Steam Input is running). Takes effect on the next controller connect.">Suppress Kbd/Mouse (Steam)</label>
@@ -933,11 +933,11 @@
   </div>
   <div class="setting-row">
     <label>Show Gyro HUD</label>
-    <input type="checkbox" id="show-gimbal">
+    <input type="checkbox" id="show-gyro-hud">
   </div>
   <div class="setting-row">
     <label>Gyro HUD: full orientation</label>
-    <input type="checkbox" id="gimbal-full-mode">
+    <input type="checkbox" id="gyro-hud-full-mode">
   </div>
   <div class="setting-row">
     <label>Show Button HUD</label>
@@ -978,7 +978,7 @@
   </div>
   <div class="setting-row">
     <label>Button HUD window</label>
-    <button id="popout-button-hud" title="Open the Button HUD in its own draggable window">Detach</button>
+    <button id="detach-button-hud" title="Open the Button HUD in its own draggable window">Detach</button>
   </div>
   <div class="setting-row">
     <label title="Open the Gyro HUD (3D gyro) in its own transparent, always-on-top window">Gyro HUD window</label>
@@ -1026,7 +1026,7 @@
   <hr class="settings-divider">
   <h3>Edit Layout</h3>
   <div class="setting-row">
-    <label title="Click-drag the triggers, bumpers and back paddles to position them; rotate the selected one with the keyboard.">Edit pop-out layout</label>
+    <label title="Click-drag the triggers, bumpers and back paddles to position them; rotate the selected one with the keyboard.">Edit float layout</label>
     <input type="checkbox" id="edit-layout-toggle">
   </div>
   <div class="setting-row">
@@ -1212,8 +1212,8 @@
   </div>
 </div>
 
-<!-- 3D gyro gimbal widget canvas -->
-<canvas id="gimbal-canvas"></canvas>
+<!-- Gyro HUD — 3D nested-ring gyro widget canvas -->
+<canvas id="gyro-hud-canvas"></canvas>
 
 <!-- Click-through mode indicator -->
 <div id="click-through-indicator"></div>

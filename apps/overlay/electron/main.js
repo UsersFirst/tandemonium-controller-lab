@@ -16,10 +16,10 @@ if (require('./squirrel-startup')) {
 let mainWindow = null;
 let tray = null;
 let clickThrough = false;
-// Button HUD popout window — at most one open at a time. Tracked so the
-// main renderer can forward profile-change events to it via IPC without
+// Detached HUD windows — at most one open per kind. Tracked so the main
+// renderer can forward profile/state events to them via IPC without
 // re-opening or duplicating.
-const hudWindows = {}; // detached HUD windows keyed by kind ('button' | 'gyro')
+const hudWindows = {}; // keyed by kind ('button' | 'gyro' | 'axis' | 'roll')
 let inventoryWindow = null;
 
 // ── Frameless window dragging ──
@@ -199,7 +199,7 @@ app.whenReady().then(() => {
   // Renderer signals start/move/end; we compute position from the live
   // cursor so the grab point stays pinned under the pointer regardless of
   // DPI scaling or how fast the mouse moves. fromWebContents makes this work
-  // for any frameless window (main overlay, button-HUD popout) that opts in.
+  // for any frameless window (main overlay, detached HUD windows) that opts in.
   ipcMain.on('window-drag-start', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
@@ -300,8 +300,8 @@ app.whenReady().then(() => {
     if (w && !w.isDestroyed()) w.webContents.send('hud-state-update', state);
   });
 
-  // Popout's close button uses this to close itself (frameless windows
-  // have no titlebar close affordance).
+  // A detached window's close button uses this to close itself (frameless
+  // windows have no titlebar close affordance).
   ipcMain.on('close-this-window', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (win && !win.isDestroyed()) win.close();
