@@ -16,6 +16,52 @@ if (require('./squirrel-startup')) {
 let mainWindow = null;
 let tray = null;
 let clickThrough = false;
+
+// ── Persisted window size (issue #69) ──
+// The controller body window should reopen at the size it was last left, so
+// the user can line it up once for OBS and just hit "start recording" next
+// time. We store width/height in a small JSON file under userData, keyed per
+// mode (single vs. multi) so the two layouts don't clobber each other. The
+// default for the single-controller window is 720×540 — a clean capture size.
+const DEFAULT_WINDOW_SIZE = { width: 720, height: 540 };
+const MULTI_WINDOW_SIZE = { width: 1100, height: 520 };
+let windowStatePath = null; // resolved once app is ready (needs userData path)
+let saveWindowSizeTimer = null;
+
+function getWindowStatePath() {
+  if (!windowStatePath) {
+    windowStatePath = path.join(app.getPath('userData'), 'window-state.json');
+  }
+  return windowStatePath;
+}
+
+function readWindowState() {
+  try {
+    return JSON.parse(fs.readFileSync(getWindowStatePath(), 'utf8')) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function writeWindowState(state) {
+  try {
+    fs.writeFileSync(getWindowStatePath(), JSON.stringify(state, null, 2), 'utf8');
+  } catch (e) {
+    // Non-fatal — size persistence is a convenience, not correctness.
+    console.log('[window-state] save failed:', e.message);
+  }
+}
+
+// Sanity-check a saved size before trusting it (corrupt file, off-screen tiny
+// values, etc.). Falls back to the mode's default for anything out of range.
+function sanitizeSize(saved, fallback) {
+  const w = saved && Number(saved.width);
+  const h = saved && Number(saved.height);
+  return {
+    width: Number.isFinite(w) && w >= 200 && w <= 8000 ? Math.round(w) : fallback.width,
+    height: Number.isFinite(h) && h >= 200 && h <= 8000 ? Math.round(h) : fallback.height,
+  };
+}
 // Button HUD popout window — at most one open at a time. Tracked so the
 // main renderer can forward profile-change events to it via IPC without
 // re-opening or duplicating.
@@ -92,9 +138,16 @@ function openInventoryWindow() {
 
 function createWindow() {
   const useMulti = process.env.OVERLAY_MULTI === '1' || process.argv.includes('--multi');
+
+  // Restore the last-used size for this mode (issue #69), falling back to the
+  // mode's default (single = 720×540).
+  const stateKey = useMulti ? 'multi' : 'main';
+  const defaultSize = useMulti ? MULTI_WINDOW_SIZE : DEFAULT_WINDOW_SIZE;
+  const { width, height } = sanitizeSize(readWindowState()[stateKey], defaultSize);
+
   mainWindow = new BrowserWindow({
-    width: useMulti ? 1100 : 600,
-    height: useMulti ? 520 : 400,
+    width,
+    height,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
@@ -121,6 +174,25 @@ function createWindow() {
   });
 
   // DevTools: Cmd+Shift+I to open manually (auto-open triggers Autofill errors)
+
+  // Persist the window size as the user resizes (issue #69). Debounced so a
+  // drag-resize doesn't hammer the disk; also saved on close as a backstop.
+  const persistSize = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized() || mainWindow.isFullScreen()) return;
+    const [w, h] = mainWindow.getSize();
+    const state = readWindowState();
+    state[stateKey] = { width: w, height: h };
+    writeWindowState(state);
+  };
+  mainWindow.on('resize', () => {
+    if (saveWindowSizeTimer) clearTimeout(saveWindowSizeTimer);
+    saveWindowSizeTimer = setTimeout(persistSize, 400);
+  });
+  mainWindow.on('close', () => {
+    if (saveWindowSizeTimer) { clearTimeout(saveWindowSizeTimer); saveWindowSizeTimer = null; }
+    persistSize();
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
