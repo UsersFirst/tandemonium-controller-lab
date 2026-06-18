@@ -46,6 +46,10 @@ invariants. The probe test runs against a **real GameSir Super Nova capture**
 committed under [`packages/core/test/fixtures/`](./packages/core/test/fixtures/).
 CI runs the same suite on every PR via [`.github/workflows/ci.yml`](./.github/workflows/ci.yml).
 
+## Credits & acknowledgments
+
+The gyro sensor-fusion runtime (`@usersfirst/controller-core/sensor-fusion`) is derived from [**JibbSmart/GamepadMotionHelpers**](https://github.com/JibbSmart/GamepadMotionHelpers) by Julian "Jibb" Smart (MIT). The gravity tracking, tilt correction, and continuous bias-calibration math are ported from Jibb's reference implementation, and [**GyroWiki**](http://gyrowiki.jibbsmart.com/) — especially the "Finding Gravity with Sensor Fusion" article — was indispensable in building it. Thank you, Jibb, for both the code and the writing that makes gyro input approachable. See [`packages/core/THIRD_PARTY_NOTICES.md`](./packages/core/THIRD_PARTY_NOTICES.md) for the upstream license text.
+
 ## Asset attribution
 
 The GLB controller models in `packages/visualizer/assets/controllers/` derive from [larfingshnew/3d-controller-overlay](https://github.com/larfingshnew/3d-controller-overlay) (MIT). See [`packages/visualizer/ASSETS_ATTRIBUTION.md`](./packages/visualizer/ASSETS_ATTRIBUTION.md) for the upstream license text.

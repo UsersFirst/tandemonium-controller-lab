@@ -3,9 +3,29 @@
 // ============================================================
 //
 // Ported from InputManager's sensor fusion block (see PR #186 and the
-// follow-up polish in feature/gyro-sensor-fusion). Originally derived from
-// JibbSmart/GamepadMotionHelpers — see the GyroWiki "Finding Gravity with
-// Sensor Fusion" article for the algorithm derivation.
+// follow-up polish in feature/gyro-sensor-fusion). Derived from
+// JibbSmart/GamepadMotionHelpers by Julian "Jibb" Smart — see the GyroWiki
+// "Finding Gravity with Sensor Fusion" article (http://gyrowiki.jibbsmart.com/)
+// for the algorithm derivation. The original C++ is MIT-licensed; this is a
+// JavaScript port adapted for the WebHID runtime. The required copyright and
+// permission notice is reproduced below and in packages/core/THIRD_PARTY_NOTICES.md.
+//
+// ── Upstream license (GamepadMotionHelpers) ──────────────────
+//   MIT License — Copyright (c) 2020-2023 Julian "Jibb" Smart
+//
+//   Permission is hereby granted, free of charge, to any person obtaining a
+//   copy of this software and associated documentation files (the "Software"),
+//   to deal in the Software without restriction, including without limitation
+//   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+//   and/or sell copies of the Software, and to permit persons to whom the
+//   Software is furnished to do so, subject to the following conditions:
+//
+//   The above copyright notice and this permission notice shall be included in
+//   all copies or substantial portions of the Software.
+//
+//   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//   IMPLIED. See THIRD_PARTY_NOTICES.md for the full warranty disclaimer.
+// ─────────────────────────────────────────────────────────────
 //
 // Three pipelines run in parallel each ingest() call:
 //  1. Axis-angle quaternion integration of gyro rates
