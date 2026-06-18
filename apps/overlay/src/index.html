@@ -143,6 +143,23 @@
     accent-color: #3388ff;
     cursor: pointer;
   }
+
+  .window-size-fields { display: flex; align-items: center; gap: 4px; }
+  .window-size-x { color: #888; font-size: 11px; }
+  .setting-row input[type="number"] {
+    width: 52px;
+    background: rgba(255,255,255,0.08);
+    color: #eee;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 5px;
+    padding: 4px 6px;
+    font-size: 11px;
+    text-align: right;
+  }
+  .setting-row input[type="number"]:focus {
+    outline: none;
+    border-color: #3388ff;
+  }
   .settings-divider {
     border: none;
     border-top: 1px solid rgba(255,255,255,0.08);
@@ -868,6 +885,15 @@
   <div class="camera-presets" data-row="1">
     <button data-preset="player">Player</button>
     <button data-preset="top">Top</button>
+  </div>
+
+  <div class="setting-row">
+    <label title="Overlay window size in pixels. Updates live as you resize the window, and editing a value resizes the window to match. The last size is remembered between launches.">Window Size</label>
+    <span class="window-size-fields">
+      <input type="number" id="window-width" min="200" max="8000" step="1" autocomplete="off" title="Width (px)">
+      <span class="window-size-x">×</span>
+      <input type="number" id="window-height" min="200" max="8000" step="1" autocomplete="off" title="Height (px)">
+    </span>
   </div>
 
   <div class="setting-row">
