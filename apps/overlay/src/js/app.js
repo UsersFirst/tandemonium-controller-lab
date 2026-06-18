@@ -572,6 +572,11 @@ async function init() {
     overlay.setVisible(false);
     modelReady = false;
   }
+  // Re-apply the saved camera preset (issue #70) now that the 3D overlay
+  // exists — the module-level selectCameraPreset() ran before `overlay` was
+  // created, so it only updated the button highlight, not the actual view.
+  overlay.setCameraPreset(selectedCameraPreset);
+
   // Apply HUD labels for whatever the current profile resolved to, even
   // when no gamepad was detected at startup — the user might enable the
   // HUD before plugging in, and the labels should match the model's
@@ -2095,12 +2100,22 @@ function applyGreenScreen() {
 greenScreenToggle.addEventListener('change', applyGreenScreen);
 greenScreenColorInput.addEventListener('input', applyGreenScreen);
 
-// Camera presets — one selected at a time, used as calibration view
-let selectedCameraPreset = 'player';
+// Camera presets — one selected at a time, used as calibration view.
+// The last-selected preset is persisted (issue #70) so reopening the overlay
+// restores the user's preferred view (e.g. Top) instead of always resetting
+// to Player.
+const CAMERA_PRESETS = ['front', 'back', 'left', 'right', 'player', 'top'];
+const CAMERA_PRESET_KEY = 'overlay:cameraPreset';
+function loadSavedCameraPreset() {
+  const saved = localStorage.getItem(CAMERA_PRESET_KEY);
+  return CAMERA_PRESETS.includes(saved) ? saved : 'player';
+}
+let selectedCameraPreset = loadSavedCameraPreset();
 const cameraPresetBtns = document.querySelectorAll('.camera-presets button');
 
 function selectCameraPreset(preset) {
   selectedCameraPreset = preset;
+  try { localStorage.setItem(CAMERA_PRESET_KEY, preset); } catch (e) { /* ignore */ }
   if (overlay) overlay.setCameraPreset(preset);
   cameraPresetBtns.forEach(b => {
     b.classList.toggle('selected', b.dataset.preset === preset);
@@ -2111,8 +2126,10 @@ cameraPresetBtns.forEach((btn) => {
   btn.addEventListener('click', () => selectCameraPreset(btn.dataset.preset));
 });
 
-// Set default selection (overlay not ready yet, just highlights the button)
-selectCameraPreset('player');
+// Apply the saved (or default) selection — overlay may not be ready yet, in
+// which case this just highlights the button; init() re-applies it to the 3D
+// view once the overlay exists.
+selectCameraPreset(selectedCameraPreset);
 
 // ── Window display toggles (cosmetic only — never affects functionality) ──
 const showTitleCheck = document.getElementById('show-title');
