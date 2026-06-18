@@ -20,7 +20,7 @@ Vendor-agnostic gamepad drivers, WebHID sensor fusion, and the slot/claim `Contr
 
 `ControllerManager` owns N player slots (typically P1/P2). WebHID devices live in a separate pool; pairing a device starts its own `SensorFusion` + synthetic-gamepad immediately, and a slot only takes ownership at *claim time* (so "first to press" assignment is preserved). On release, the entry returns to the pool with fusion still running for seamless re-claim. See the original design in Tandemonium issues #222 / #224.
 
-`SensorFusion` keeps orientation, gravity, stillness detection, and bias-calibration state internal — replacing ~250 lines of duplicated gyro math that used to live inside each consumer.
+`SensorFusion` keeps orientation, gravity, stillness detection, and bias-calibration state internal — replacing ~250 lines of duplicated gyro math that used to live inside each consumer. Its algorithms are derived from [JibbSmart/GamepadMotionHelpers](https://github.com/JibbSmart/GamepadMotionHelpers) by Julian "Jibb" Smart (MIT) and the [GyroWiki](http://gyrowiki.jibbsmart.com/) write-ups; see [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) for the upstream license.
 
 No bundler is required — this is plain ESM. Designed for direct use in Electron + browser contexts via importmap, as well as bundlers (Vite, webpack, esbuild) for web apps.
 
