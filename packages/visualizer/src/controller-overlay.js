@@ -583,6 +583,9 @@ export class ControllerOverlay {
     this._repositionGripBars(profile);
     // Honor the current "show grip bars" setting on this freshly-loaded model.
     this._applyGripBarsVisible();
+    // Paint the bars with the grip color (they're not in a theme group, so this
+    // is the only thing that colors them).
+    this._applyGripBarColor();
 
     // Diagnostic: per-mapping check at load time so we can tell whether
     // each gamepad-index → mesh path will animate at runtime. The press
@@ -1978,6 +1981,24 @@ export class ControllerOverlay {
     this._gripColor = new THREE.Color(hexColor).getHex();
     if (this._gripMarkers) {
       for (const side of ['left', 'right']) this._gripMarkers[side]?.material.color.setHex(this._gripColor);
+    }
+    this._applyGripBarColor();
+  }
+
+  // Paint the grip-sense BAR meshes with the grip color. They're intentionally
+  // excluded from the body/accent theme groups (PR #76) — otherwise they'd take
+  // the body color and vanish into it — so their color is set here instead, and
+  // re-applied whenever the grip color changes.
+  _applyGripBarColor() {
+    const map = PROFILES[this.controllerType]?.gripMeshes;
+    if (!map) return;
+    for (const side of ['left', 'right']) {
+      const obj = this.meshes[map[side]];
+      const mesh = obj && (obj.isMesh ? obj : obj.children?.find((c) => c.isMesh));
+      if (mesh?.material?.color) {
+        mesh.material.color.setHex(this._gripColor);
+        mesh.material.needsUpdate = true;
+      }
     }
   }
 

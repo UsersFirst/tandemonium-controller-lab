@@ -396,12 +396,15 @@ export const PROFILES = {
     // sit over the controller handles where the hands grip, instead of bunched
     // near the center (PR #76 feedback).
     gripMarkerSideOffset: 0.14,
-    // Two-tone (ceski/Larf SC2 look, issue #61): light body = shells + grips
-    // only. Everything else is dark accent — the trackpads, the system buttons
+    // Two-tone (ceski/Larf SC2 look, issue #61): light body = shells only.
+    // The grip-sense bars (left/right_gripsense) are deliberately NOT in a
+    // theme group — they're painted with the grip color so they read as the
+    // grip-sense indicator instead of disappearing into the body color (PR #76).
+    // Everything else is dark accent — the trackpads, the system buttons
     // (view/menu/steam + the "…" quick-access), and the controls (sticks, face
     // buttons, dpad, shoulders, triggers, paddles).
     bodyColorMeshes: [
-      'top_shell', 'bottom_shell', 'left_gripsense', 'right_gripsense',
+      'top_shell', 'bottom_shell',
     ],
     accentColorMeshes: [
       'misc1', 'misc2', 'touchpad', 'touch_point1', 'touch_point2',
