@@ -392,8 +392,10 @@ export const PROFILES = {
     // Lift the glow up a little into the handle body (fraction toward the top).
     gripMarkerHeight: 0.1,
     // Nudge each glow outward into the handle (away from the body center), as a
-    // fraction of the model width.
-    gripMarkerSideOffset: 0.06,
+    // fraction of the model width. Pushed farther out (was 0.06) so the glows
+    // sit over the controller handles where the hands grip, instead of bunched
+    // near the center (PR #76 feedback).
+    gripMarkerSideOffset: 0.14,
     // Two-tone (ceski/Larf SC2 look, issue #61): light body = shells + grips
     // only. Everything else is dark accent — the trackpads, the system buttons
     // (view/menu/steam + the "…" quick-access), and the controls (sticks, face
