@@ -104,6 +104,9 @@ export class ControllerOverlay {
     // Grip highlight color — shares the global highlight color (#45's
     // overlay:highlightColor / --hl-color). Default matches that picker.
     this._gripColor = 0xff0000; // follows the highlight default: red
+    // Reusable scratch color so the per-frame grip-bar tint lerp doesn't
+    // allocate a THREE.Color every frame.
+    this._tmpGripColor = new THREE.Color();
 
     // ── Layout editor (#51): click-drag + keyboard-rotate the floatable parts ──
     this._editMode = false;        // editing the float layout right now
@@ -1938,6 +1941,19 @@ export class ControllerOverlay {
         // brightness at max (and stays subtle at the lower default).
         const barTarget = barOn ? this._gripBrightness * 1.5 : 0;
         mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, barTarget, LERP_SPEED);
+        // Also drive the bar's BASE color white→grip-color on activation (#74).
+        // The emissive glow alone sat on top of the model's near-white bar
+        // material, so a saturated grip color (e.g. red) washed out to a barely
+        // visible pink and the activation was easy to miss. Tinting the base
+        // color makes the on/off transition unmistakable. Capture the model's
+        // original color once so we can lerp back to it on release.
+        if ('color' in mat) {
+          if (mat.userData._gripBarBaseColor === undefined) {
+            mat.userData._gripBarBaseColor = mat.color.getHex();
+          }
+          const targetColor = barOn ? this._gripColor : mat.userData._gripBarBaseColor;
+          mat.color.lerp(this._tmpGripColor.setHex(targetColor), LERP_SPEED);
+        }
       }
       // (2) always-on-top billboard glow marker (brightness = peak opacity)
       const marker = this._gripMarkers?.[side];
