@@ -104,9 +104,6 @@ export class ControllerOverlay {
     // Grip highlight color — shares the global highlight color (#45's
     // overlay:highlightColor / --hl-color). Default matches that picker.
     this._gripColor = 0xff0000; // follows the highlight default: red
-    // Reusable scratch color so the per-frame grip-bar tint lerp doesn't
-    // allocate a THREE.Color every frame.
-    this._tmpGripColor = new THREE.Color();
 
     // ── Layout editor (#51): click-drag + keyboard-rotate the floatable parts ──
     this._editMode = false;        // editing the float layout right now
@@ -1914,50 +1911,28 @@ export class ControllerOverlay {
   }
 
   /**
-   * Highlight the capacitive grip sensors while held (digital on/off). Two
-   * visuals: (1) emissive glow on the grip meshes — only seen when the back of
-   * the controller faces the camera; and (2) a billboard glow marker per grip
-   * rendered ON TOP (depthTest off, at the top of the controller) so grip state
-   * reads at ANY angle. Toggle both via setGripVisible. Intensity lerps.
+   * Highlight the capacitive grip sensors while held (digital on/off). The
+   * activation indicator is a billboard glow marker per grip, rendered ON TOP
+   * (depthTest off) so grip state reads at ANY angle; its peak opacity is the
+   * Grip Brightness setting. Gated by setGripVisible. The grip-sense BARS (the
+   * separate left/right side strips) are purely cosmetic and do NOT change on
+   * touch — keeping them static avoids the white→color flash and makes web and
+   * desktop render identically.
    * @param {{left:boolean, right:boolean}} grips
    */
   setGripState(grips) {
     const map = PROFILES[this.controllerType]?.gripMeshes;
     if (!map || !grips) return;
     for (const side of ['left', 'right']) {
-      const gripped = !!grips[side];
-      // The bars and the on-top glow markers are INDEPENDENT:
-      //  - bars highlight on touch whenever the bars are shown (their own glow),
-      //  - the on-top markers are the separate, toggleable "glow".
-      const barOn = this._gripBarsVisible && gripped;
-      const glowOn = this._gripEnabled && gripped;
-      // (1) bar mesh emissive highlight (on touch, if the bars are visible)
-      const obj = this.meshes[map[side]];
-      const mesh = obj && (obj.isMesh ? obj : obj.children?.find((c) => c.isMesh));
-      const mat = mesh?.material;
-      if (mat && 'emissive' in mat) {
-        mat.emissive.set(this._gripColor); // set each frame so a color change applies live
-        // Bar glow scales with the brightness slider too, so it can reach full
-        // brightness at max (and stays subtle at the lower default).
-        const barTarget = barOn ? this._gripBrightness * 1.5 : 0;
-        mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, barTarget, LERP_SPEED);
-        // Also drive the bar's BASE color white→grip-color on activation (#74).
-        // The emissive glow alone sat on top of the model's near-white bar
-        // material, so a saturated grip color (e.g. red) washed out to a barely
-        // visible pink and the activation was easy to miss. Tinting the base
-        // color makes the on/off transition unmistakable. Capture the model's
-        // original color once so we can lerp back to it on release.
-        if ('color' in mat) {
-          if (mat.userData._gripBarBaseColor === undefined) {
-            mat.userData._gripBarBaseColor = mat.color.getHex();
-          }
-          const targetColor = barOn ? this._gripColor : mat.userData._gripBarBaseColor;
-          mat.color.lerp(this._tmpGripColor.setHex(targetColor), LERP_SPEED);
-        }
-      }
-      // (2) always-on-top billboard glow marker (brightness = peak opacity)
+      // On-top billboard glow marker — the activation cue. Brightness sets its
+      // peak opacity; lerps in/out. (The bars are left untouched on purpose.)
+      const glowOn = this._gripEnabled && !!grips[side];
       const marker = this._gripMarkers?.[side];
-      if (marker) marker.material.opacity = THREE.MathUtils.lerp(marker.material.opacity, glowOn ? this._gripBrightness : 0, LERP_SPEED);
+      if (marker) {
+        marker.material.opacity = THREE.MathUtils.lerp(
+          marker.material.opacity, glowOn ? this._gripBrightness : 0, LERP_SPEED
+        );
+      }
     }
   }
 
