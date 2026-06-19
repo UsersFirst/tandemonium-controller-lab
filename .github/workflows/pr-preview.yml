@@ -1,0 +1,221 @@
+name: PR preview (web + desktop)
+
+# Per-PR preview so a change can be tested fully and in isolation (issue #77),
+# mirroring the PR-preview workflow in petegordon/tandemonium but extended with
+# the desktop installers:
+#
+#   • Web preview  — the browser overlay deployed to the gh-pages `pr-preview/`
+#                    umbrella at  https://lab.usersfirst.games/pr-preview/pr-<N>/
+#                    (overlay at  …/pr-preview/pr-<N>/overlay/). Torn down on close.
+#   • Desktop      — Windows .exe + macOS .dmg/zip published as a per-PR
+#                    *prerelease* tagged `pr-<N>`, deleted when the PR closes.
+#   • One sticky comment links the web URL and the desktop downloads, refreshed
+#                    on every push.
+#
+# Scope: INTERNAL branches only. Fork PRs get a read-only GITHUB_TOKEN (and no
+# secrets), so they can't publish to gh-pages / Releases anyway — every job is
+# guarded on the head repo being this repo to avoid noisy guaranteed failures.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+# Supersede an in-flight preview when the PR is pushed again; each PR is its own
+# group so PRs never cancel each other.
+concurrency:
+  group: pr-preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write        # gh-pages preview branch + per-PR prerelease
+  pull-requests: write   # sticky preview comment
+
+jobs:
+  # ── Web preview → gh-pages /pr-preview/pr-<N>/ (and teardown on close) ──
+  web-preview:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    # Share the repo-wide gh-pages serialization group with deploy-pages.yml so
+    # a prod deploy and a preview deploy never push to gh-pages concurrently.
+    concurrency:
+      group: gh-pages-write
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      # Build steps are skipped on `closed` — the deploy action then only runs
+      # its teardown (removes this PR's preview dir from gh-pages).
+      - name: Assemble _site for the preview subpath
+        if: github.event.action != 'closed'
+        run: |
+          node apps/overlay/scripts/copy-workspace.js
+          HASH=$(git rev-parse --short HEAD)
+          export BUILD_STAMP="PR #${{ github.event.number }} &middot; <a href=\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}\" target=\"_blank\" rel=\"noopener\">v.${HASH}</a> &middot; $(date -u +'%Y-%m-%d %H:%M UTC')"
+          node scripts/stamp-build-version.js apps/overlay/src/index.html web/index.html
+          node scripts/build-web.js
+          # Scope the landing page's relative URLs to the preview subpath so its
+          # links (e.g. → /overlay) resolve under /pr-preview/pr-<N>/.
+          sed -i 's|<head>|<head><base href="/pr-preview/pr-${{ github.event.number }}/">|' _site/index.html
+      - name: Deploy / teardown PR web preview
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: ./_site/
+          preview-branch: gh-pages
+          umbrella-dir: pr-preview
+          action: auto
+          # We post a single combined sticky comment (web + desktop) ourselves.
+          comment: false
+
+  # ── Desktop installers (skipped on close) ──
+  build-macos:
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Stamp build version
+        shell: bash
+        run: |
+          HASH=$(git rev-parse --short HEAD)
+          export BUILD_STAMP="PR #${{ github.event.number }} &middot; <a href=\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}\" target=\"_blank\" rel=\"noopener\">v.${HASH}</a> &middot; $(date -u +'%Y-%m-%d %H:%M UTC')"
+          node scripts/stamp-build-version.js apps/overlay/src/index.html
+      - name: Build macOS (zip + dmg)
+        working-directory: apps/overlay
+        shell: bash
+        run: |
+          node scripts/copy-three.js
+          node scripts/copy-workspace.js
+          npx electron-forge make --arch universal --targets @electron-forge/maker-zip
+          bash scripts/make-dmg.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          if-no-files-found: error
+          path: |
+            apps/overlay/out/WebHID-Controller-Overlay.dmg
+            apps/overlay/out/make/zip/darwin/**/*.zip
+
+  build-windows:
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Stamp build version
+        shell: bash
+        run: |
+          HASH=$(git rev-parse --short HEAD)
+          export BUILD_STAMP="PR #${{ github.event.number }} &middot; <a href=\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}\" target=\"_blank\" rel=\"noopener\">v.${HASH}</a> &middot; $(date -u +'%Y-%m-%d %H:%M UTC')"
+          node scripts/stamp-build-version.js apps/overlay/src/index.html
+      - name: Build Windows (squirrel + zip)
+        working-directory: apps/overlay
+        shell: bash
+        run: |
+          node scripts/copy-three.js
+          node scripts/copy-workspace.js
+          npx electron-forge make --targets @electron-forge/maker-squirrel,@electron-forge/maker-zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          if-no-files-found: error
+          path: |
+            apps/overlay/out/make/squirrel.windows/**/*.exe
+            apps/overlay/out/make/zip/win32/**/*.zip
+
+  # ── Per-PR prerelease so the installers have stable, clickable URLs ──
+  prerelease:
+    needs: [build-macos, build-windows]
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Gather release files
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' \) -exec cp {} release-assets/ \;
+          ls -lh release-assets
+      - name: Publish PR prerelease
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: pr-${{ github.event.number }}
+          name: "PR #${{ github.event.number }} preview (${{ github.event.pull_request.head.sha }})"
+          # Prerelease + NOT latest so it never displaces the rolling
+          # `webhid-overlay-latest` release the landing page tracks.
+          prerelease: true
+          make_latest: false
+          target_commitish: ${{ github.event.pull_request.head.sha }}
+          files: release-assets/*
+          body: |
+            Automated **preview build** for PR #${{ github.event.number }} — for testing in isolation only.
+
+            - **Commit:** `${{ github.event.pull_request.head.sha }}`
+            - **Windows:** `*-Setup.exe` (installer) or `.zip` (portable)
+            - **macOS:** `WebHID-Controller-Overlay.dmg` or `.zip` (unsigned — right-click → Open on first launch)
+
+            This prerelease is deleted automatically when the PR closes.
+
+  # ── One combined sticky comment (web URL + desktop downloads) ──
+  comment:
+    needs: [web-preview, prerelease]
+    if: always() && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post / update preview comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pr-preview
+          message: |
+            ### 🔎 PR #${{ github.event.number }} preview — test it in isolation
+
+            **🌐 Web overlay:** https://lab.usersfirst.games/pr-preview/pr-${{ github.event.number }}/overlay/
+            _(landing page: https://lab.usersfirst.games/pr-preview/pr-${{ github.event.number }}/)_
+
+            **💻 Desktop installers (prerelease):** https://github.com/${{ github.repository }}/releases/tag/pr-${{ github.event.number }}
+            - **Windows** — `…-Setup.exe` (installer) or `.zip` (portable)
+            - **macOS** — `WebHID-Controller-Overlay.dmg` or `.zip` (unsigned: right-click → Open)
+
+            <sub>Updated for ${{ github.event.pull_request.head.sha }}. Web preview and prerelease are torn down when this PR closes.</sub>
+
+  # ── Teardown on close: delete the per-PR prerelease + tag, note the comment ──
+  cleanup:
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete PR prerelease and tag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = `pr-${context.issue.number}`;
+            try {
+              const rel = await github.rest.repos.getReleaseByTag({ ...context.repo, tag });
+              await github.rest.repos.deleteRelease({ ...context.repo, release_id: rel.data.id });
+              core.info(`Deleted release ${tag}`);
+            } catch (e) {
+              core.info(`No release ${tag} to delete (${e.status})`);
+            }
+            try {
+              await github.rest.git.deleteRef({ ...context.repo, ref: `tags/${tag}` });
+              core.info(`Deleted tag ${tag}`);
+            } catch (e) {
+              core.info(`No tag ${tag} to delete (${e.status})`);
+            }
+      - name: Update sticky comment to "torn down"
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pr-preview
+          message: |
+            ### 🔎 PR #${{ github.event.number }} preview — torn down
+
+            This PR is closed; its web preview and desktop prerelease have been removed.
