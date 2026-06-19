@@ -1,5 +1,16 @@
 name: Deploy web overlay (lab.usersfirst.games)
 
+# Publishes the production site to the ROOT of the `gh-pages` branch. We use a
+# branch-based Pages source (rather than the GitHub-Actions Pages source) so
+# the per-PR previews from pr-preview.yml — which live under gh-pages
+# `pr-preview/pr-<N>/` via rossjrw/pr-preview-action — can coexist with prod on
+# the same site. `keep_files: true` means a prod deploy never wipes the
+# `pr-preview/` umbrella (or vice-versa).
+#
+# ⚠️ One-time repo setting required: Settings → Pages → "Build and deployment"
+#    → Source = "Deploy from a branch" → Branch = `gh-pages` / `(root)`.
+#    The custom domain (lab.usersfirst.games) is preserved via the CNAME file
+#    that build-web.js writes into _site (and the `cname:` below).
 on:
   push:
     branches: [main]
@@ -13,23 +24,18 @@ on:
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
-# Required for the GitHub Actions Pages deployment.
+# Pushing to the gh-pages branch needs write to repo contents.
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
-# One in-flight deploy at a time; don't cancel a running publish.
+# Serialize gh-pages writes so a prod deploy and a preview deploy don't race.
 concurrency:
-  group: pages
+  group: gh-pages-write
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -46,9 +52,12 @@ jobs:
           node scripts/stamp-build-version.js apps/overlay/src/index.html web/index.html
       - name: Assemble _site (landing + /overlay + CNAME)
         run: node scripts/build-web.js
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
+      - name: Publish to gh-pages root
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: _site
-      - id: deploy
-        uses: actions/deploy-pages@v5
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          # Preserve the pr-preview/ umbrella (and anything else) on gh-pages.
+          keep_files: true
+          # Re-assert the custom domain on every deploy so it survives keep_files.
+          cname: lab.usersfirst.games
