@@ -1037,6 +1037,84 @@ export class ControllerOverlay {
 
   _emitLayout() { if (this._onLayoutChange) this._onLayoutChange(this.getLayout()); }
 
+  // Lazily create a part's layout override, SEEDED FROM ITS CURRENT POPPED
+  // ORIENTATION rather than zero rotation. Selecting/grabbing a part used to
+  // reset it to euler {0,0,0}, throwing away its intended tilt (triggers/
+  // bumpers' tiltUp) or camera-facing pose (paddles) — the "orientation resets
+  // on first click" complaint. Reading the live wrapper quaternion reproduces
+  // exactly what's on screen, so the first edit is a no-op visually.
+  _ensureLayout(w) {
+    if (!w || w.layout) return;
+    const q = (this._layoutMode === 'absolute')
+      ? w.group.getWorldQuaternion(new THREE.Quaternion())
+      : w.group.quaternion.clone();
+    const e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
+    w.layout = {
+      offset: w.offset.clone(),
+      euler: {
+        x: THREE.MathUtils.radToDeg(e.x),
+        y: THREE.MathUtils.radToDeg(e.y),
+        z: THREE.MathUtils.radToDeg(e.z),
+      },
+    };
+  }
+
+  /**
+   * Current position/rotation of the selected part, for a numeric editor.
+   * Read-only — does NOT create an override (so merely selecting a part to
+   * inspect its values doesn't freeze a camera-facing paddle). Values match
+   * what `setSelectedLayout` accepts: offset in parent-local model units,
+   * euler in degrees. Returns null when nothing is selected.
+   */
+  getSelectedLayout() {
+    const w = this._selectedWrapper;
+    if (!w) return null;
+    let offset, euler;
+    if (w.layout) {
+      offset = w.layout.offset;
+      euler = w.layout.euler;
+    } else {
+      offset = w.offset;
+      const q = (this._layoutMode === 'absolute')
+        ? w.group.getWorldQuaternion(new THREE.Quaternion())
+        : w.group.quaternion;
+      const e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
+      euler = {
+        x: THREE.MathUtils.radToDeg(e.x),
+        y: THREE.MathUtils.radToDeg(e.y),
+        z: THREE.MathUtils.radToDeg(e.z),
+      };
+    }
+    return {
+      partName: w.partName,
+      offset: { x: offset.x, y: offset.y, z: offset.z },
+      euler: { x: euler.x, y: euler.y, z: euler.z },
+    };
+  }
+
+  /**
+   * Set precise position/rotation on the selected part from a numeric editor.
+   * Accepts a partial `{ offset:{x,y,z}, euler:{x,y,z} }`; only finite fields
+   * are applied, so individual axes can be edited independently. Commits an
+   * override (seeded from the current pose for any axes left unspecified).
+   */
+  setSelectedLayout(vals) {
+    const w = this._selectedWrapper;
+    if (!w || !vals) return;
+    this._ensureLayout(w);
+    if (vals.offset) {
+      for (const k of ['x', 'y', 'z']) {
+        if (Number.isFinite(vals.offset[k])) w.layout.offset[k] = vals.offset[k];
+      }
+    }
+    if (vals.euler) {
+      for (const k of ['x', 'y', 'z']) {
+        if (Number.isFinite(vals.euler[k])) w.layout.euler[k] = vals.euler[k];
+      }
+    }
+    this._emitLayout();
+  }
+
   // Raycast canvas coords → the floatable wrapper under the cursor (or null).
   _pickWrapper(clientX, clientY) {
     const el = this.renderer?.domElement;
@@ -1107,7 +1185,7 @@ export class ControllerOverlay {
     if (!hit) { if (this.controls) this.controls.enabled = true; return; }
     const parent = w.group.parent;
     const startLocal = parent ? parent.worldToLocal(hit.clone()) : hit.clone();
-    if (!w.layout) w.layout = { offset: w.offset.clone(), euler: { x: 0, y: 0, z: 0 } };
+    this._ensureLayout(w);
     this._dragState = { wrapper: w, plane, startLocal, startOffset: w.layout.offset.clone() };
   }
 
@@ -1133,7 +1211,7 @@ export class ControllerOverlay {
     if (e.key === 'Escape') { this._selectWrapper(null); e.preventDefault(); return; }
     const w = this._selectedWrapper;
     if (!w) return;
-    if (!w.layout) w.layout = { offset: w.offset.clone(), euler: { x: 0, y: 0, z: 0 } };
+    this._ensureLayout(w);
     const step = e.shiftKey ? 2 : 15; // degrees per press (Shift = fine)
     let handled = true;
     switch (e.key) {

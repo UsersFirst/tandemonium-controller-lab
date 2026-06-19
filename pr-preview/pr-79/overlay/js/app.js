@@ -555,6 +555,8 @@ async function init() {
     });
     overlay.setLayoutChangeHandler((layout) => {
       localStorage.setItem('overlay:partLayout:' + currentControllerType, JSON.stringify(layout));
+      // Keep the numeric editor in sync while the user drags or nudges with keys.
+      refreshLayoutNumeric();
     });
     overlay.setSelectHandler(onEditSelectionChange);
     overlay.setLayoutMode(localStorage.getItem('overlay:layoutMode') || 'relative');
@@ -1962,9 +1964,47 @@ const editLayoutStatusRow = document.getElementById('edit-layout-status-row');
 const editLayoutHelp = document.getElementById('edit-layout-help');
 const editLayoutSelected = document.getElementById('edit-layout-selected');
 
+// Precise numeric editor for the selected part (in addition to drag + Q/E/arrows).
+const editLayoutNumeric = document.getElementById('edit-layout-numeric');
+const layoutNumInputs = {
+  px: document.getElementById('layout-pos-x'), py: document.getElementById('layout-pos-y'), pz: document.getElementById('layout-pos-z'),
+  rx: document.getElementById('layout-rot-x'), ry: document.getElementById('layout-rot-y'), rz: document.getElementById('layout-rot-z'),
+};
+
+// Push the selected part's live values into the numeric fields. Skips a field
+// the user is mid-edit in (so typing isn't clobbered by drag/key updates), and
+// rounds for readability. Pass the overlay's getSelectedLayout() result.
+function refreshLayoutNumeric() {
+  const data = overlay?.getSelectedLayout?.();
+  if (!data) return;
+  const round = (v, d) => Number.isFinite(v) ? Number(v.toFixed(d)) : 0;
+  const set = (el, v) => { if (el && document.activeElement !== el) el.value = v; };
+  set(layoutNumInputs.px, round(data.offset.x, 3));
+  set(layoutNumInputs.py, round(data.offset.y, 3));
+  set(layoutNumInputs.pz, round(data.offset.z, 3));
+  set(layoutNumInputs.rx, round(data.euler.x, 1));
+  set(layoutNumInputs.ry, round(data.euler.y, 1));
+  set(layoutNumInputs.rz, round(data.euler.z, 1));
+}
+
+// Read all six fields and apply them to the selected part.
+function applyLayoutNumeric() {
+  if (!overlay?.setSelectedLayout) return;
+  const num = (el) => { const v = parseFloat(el?.value); return Number.isFinite(v) ? v : undefined; };
+  overlay.setSelectedLayout({
+    offset: { x: num(layoutNumInputs.px), y: num(layoutNumInputs.py), z: num(layoutNumInputs.pz) },
+    euler:  { x: num(layoutNumInputs.rx), y: num(layoutNumInputs.ry), z: num(layoutNumInputs.rz) },
+  });
+}
+for (const el of Object.values(layoutNumInputs)) {
+  el?.addEventListener('input', applyLayoutNumeric);
+}
+
 // Reflect the overlay's current selection in the settings UI.
 function onEditSelectionChange(partName) {
   if (editLayoutSelected) editLayoutSelected.textContent = partName || 'none';
+  if (editLayoutNumeric) editLayoutNumeric.style.display = partName ? '' : 'none';
+  if (partName) refreshLayoutNumeric();
 }
 
 if (editLayoutToggle) {
