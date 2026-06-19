@@ -144,6 +144,10 @@
     cursor: pointer;
   }
 
+  .layout-num-row { align-items: center; }
+  .layout-num-fields { display: flex; align-items: center; gap: 4px; }
+  .layout-num-fields input[type="number"] { width: 46px; }
+
   .window-size-fields { display: flex; align-items: center; gap: 4px; }
   .window-size-x { color: #888; font-size: 11px; }
   .setting-row input[type="number"] {
@@ -1067,7 +1071,28 @@
     <span class="combo-display" id="edit-layout-selected">none</span>
   </div>
   <div id="edit-layout-help" class="build-stamp" style="display:none; text-align:left; margin-top:2px; white-space:normal;">
-    Click a part to select. Drag to move. Rotate with arrows (pitch/yaw), Q/E (roll); Shift = fine, R = reset rotation, Esc = deselect.
+    Click a part to select. Drag to move, or type exact values below. Rotate with arrows (pitch/yaw), Q/E (roll); Shift = fine, R = reset rotation, Esc = deselect.
+  </div>
+  <div id="edit-layout-numeric" style="display:none;">
+    <div class="setting-row layout-num-row">
+      <label title="Position offset in model units. X mirrors left (−) / right (+), Y is up (+), Z is front (+) / back (−). Type matching values on the two sides for a symmetrical layout.">Position</label>
+      <span class="layout-num-fields">
+        <input type="number" id="layout-pos-x" step="0.01" autocomplete="off" title="X — left −/right +">
+        <input type="number" id="layout-pos-y" step="0.01" autocomplete="off" title="Y — up +">
+        <input type="number" id="layout-pos-z" step="0.01" autocomplete="off" title="Z — front +/back −">
+      </span>
+    </div>
+    <div class="setting-row layout-num-row">
+      <label title="Rotation in degrees: pitch (X), yaw (Y), roll (Z).">Rotation°</label>
+      <span class="layout-num-fields">
+        <input type="number" id="layout-rot-x" step="1" autocomplete="off" title="Pitch — X">
+        <input type="number" id="layout-rot-y" step="1" autocomplete="off" title="Yaw — Y">
+        <input type="number" id="layout-rot-z" step="1" autocomplete="off" title="Roll — Z">
+      </span>
+    </div>
+    <div class="build-stamp" style="text-align:left; margin-top:2px; white-space:normal;">
+      Tip: for a symmetrical layout, give the left/right parts the same values with X negated (e.g. X −0.30 ↔ +0.30).
+    </div>
   </div>
   <div class="setting-row">
     <button class="settings-action-btn" id="reset-layout">RESET LAYOUT</button>
