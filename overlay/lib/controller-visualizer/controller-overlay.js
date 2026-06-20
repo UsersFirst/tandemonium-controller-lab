@@ -818,9 +818,11 @@ export class ControllerOverlay {
       this._floatWrappers.push(wrapper);
     }
 
-    // Re-apply any saved user layout for this controller (the editor's provider
-    // is registered by the app); runs on every (re)load so switching controllers
-    // restores each one's saved positions.
+    // Apply the profile's hand-tuned default layout first (baseline), then let
+    // any saved user layout for this controller override it. Both run on every
+    // (re)load so switching controllers restores each one's positions; the
+    // editor's provider is registered by the app.
+    if (profile.defaultLayout) this.applyLayout(profile.defaultLayout);
     if (this._layoutProvider) {
       const saved = this._layoutProvider(this.controllerType);
       if (saved) this.applyLayout(saved);
@@ -1027,15 +1029,112 @@ export class ControllerOverlay {
 
   /** Clear all per-part overrides back to the profile defaults. */
   resetLayout() {
-    for (const w of this._floatWrappers) w.layout = null;
+    for (const w of this._floatWrappers) this._restoreWrapperDefault(w);
     this._emitLayout();
   }
   /** Clear just the selected part's override. */
   resetSelected() {
-    if (this._selectedWrapper) { this._selectedWrapper.layout = null; this._emitLayout(); }
+    if (this._selectedWrapper) { this._restoreWrapperDefault(this._selectedWrapper); this._emitLayout(); }
   }
 
+  // Reset a wrapper to the position it had BEFORE any user edit — i.e. the spot
+  // shown when Edit Layout opens. That's the profile's hand-tuned defaultLayout
+  // if it lists this part (Steam triggers/bumpers), otherwise null so it falls
+  // back to the computed floatTuning offset. So "reset" undoes the user's tweaks
+  // rather than jumping to a different procedural value.
+  _restoreWrapperDefault(w) {
+    const def = PROFILES[this.controllerType]?.defaultLayout?.[w.partName];
+    if (def && Array.isArray(def.offset)) {
+      w.layout = {
+        offset: new THREE.Vector3(def.offset[0] || 0, def.offset[1] || 0, def.offset[2] || 0),
+        euler: { x: def.euler?.[0] || 0, y: def.euler?.[1] || 0, z: def.euler?.[2] || 0 },
+      };
+    } else {
+      w.layout = null;
+    }
+  }
+  /** Deselect the current part (used by the floating editor's close button). */
+  clearLayoutSelection() { this._selectWrapper(null); }
+
   _emitLayout() { if (this._onLayoutChange) this._onLayoutChange(this.getLayout()); }
+
+  // Lazily create a part's layout override, SEEDED FROM ITS CURRENT POPPED
+  // ORIENTATION rather than zero rotation. Selecting/grabbing a part used to
+  // reset it to euler {0,0,0}, throwing away its intended tilt (triggers/
+  // bumpers' tiltUp) or camera-facing pose (paddles) — the "orientation resets
+  // on first click" complaint. Reading the live wrapper quaternion reproduces
+  // exactly what's on screen, so the first edit is a no-op visually.
+  _ensureLayout(w) {
+    if (!w || w.layout) return;
+    const q = (this._layoutMode === 'absolute')
+      ? w.group.getWorldQuaternion(new THREE.Quaternion())
+      : w.group.quaternion.clone();
+    const e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
+    w.layout = {
+      offset: w.offset.clone(),
+      euler: {
+        x: THREE.MathUtils.radToDeg(e.x),
+        y: THREE.MathUtils.radToDeg(e.y),
+        z: THREE.MathUtils.radToDeg(e.z),
+      },
+    };
+  }
+
+  /**
+   * Current position/rotation of the selected part, for a numeric editor.
+   * Read-only — does NOT create an override (so merely selecting a part to
+   * inspect its values doesn't freeze a camera-facing paddle). Values match
+   * what `setSelectedLayout` accepts: offset in parent-local model units,
+   * euler in degrees. Returns null when nothing is selected.
+   */
+  getSelectedLayout() {
+    const w = this._selectedWrapper;
+    if (!w) return null;
+    let offset, euler;
+    if (w.layout) {
+      offset = w.layout.offset;
+      euler = w.layout.euler;
+    } else {
+      offset = w.offset;
+      const q = (this._layoutMode === 'absolute')
+        ? w.group.getWorldQuaternion(new THREE.Quaternion())
+        : w.group.quaternion;
+      const e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
+      euler = {
+        x: THREE.MathUtils.radToDeg(e.x),
+        y: THREE.MathUtils.radToDeg(e.y),
+        z: THREE.MathUtils.radToDeg(e.z),
+      };
+    }
+    return {
+      partName: w.partName,
+      offset: { x: offset.x, y: offset.y, z: offset.z },
+      euler: { x: euler.x, y: euler.y, z: euler.z },
+    };
+  }
+
+  /**
+   * Set precise position/rotation on the selected part from a numeric editor.
+   * Accepts a partial `{ offset:{x,y,z}, euler:{x,y,z} }`; only finite fields
+   * are applied, so individual axes can be edited independently. Commits an
+   * override (seeded from the current pose for any axes left unspecified).
+   */
+  setSelectedLayout(vals) {
+    const w = this._selectedWrapper;
+    if (!w || !vals) return;
+    this._ensureLayout(w);
+    if (vals.offset) {
+      for (const k of ['x', 'y', 'z']) {
+        if (Number.isFinite(vals.offset[k])) w.layout.offset[k] = vals.offset[k];
+      }
+    }
+    if (vals.euler) {
+      for (const k of ['x', 'y', 'z']) {
+        if (Number.isFinite(vals.euler[k])) w.layout.euler[k] = vals.euler[k];
+      }
+    }
+    this._emitLayout();
+  }
 
   // Raycast canvas coords → the floatable wrapper under the cursor (or null).
   _pickWrapper(clientX, clientY) {
@@ -1107,7 +1206,7 @@ export class ControllerOverlay {
     if (!hit) { if (this.controls) this.controls.enabled = true; return; }
     const parent = w.group.parent;
     const startLocal = parent ? parent.worldToLocal(hit.clone()) : hit.clone();
-    if (!w.layout) w.layout = { offset: w.offset.clone(), euler: { x: 0, y: 0, z: 0 } };
+    this._ensureLayout(w);
     this._dragState = { wrapper: w, plane, startLocal, startOffset: w.layout.offset.clone() };
   }
 
@@ -1133,7 +1232,7 @@ export class ControllerOverlay {
     if (e.key === 'Escape') { this._selectWrapper(null); e.preventDefault(); return; }
     const w = this._selectedWrapper;
     if (!w) return;
-    if (!w.layout) w.layout = { offset: w.offset.clone(), euler: { x: 0, y: 0, z: 0 } };
+    this._ensureLayout(w);
     const step = e.shiftKey ? 2 : 15; // degrees per press (Shift = fine)
     let handled = true;
     switch (e.key) {

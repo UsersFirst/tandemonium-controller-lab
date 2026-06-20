@@ -367,18 +367,38 @@ export const PROFILES = {
     floatTuning: {
       left_shoulder:  { back: 0.08, up: 0.12, tiltUp: 65 },
       right_shoulder: { back: 0.08, up: 0.12, tiltUp: 65 },
-      left_trigger:   { back: 0.22, up: 0.24, tiltUp: 65 },
-      right_trigger:  { back: 0.22, up: 0.24, tiltUp: 65 },
+      // Triggers sit ABOVE/behind the bumpers when popped. #61's tighter spread
+      // packed them right on top of the bumpers (issue #75 — they overlapped),
+      // so push the triggers further off the back surface to reopen the gap.
+      left_trigger:   { back: 0.34, up: 0.36, tiltUp: 65 },
+      right_trigger:  { back: 0.34, up: 0.36, tiltUp: 65 },
       // Paddles pop toward the CENTER (X) and along −Z, with a little drop, so
       // from the top view they sit between the handle ends toward the bottom of
       // the view and stay visible. Knobs (model-radius units):
       //   up<0   = down (−Y)
       //   back>0 = −Z, back<0 = +Z (toward camera). `offset.z = −radius·back`.
       //   side<0 = inward toward center (X)
-      paddle1: { up: -0.14, back: -0.45, side: -0.13 },
-      paddle2: { up: -0.14, back: -0.45, side: -0.13 },
-      paddle3: { up: -0.14, back: -0.45, side: -0.13 },
-      paddle4: { up: -0.14, back: -0.45, side: -0.13 },
+      // #61 dropped them too far under the body (issue #75 — half hidden below);
+      // raise them and pull them further toward the camera so they clear the
+      // body's bottom edge instead of hiding behind it.
+      paddle1: { up: -0.06, back: -0.58, side: -0.13 },
+      paddle2: { up: -0.06, back: -0.58, side: -0.13 },
+      paddle3: { up: -0.06, back: -0.58, side: -0.13 },
+      paddle4: { up: -0.06, back: -0.58, side: -0.13 },
+    },
+    // Hand-tuned pop-off placement for the triggers + bumpers (issue #75),
+    // captured from the Edit-Layout editor. This is the same shape the editor
+    // persists to localStorage and overrides floatTuning's computed offset for
+    // these parts: `offset` is the part's parent-local translation (model-radius
+    // units, already scale-divided) and `euler` is its rotation in DEGREES. The
+    // overlay applies this as the baseline; a user's own Edit-Layout tweaks
+    // (saved to localStorage) still take precedence. Parts not listed here keep
+    // their floatTuning offset.
+    defaultLayout: {
+      left_trigger:   { offset: [0.002, 0.0295, -0.0287],  euler: [65, 0, 0] },
+      right_trigger:  { offset: [-0.0007, 0.0295, -0.0294], euler: [65, 0, 0] },
+      left_shoulder:  { offset: [0.0007, 0.0098, -0.0024],  euler: [65, 0, 0] },
+      right_shoulder: { offset: [-0.0006, 0.0098, -0.003],  euler: [65, 0, 0] },
     },
     // Capacitive grip sensors (digital): glow these meshes while the grip is
     // held (driver parsed.grips). Highlighted via overlay.setGripState.
