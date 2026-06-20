@@ -818,9 +818,11 @@ export class ControllerOverlay {
       this._floatWrappers.push(wrapper);
     }
 
-    // Re-apply any saved user layout for this controller (the editor's provider
-    // is registered by the app); runs on every (re)load so switching controllers
-    // restores each one's saved positions.
+    // Apply the profile's hand-tuned default layout first (baseline), then let
+    // any saved user layout for this controller override it. Both run on every
+    // (re)load so switching controllers restores each one's positions; the
+    // editor's provider is registered by the app.
+    if (profile.defaultLayout) this.applyLayout(profile.defaultLayout);
     if (this._layoutProvider) {
       const saved = this._layoutProvider(this.controllerType);
       if (saved) this.applyLayout(saved);
@@ -1027,13 +1029,32 @@ export class ControllerOverlay {
 
   /** Clear all per-part overrides back to the profile defaults. */
   resetLayout() {
-    for (const w of this._floatWrappers) w.layout = null;
+    for (const w of this._floatWrappers) this._restoreWrapperDefault(w);
     this._emitLayout();
   }
   /** Clear just the selected part's override. */
   resetSelected() {
-    if (this._selectedWrapper) { this._selectedWrapper.layout = null; this._emitLayout(); }
+    if (this._selectedWrapper) { this._restoreWrapperDefault(this._selectedWrapper); this._emitLayout(); }
   }
+
+  // Reset a wrapper to the position it had BEFORE any user edit — i.e. the spot
+  // shown when Edit Layout opens. That's the profile's hand-tuned defaultLayout
+  // if it lists this part (Steam triggers/bumpers), otherwise null so it falls
+  // back to the computed floatTuning offset. So "reset" undoes the user's tweaks
+  // rather than jumping to a different procedural value.
+  _restoreWrapperDefault(w) {
+    const def = PROFILES[this.controllerType]?.defaultLayout?.[w.partName];
+    if (def && Array.isArray(def.offset)) {
+      w.layout = {
+        offset: new THREE.Vector3(def.offset[0] || 0, def.offset[1] || 0, def.offset[2] || 0),
+        euler: { x: def.euler?.[0] || 0, y: def.euler?.[1] || 0, z: def.euler?.[2] || 0 },
+      };
+    } else {
+      w.layout = null;
+    }
+  }
+  /** Deselect the current part (used by the floating editor's close button). */
+  clearLayoutSelection() { this._selectWrapper(null); }
 
   _emitLayout() { if (this._onLayoutChange) this._onLayoutChange(this.getLayout()); }
 

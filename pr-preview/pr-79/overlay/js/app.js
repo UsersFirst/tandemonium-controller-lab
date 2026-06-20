@@ -1830,7 +1830,7 @@ document.getElementById('btn-close-settings').addEventListener('click', () => {
 
 // Reset every saved overlay setting (all `overlay:*` keys) and reload so the
 // app re-initializes from defaults.
-document.getElementById('btn-reset-defaults').addEventListener('click', () => {
+document.getElementById('btn-reset-defaults').addEventListener('click', async () => {
   if (!confirm('Reset ALL overlay settings to their defaults? This clears your saved customizations.')) return;
   // Clear every overlay key — both the `overlay:` settings and the
   // `overlay-display-prefs` blob (note: no colon, so a `overlay:` filter misses it).
@@ -1840,6 +1840,9 @@ document.getElementById('btn-reset-defaults').addEventListener('click', () => {
   // Force the settings gear visible so a reset can never strand the user with a
   // hidden gear (the in-handle Ctrl+Right-Click is the other way back in).
   try { localStorage.removeItem('overlay-display-prefs'); } catch (e) { /* ignore */ }
+  // Window size lives in the main process (window-state.json), not localStorage,
+  // so it has to be reset over IPC. Await it so the resize lands before reload.
+  try { await window.electronAPI?.resetWindowSize?.(); } catch (e) { /* ignore */ }
   location.reload();
 });
 
@@ -1960,12 +1963,13 @@ let layoutEditing = false;
 const editLayoutToggle = document.getElementById('edit-layout-toggle');
 const layoutModeSelect = document.getElementById('layout-mode');
 const resetLayoutBtn = document.getElementById('reset-layout');
-const editLayoutStatusRow = document.getElementById('edit-layout-status-row');
 const editLayoutHelp = document.getElementById('edit-layout-help');
 const editLayoutSelected = document.getElementById('edit-layout-selected');
 
 // Precise numeric editor for the selected part (in addition to drag + Q/E/arrows).
-const editLayoutNumeric = document.getElementById('edit-layout-numeric');
+// It's a floating popup (outside the settings panel) so it's visible while the
+// panel is closed and the user is dragging parts in the 3D view.
+const layoutPopup = document.getElementById('layout-editor-popup');
 const layoutNumInputs = {
   px: document.getElementById('layout-pos-x'), py: document.getElementById('layout-pos-y'), pz: document.getElementById('layout-pos-z'),
   rx: document.getElementById('layout-rot-x'), ry: document.getElementById('layout-rot-y'), rz: document.getElementById('layout-rot-z'),
@@ -1996,14 +2000,30 @@ function applyLayoutNumeric() {
     euler:  { x: num(layoutNumInputs.rx), y: num(layoutNumInputs.ry), z: num(layoutNumInputs.rz) },
   });
 }
-for (const el of Object.values(layoutNumInputs)) {
-  el?.addEventListener('input', applyLayoutNumeric);
+for (const [key, el] of Object.entries(layoutNumInputs)) {
+  if (!el) continue;
+  el.addEventListener('input', applyLayoutNumeric);
+  // Shift + ↑/↓ does a fine nudge (Position 0.001, Rotation 0.1°). Native number
+  // inputs have no "fine step" modifier, so handle it ourselves; plain ↑/↓ keep
+  // the coarse `step` from the markup (0.01 / 1).
+  const isPos = key.startsWith('p');
+  const fineStep = isPos ? 0.001 : 0.1;
+  const decimals = isPos ? 3 : 1;
+  el.addEventListener('keydown', (e) => {
+    if (!e.shiftKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    const cur = parseFloat(el.value) || 0;
+    const next = cur + (e.key === 'ArrowUp' ? fineStep : -fineStep);
+    el.value = next.toFixed(decimals);
+    applyLayoutNumeric();
+  });
 }
 
-// Reflect the overlay's current selection in the settings UI.
+// Reflect the overlay's current selection: pop up the numeric editor for the
+// selected part, hide it when nothing is selected.
 function onEditSelectionChange(partName) {
   if (editLayoutSelected) editLayoutSelected.textContent = partName || 'none';
-  if (editLayoutNumeric) editLayoutNumeric.style.display = partName ? '' : 'none';
+  if (layoutPopup) layoutPopup.style.display = partName ? 'block' : 'none';
   if (partName) refreshLayoutNumeric();
 }
 
@@ -2012,11 +2032,50 @@ if (editLayoutToggle) {
     const on = e.target.checked;
     layoutEditing = on; // suppress window-drag while editing
     if (overlay?.setEditMode) overlay.setEditMode(on);
-    if (editLayoutStatusRow) editLayoutStatusRow.style.display = on ? '' : 'none';
     if (editLayoutHelp) editLayoutHelp.style.display = on ? '' : 'none';
-    if (!on) onEditSelectionChange(null);
+    if (!on) onEditSelectionChange(null); // editing off → close the popup
   });
 }
+
+// Floating editor controls: close (×) deselects the part; "Reset this part"
+// clears just its override. Both flow back through the overlay's select/layout
+// handlers, which refresh the fields.
+document.getElementById('lep-close')?.addEventListener('click', () => {
+  overlay?.clearLayoutSelection?.();
+});
+document.getElementById('lep-reset-part')?.addEventListener('click', () => {
+  overlay?.resetSelected?.();
+  refreshLayoutNumeric();
+});
+
+// Let the user drag the popup by its header so it never blocks the part being
+// edited. Window-drag is already suppressed while editing (layoutEditing), so
+// this can't fight the OS window move.
+(function makeLayoutPopupDraggable() {
+  const handle = document.getElementById('lep-drag');
+  if (!layoutPopup || !handle) return;
+  let dragging = false, offX = 0, offY = 0;
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return; // the close button isn't a drag grip
+    dragging = true;
+    const r = layoutPopup.getBoundingClientRect();
+    offX = e.clientX - r.left;
+    offY = e.clientY - r.top;
+    try { handle.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    e.preventDefault();
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    layoutPopup.style.left = Math.max(0, e.clientX - offX) + 'px';
+    layoutPopup.style.top = Math.max(0, e.clientY - offY) + 'px';
+  });
+  const stop = (e) => {
+    dragging = false;
+    try { handle.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+  };
+  handle.addEventListener('pointerup', stop);
+  handle.addEventListener('pointercancel', stop);
+})();
 
 if (layoutModeSelect) {
   layoutModeSelect.value = localStorage.getItem('overlay:layoutMode') || 'relative';
@@ -2029,6 +2088,7 @@ if (layoutModeSelect) {
 if (resetLayoutBtn) {
   resetLayoutBtn.addEventListener('click', () => {
     if (overlay?.resetLayout) overlay.resetLayout();
+    refreshLayoutNumeric(); // keep the popup in sync if a part is still selected
   });
 }
 
@@ -2141,14 +2201,14 @@ greenScreenToggle.addEventListener('change', applyGreenScreen);
 greenScreenColorInput.addEventListener('input', applyGreenScreen);
 
 // Camera presets — one selected at a time, used as calibration view.
-// The last-selected preset is persisted (issue #70) so reopening the overlay
-// restores the user's preferred view (e.g. Top) instead of always resetting
-// to Player.
+// Defaults to Top for every controller; the last-selected preset is persisted
+// (issue #70) so reopening the overlay restores the user's preferred view
+// instead of resetting to the default.
 const CAMERA_PRESETS = ['front', 'back', 'left', 'right', 'player', 'top'];
 const CAMERA_PRESET_KEY = 'overlay:cameraPreset';
 function loadSavedCameraPreset() {
   const saved = localStorage.getItem(CAMERA_PRESET_KEY);
-  return CAMERA_PRESETS.includes(saved) ? saved : 'player';
+  return CAMERA_PRESETS.includes(saved) ? saved : 'top';
 }
 let selectedCameraPreset = loadSavedCameraPreset();
 const cameraPresetBtns = document.querySelectorAll('.camera-presets button');
