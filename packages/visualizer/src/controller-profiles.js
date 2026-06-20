@@ -412,14 +412,24 @@ export const PROFILES = {
     // Lift the glow up a little into the handle body (fraction toward the top).
     gripMarkerHeight: 0.1,
     // Nudge each glow outward into the handle (away from the body center), as a
-    // fraction of the model width.
-    gripMarkerSideOffset: 0.06,
-    // Two-tone (ceski/Larf SC2 look, issue #61): light body = shells + grips
-    // only. Everything else is dark accent — the trackpads, the system buttons
+    // fraction of the model width. Pushed farther out (was 0.06) so the glows
+    // sit over the controller handles where the hands grip, instead of bunched
+    // near the center (PR #76 feedback).
+    gripMarkerSideOffset: 0.14,
+    // Yaw each glow about the vertical axis (degrees) so its front (bumper/
+    // trigger) end angles toward the controller's centerline — best seen in the
+    // Top view. Sign is applied per side in code (left/right mirror).
+    gripMarkerYaw: 18,
+    // Two-tone (ceski/Larf SC2 look, issue #61): light body = shells only.
+    // The grip-sense bars (left/right_gripsense) are deliberately NOT in a
+    // theme group — they're driven on their own (a rest grey that lights to the
+    // grip color while that side is gripped) so they read as the grip-sense
+    // indicator instead of disappearing into the body color (PR #76, #74).
+    // Everything else is dark accent — the trackpads, the system buttons
     // (view/menu/steam + the "…" quick-access), and the controls (sticks, face
     // buttons, dpad, shoulders, triggers, paddles).
     bodyColorMeshes: [
-      'top_shell', 'bottom_shell', 'left_gripsense', 'right_gripsense',
+      'top_shell', 'bottom_shell',
     ],
     accentColorMeshes: [
       'misc1', 'misc2', 'touchpad', 'touch_point1', 'touch_point2',
