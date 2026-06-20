@@ -1036,6 +1036,8 @@ export class ControllerOverlay {
   resetSelected() {
     if (this._selectedWrapper) { this._selectedWrapper.layout = null; this._emitLayout(); }
   }
+  /** Deselect the current part (used by the floating editor's close button). */
+  clearLayoutSelection() { this._selectWrapper(null); }
 
   _emitLayout() { if (this._onLayoutChange) this._onLayoutChange(this.getLayout()); }
 
