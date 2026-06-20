@@ -1830,7 +1830,7 @@ document.getElementById('btn-close-settings').addEventListener('click', () => {
 
 // Reset every saved overlay setting (all `overlay:*` keys) and reload so the
 // app re-initializes from defaults.
-document.getElementById('btn-reset-defaults').addEventListener('click', () => {
+document.getElementById('btn-reset-defaults').addEventListener('click', async () => {
   if (!confirm('Reset ALL overlay settings to their defaults? This clears your saved customizations.')) return;
   // Clear every overlay key — both the `overlay:` settings and the
   // `overlay-display-prefs` blob (note: no colon, so a `overlay:` filter misses it).
@@ -1840,6 +1840,9 @@ document.getElementById('btn-reset-defaults').addEventListener('click', () => {
   // Force the settings gear visible so a reset can never strand the user with a
   // hidden gear (the in-handle Ctrl+Right-Click is the other way back in).
   try { localStorage.removeItem('overlay-display-prefs'); } catch (e) { /* ignore */ }
+  // Window size lives in the main process (window-state.json), not localStorage,
+  // so it has to be reset over IPC. Await it so the resize lands before reload.
+  try { await window.electronAPI?.resetWindowSize?.(); } catch (e) { /* ignore */ }
   location.reload();
 });
 
@@ -2141,14 +2144,14 @@ greenScreenToggle.addEventListener('change', applyGreenScreen);
 greenScreenColorInput.addEventListener('input', applyGreenScreen);
 
 // Camera presets — one selected at a time, used as calibration view.
-// The last-selected preset is persisted (issue #70) so reopening the overlay
-// restores the user's preferred view (e.g. Top) instead of always resetting
-// to Player.
+// Defaults to Top for every controller; the last-selected preset is persisted
+// (issue #70) so reopening the overlay restores the user's preferred view
+// instead of resetting to the default.
 const CAMERA_PRESETS = ['front', 'back', 'left', 'right', 'player', 'top'];
 const CAMERA_PRESET_KEY = 'overlay:cameraPreset';
 function loadSavedCameraPreset() {
   const saved = localStorage.getItem(CAMERA_PRESET_KEY);
-  return CAMERA_PRESETS.includes(saved) ? saved : 'player';
+  return CAMERA_PRESETS.includes(saved) ? saved : 'top';
 }
 let selectedCameraPreset = loadSavedCameraPreset();
 const cameraPresetBtns = document.querySelectorAll('.camera-presets button');

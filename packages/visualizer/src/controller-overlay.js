@@ -818,9 +818,11 @@ export class ControllerOverlay {
       this._floatWrappers.push(wrapper);
     }
 
-    // Re-apply any saved user layout for this controller (the editor's provider
-    // is registered by the app); runs on every (re)load so switching controllers
-    // restores each one's saved positions.
+    // Apply the profile's hand-tuned default layout first (baseline), then let
+    // any saved user layout for this controller override it. Both run on every
+    // (re)load so switching controllers restores each one's positions; the
+    // editor's provider is registered by the app.
+    if (profile.defaultLayout) this.applyLayout(profile.defaultLayout);
     if (this._layoutProvider) {
       const saved = this._layoutProvider(this.controllerType);
       if (saved) this.applyLayout(saved);

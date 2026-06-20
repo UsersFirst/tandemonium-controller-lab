@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setWindowSize: (width, height) => ipcRenderer.send('set-window-size', { width, height }),
   onWindowSizeChanged: (callback) =>
     ipcRenderer.on('window-size-changed', (_, size) => callback(size)),
+  // resetWindowSize() drops the persisted size and snaps the window back to the
+  // mode default; used by "Reset all defaults". Resolves to the default size.
+  resetWindowSize: () => ipcRenderer.invoke('reset-window-size'),
 
   // ── Frameless window drag ──
   // The renderer detects a grab on a non-interactive area and drives the

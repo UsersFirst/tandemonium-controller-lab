@@ -136,13 +136,20 @@ function openInventoryWindow() {
   inventoryWindow.on('closed', () => { inventoryWindow = null; });
 }
 
-function createWindow() {
+// Which size profile this launch uses. Single source of truth so the window
+// creation and the "reset to default" handler agree on key + default size.
+function getSizeMode() {
   const useMulti = process.env.OVERLAY_MULTI === '1' || process.argv.includes('--multi');
+  return {
+    stateKey: useMulti ? 'multi' : 'main',
+    defaultSize: useMulti ? MULTI_WINDOW_SIZE : DEFAULT_WINDOW_SIZE,
+  };
+}
 
+function createWindow() {
   // Restore the last-used size for this mode (issue #69), falling back to the
   // mode's default (single = 720×540).
-  const stateKey = useMulti ? 'multi' : 'main';
-  const defaultSize = useMulti ? MULTI_WINDOW_SIZE : DEFAULT_WINDOW_SIZE;
+  const { stateKey, defaultSize } = getSizeMode();
   const { width, height } = sanitizeSize(readWindowState()[stateKey], defaultSize);
 
   mainWindow = new BrowserWindow({
@@ -166,7 +173,7 @@ function createWindow() {
     },
   });
 
-  const entry = useMulti ? 'multi.html' : 'index.html';
+  const entry = stateKey === 'multi' ? 'multi.html' : 'index.html';
   mainWindow.loadFile(path.join(__dirname, '..', 'src', entry));
 
   mainWindow.once('ready-to-show', () => {
@@ -291,6 +298,21 @@ app.whenReady().then(() => {
     const clampedW = Math.max(200, Math.min(8000, w));
     const clampedH = Math.max(200, Math.min(8000, h));
     mainWindow.setSize(clampedW, clampedH);
+  });
+
+  // "Reset all defaults" (settings panel) clears localStorage in the renderer,
+  // but the window size lives in window-state.json (per mode), so it can't be
+  // reached from there. Drop the persisted size and snap the live window back
+  // to the mode's default so a reset truly restores everything.
+  ipcMain.handle('reset-window-size', () => {
+    const { stateKey, defaultSize } = getSizeMode();
+    const state = readWindowState();
+    delete state[stateKey];
+    writeWindowState(state);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setSize(defaultSize.width, defaultSize.height);
+    }
+    return defaultSize;
   });
 
   // ── Frameless window drag (renderer grabs a non-interactive area) ──
