@@ -28,6 +28,14 @@ const PRESS_GLOW = 1.5;
 // between render frames still shows a noticeably-sized circle, then keeps
 // expanding to full while held.
 const TRACKPAD_FILL_MIN = 0.45;
+// Grip-sense bars sit at this inert dark grey at rest and brighten to the grip
+// color while that side is gripped (issue #74 — activation should read on the
+// bar itself, not just the handle glow).
+const GRIP_BAR_REST_COLOR = 0x44444c;
+// Emissive intensity of a grip-sense BAR while its side is gripped. Fixed on
+// purpose — the Grip Glow Brightness slider drives the GLOW only, so the bar and
+// the glow stay independently defined.
+const GRIP_BAR_LIT_EMISSIVE = 0.6;
 const FLOAT_ZERO = new THREE.Vector3(); // shared read-only lerp target (parts seated)
 
 export class ControllerOverlay {
@@ -583,8 +591,9 @@ export class ControllerOverlay {
     this._repositionGripBars(profile);
     // Honor the current "show grip bars" setting on this freshly-loaded model.
     this._applyGripBarsVisible();
-    // Paint the bars with the grip color (they're not in a theme group, so this
-    // is the only thing that colors them).
+    // Set the bars to their inert rest grey + clone their materials (they're not
+    // in a theme group, so this is the only thing that colors them); setGripState
+    // then lights them to the grip color while a side is gripped.
     this._applyGripBarColor();
 
     // Diagnostic: per-mapping check at load time so we can tell whether
@@ -2013,32 +2022,58 @@ export class ControllerOverlay {
   }
 
   /**
-   * Highlight the capacitive grip sensors while held (digital on/off). The
-   * activation indicator is a billboard glow marker per grip, rendered ON TOP
-   * (depthTest off) so grip state reads at ANY angle; its peak opacity is the
-   * Grip Brightness setting. Gated by setGripVisible. The grip-sense BARS (the
-   * separate left/right side strips) are purely cosmetic and do NOT change on
-   * touch — keeping them static avoids the white→color flash and makes web and
-   * desktop render identically.
+   * Highlight the capacitive grip sensors while held (digital on/off). Two
+   * INDEPENDENT indicators, each with its own toggle:
+   *   • GLOW — an on-top billboard/cylinder marker per grip, rendered with
+   *     depthTest off so it reads at ANY angle. Peak opacity = the Grip Glow
+   *     Brightness setting. Gated by setGripVisible (_gripEnabled).
+   *   • BARS — the left/right side strip meshes. They ease from a rest grey to
+   *     the grip color (with a fixed emissive lift) while that side is gripped,
+   *     so the bar itself shows activation (issue #74). Gated by
+   *     setGripBarsVisible (_gripBarsVisible); brightness does NOT affect them.
    * @param {{left:boolean, right:boolean}} grips
    */
   setGripState(grips) {
     const map = PROFILES[this.controllerType]?.gripMeshes;
     if (!map || !grips) return;
+    const gripCol = this._gripColorC || (this._gripColorC = new THREE.Color());
+    gripCol.setHex(this._gripColor);
+    const restCol = this._gripBarRestC || (this._gripBarRestC = new THREE.Color(GRIP_BAR_REST_COLOR));
+    const black = this._gripBlackC || (this._gripBlackC = new THREE.Color(0x000000));
     for (const side of ['left', 'right']) {
-      // On-top billboard glow marker — the activation cue. Brightness sets its
-      // peak opacity; lerps in/out. (The bars are left untouched on purpose.)
-      const glowOn = this._gripEnabled && !!grips[side];
+      const gripped = !!grips[side];
+      // On-top billboard glow marker — the handle activation cue. Brightness
+      // sets its peak opacity; lerps in/out. Gated by the glow toggle.
       const marker = this._gripMarkers?.[side];
       if (marker) {
         marker.material.opacity = THREE.MathUtils.lerp(
-          marker.material.opacity, glowOn ? this._gripBrightness : 0, LERP_SPEED
+          marker.material.opacity, (this._gripEnabled && gripped) ? this._gripBrightness : 0, LERP_SPEED
         );
+      }
+      // Bar mesh — ease toward the grip color (lit) while that side is gripped,
+      // back to the inert rest grey when released, so the bar itself reads the
+      // activation (issue #74). Gated by the bars toggle, independent of glow.
+      const barActive = this._gripBarsVisible && gripped;
+      const bar = this._gripBarMesh(map[side]);
+      if (bar?.material?.color) {
+        bar.material.color.lerp(barActive ? gripCol : restCol, LERP_SPEED);
+        if ('emissive' in bar.material) {
+          bar.material.emissive.lerp(barActive ? gripCol : black, LERP_SPEED);
+          bar.material.emissiveIntensity = THREE.MathUtils.lerp(
+            bar.material.emissiveIntensity ?? 0, barActive ? GRIP_BAR_LIT_EMISSIVE : 0, LERP_SPEED
+          );
+        }
       }
     }
   }
 
-  /** Toggle the grip-sense glow (mesh emissive + on-top markers). */
+  // The Mesh that carries a grip-bar's material (the GLB node may wrap it).
+  _gripBarMesh(name) {
+    const obj = this.meshes[name];
+    return obj && (obj.isMesh ? obj : obj.children?.find((c) => c.isMesh)) || null;
+  }
+
+  /** Toggle the grip-sense GLOW (the on-top marker only — not the bars). */
   setGripVisible(enabled) {
     this._gripEnabled = !!enabled;
   }
@@ -2075,29 +2110,38 @@ export class ControllerOverlay {
     this._gripBrightness = Math.max(0, Math.min(1, value));
   }
 
-  /** Grip highlight color (markers + mesh glow); CSS hex e.g. '#3388ff'. */
+  /** Grip highlight color (markers + the bar's lit state); CSS hex e.g. '#3388ff'. */
   setGripColor(hexColor) {
     this._gripColor = new THREE.Color(hexColor).getHex();
     if (this._gripMarkers) {
       for (const side of ['left', 'right']) this._gripMarkers[side]?.material.color.setHex(this._gripColor);
     }
-    this._applyGripBarColor();
+    // The bars' rest grey is independent of the grip color; setGripState picks
+    // up the new _gripColor for the lit state on the next report.
   }
 
-  // Paint the grip-sense BAR meshes with the grip color. They're intentionally
-  // excluded from the body/accent theme groups (PR #76) — otherwise they'd take
-  // the body color and vanish into it — so their color is set here instead, and
-  // re-applied whenever the grip color changes.
+  // Reset the grip-sense BAR meshes to their inert rest appearance (grey, no
+  // emissive); setGripState lights them to the grip color while gripped. The
+  // bars are excluded from the body/accent theme groups (PR #76) — otherwise
+  // they'd take the body color and vanish into it — so they're driven here.
+  // Each bar's material is cloned once so left/right light up independently
+  // (GLB models often share one material across both meshes).
   _applyGripBarColor() {
     const map = PROFILES[this.controllerType]?.gripMeshes;
     if (!map) return;
     for (const side of ['left', 'right']) {
-      const obj = this.meshes[map[side]];
-      const mesh = obj && (obj.isMesh ? obj : obj.children?.find((c) => c.isMesh));
-      if (mesh?.material?.color) {
-        mesh.material.color.setHex(this._gripColor);
-        mesh.material.needsUpdate = true;
+      const mesh = this._gripBarMesh(map[side]);
+      if (!mesh?.material?.color) continue;
+      if (!mesh.material._gripCloned) {
+        mesh.material = mesh.material.clone();
+        mesh.material._gripCloned = true;
       }
+      mesh.material.color.setHex(GRIP_BAR_REST_COLOR);
+      if ('emissive' in mesh.material) {
+        mesh.material.emissive.setHex(0x000000);
+        mesh.material.emissiveIntensity = 0;
+      }
+      mesh.material.needsUpdate = true;
     }
   }
 
@@ -2177,6 +2221,27 @@ export class ControllerOverlay {
     const w = this._gripGlowWidth;
     const len = this._gripGlowLength;
     const isCircle = w === 1 && len === 1;
+    // Yaw (about the vertical Y axis) that swings each glow's front (+Z, the
+    // bumper/trigger end) toward the controller's centerline — see it in the Top
+    // view. Per-profile knob in degrees; sign flips per side below.
+    const yaw = THREE.MathUtils.degToRad(PROFILES[this.controllerType]?.gripMarkerYaw ?? 0);
+    // Band texture for the cylinder glow: uniform AROUND the tube (so the color
+    // wraps the whole circumference, not just one facing strip like the radial
+    // texture did), and a bright plateau filling MOST of the length with just a
+    // soft fade at the very ends. The Length slider scales the cylinder height,
+    // so this keeps the glow filling ~the whole cylinder (max Length ≈ the full
+    // handle) instead of only a short middle band. Maps v (0..1) → height.
+    if (!this._barGlowTexture) {
+      const c = document.createElement('canvas'); c.width = 4; c.height = 64;
+      const ctx = c.getContext('2d');
+      const g = ctx.createLinearGradient(0, 0, 0, 64);
+      g.addColorStop(0.00, 'rgba(255,255,255,0)');
+      g.addColorStop(0.10, 'rgba(255,255,255,0.95)');
+      g.addColorStop(0.90, 'rgba(255,255,255,0.95)');
+      g.addColorStop(1.00, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 4, 64);
+      this._barGlowTexture = new THREE.CanvasTexture(c);
+    }
     const markers = {};
     for (const side of ['left', 'right']) {
       const spec = specs[side];
@@ -2196,20 +2261,26 @@ export class ControllerOverlay {
         const d = thin * 0.9;
         obj.scale.set(d, d, 1);
       } else {
-        // NORMAL blending (not additive): additive adds the glow to whatever's
-        // behind it, so it washed out over the bright white body but popped over
-        // the dark trackpads. Normal blending shows the grip color consistently
-        // regardless of what's behind/in front (fully solid at full brightness).
+        // Read as a soft GLOW that's still visible over the light handles. The
+        // band texture wraps the FULL circumference (color all the way around the
+        // tube, consistent from any angle) and fills most of the length, fading
+        // softly only at the very ends. NORMAL blending keeps
+        // it visible on any background. (Pure additive looked like a real glow
+        // but vanished over the bright body — additive adds to the destination,
+        // and there's no headroom over near-white, so it only showed over dark
+        // areas. A radial texture only lit one facing strip of the tube.)
         const mat = new THREE.MeshBasicMaterial({
+          map: this._barGlowTexture,
           color: this._gripColor, transparent: true, opacity: 0,
           blending: THREE.NormalBlending, depthTest: false, depthWrite: false,
         });
         // Cylinder: radius ≤ half the handle's thin cross-section; height ≤ the
         // handle's Z length. Built along Y, rotated so its axis runs
-        // front-to-back (model Z, the handle's long axis).
+        // front-to-back (model Z, the handle's long axis). Open-ended (no cap
+        // disks) so the band fades cleanly at the ends with no flat cap showing.
         const radius = (thin * 0.45) * (w / 5);
         const height = (spec.dimZ * 1.35) * (len / 5); // ~50% longer than before
-        const geo = new THREE.CylinderGeometry(radius, radius, height, 20);
+        const geo = new THREE.CylinderGeometry(radius, radius, height, 20, 1, true);
         // Lay the cylinder front-to-back (axis → Z), then tilt it so the back
         // (−Z) end rises ~1/3 of its length, angling it inline with the handle.
         // asin(2/3): with a centre pivot the end rises (height/2)·(2/3) = height/3.
@@ -2221,6 +2292,10 @@ export class ControllerOverlay {
       obj.renderOrder = 10; // draw after the model so it sits on top
       obj.position.copy(spec.pos);
       obj.position.y += yLift;
+      // Angle the bumper/trigger end inward toward center. Sign mirrors per
+      // side: left handle (−X) yaws −, right handle (+X) yaws +. No-op on the
+      // circle sprite (it billboards).
+      obj.rotation.y = (spec.pos.x < 0 ? -1 : 1) * yaw;
       this.bodyGroup.add(obj);
       markers[side] = obj;
     }

@@ -124,6 +124,16 @@
   .setting-row button:hover {
     background: rgba(255,255,255,0.15);
   }
+  /* The select's translucent dark bg + light text looks right on the panel,
+     but the OPEN option list is drawn by the OS — on Windows it came up
+     light-mode, leaving unselected options as light text on a white popup
+     (unreadable). `color-scheme: dark` renders the native popup dark; the
+     explicit option colors are a solid-background fallback across platforms. */
+  .setting-row select { color-scheme: dark; }
+  .setting-row select option {
+    background: #26262c;
+    color: #eee;
+  }
 
   .setting-row input[type="color"] {
     width: 32px;
@@ -1045,7 +1055,7 @@
     <input type="range" id="grip-glow-length" min="1" max="5" step="1" value="4" style="width:90px;accent-color:#33ddaa;">
   </div>
   <div class="setting-row">
-    <label title="Show the cosmetic grip-sense bars on the controller's left/right sides (Steam Controller). The bars are static — grip activation shows via the Grip Sense Glow, not the bars.">Show Grip Sense Bars</label>
+    <label title="Show the grip-sense bars on the controller's left/right sides (Steam Controller). The bars sit grey at rest and light up to the grip color while that side is gripped — independent of the Grip Sense Glow.">Show Grip Sense Bars</label>
     <input type="checkbox" id="grip-bars-toggle" autocomplete="off">
   </div>
   <div class="setting-row">
@@ -1053,7 +1063,7 @@
     <input type="range" id="grip-brightness" min="10" max="100" value="50" style="width:90px;accent-color:#33ddaa;">
   </div>
   <div class="setting-row">
-    <label title="Color of the grip-sense glow. Defaults to the Highlight Color; set here to override it.">Grip Sense Color</label>
+    <label title="Color of the grip-sense glow and the lit grip bars. Defaults to the Highlight Color; set here to override it.">Grip Sense Color</label>
     <input type="color" id="grip-color" value="#ff0000">
   </div>
   <div class="setting-row">
