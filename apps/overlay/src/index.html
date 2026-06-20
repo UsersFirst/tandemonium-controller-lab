@@ -144,6 +144,69 @@
     cursor: pointer;
   }
 
+  /* Floating numeric editor for the selected Edit-Layout part. Lives OUTSIDE the
+     settings panel so it stays visible while the panel is closed and the user
+     drags parts in the 3D view (that's why the inline fields felt "missing").
+     Shown on selection; draggable by its header so it never blocks the part. */
+  #layout-editor-popup {
+    display: none;
+    position: fixed;
+    top: 38px; left: 8px;
+    width: 340px;
+    background: rgba(30,30,35,0.95);
+    border: 1px solid rgba(51,136,255,0.55);
+    border-radius: 10px;
+    padding: 10px 12px 12px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+    backdrop-filter: blur(10px);
+    z-index: 50;
+    font-size: 12px;
+    user-select: none;
+  }
+  #layout-editor-popup .lep-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; cursor: move; margin-bottom: 8px;
+  }
+  #layout-editor-popup .lep-title {
+    color: #8af; font-family: monospace; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #layout-editor-popup .lep-close {
+    flex: none; width: 22px; height: 22px; line-height: 1; font-size: 14px;
+    border: none; border-radius: 5px; cursor: pointer;
+    background: rgba(255,255,255,0.08); color: #ccc;
+  }
+  #layout-editor-popup .lep-close:hover { background: rgba(255,255,255,0.2); color: #fff; }
+  #layout-editor-popup .lep-reset {
+    width: 100%; margin-top: 8px; padding: 6px; border: none; border-radius: 6px;
+    background: rgba(255,255,255,0.1); color: #ddd; font-size: 11px; cursor: pointer;
+  }
+  #layout-editor-popup .lep-reset:hover { background: rgba(255,255,255,0.18); }
+  #layout-editor-popup .lep-hint {
+    margin-top: 6px; font-size: 10px; color: rgba(255,255,255,0.4); line-height: 1.3;
+  }
+  /* Position/Rotation sections: a small title, then three axis-labelled inputs
+     that share the width evenly. Roomy enough that the full value (and its live
+     changes) stay readable. */
+  #layout-editor-popup .lep-header { margin-bottom: 10px; }
+  #layout-editor-popup .lep-title { font-size: 13px; }
+  #layout-editor-popup .lep-section { margin-bottom: 10px; }
+  #layout-editor-popup .lep-section-title { color: #bbb; font-size: 13px; margin-bottom: 5px; }
+  #layout-editor-popup .lep-axes { display: flex; gap: 8px; }
+  #layout-editor-popup .lep-axis { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
+  #layout-editor-popup .lep-ax { color: #8af; font-family: monospace; font-size: 13px; font-weight: 600; }
+  #layout-editor-popup input[type="number"] {
+    flex: 1; min-width: 0;
+    background: rgba(255,255,255,0.08);
+    color: #eee;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 5px;
+    padding: 7px 8px;
+    font-size: 14px;
+    text-align: right;
+  }
+  #layout-editor-popup input[type="number"]:focus { outline: none; border-color: #3388ff; }
+
   .window-size-fields { display: flex; align-items: center; gap: 4px; }
   .window-size-x { color: #888; font-size: 11px; }
   .setting-row input[type="number"] {
@@ -1062,12 +1125,8 @@
       <option value="absolute">Absolute (fixed)</option>
     </select>
   </div>
-  <div class="setting-row" id="edit-layout-status-row" style="display:none;">
-    <label>Selected</label>
-    <span class="combo-display" id="edit-layout-selected">none</span>
-  </div>
   <div id="edit-layout-help" class="build-stamp" style="display:none; text-align:left; margin-top:2px; white-space:normal;">
-    Click a part to select. Drag to move. Rotate with arrows (pitch/yaw), Q/E (roll); Shift = fine, R = reset rotation, Esc = deselect.
+    Click a part to select — a numeric editor pops up. Drag to move, or type exact values. Rotate with arrows (pitch/yaw), Q/E (roll); Shift = fine, R = reset rotation, Esc = deselect.
   </div>
   <div class="setting-row">
     <button class="settings-action-btn" id="reset-layout">RESET LAYOUT</button>
@@ -1097,6 +1156,33 @@
        commit short SHA + UTC build time (see the "Stamp build version" steps
        in build-desktop.yml and deploy-pages.yml). Stays "dev build" locally. -->
   <div class="build-stamp"><span id="build-version">dev build</span></div>
+</div>
+
+<!-- Floating numeric editor for the selected Edit-Layout part. Outside the
+     settings panel so it's usable while dragging parts with the panel closed. -->
+<div id="layout-editor-popup">
+  <div class="lep-header" id="lep-drag">
+    <span class="lep-title" id="edit-layout-selected">none</span>
+    <button class="lep-close" id="lep-close" title="Deselect (Esc)">×</button>
+  </div>
+  <div class="lep-section">
+    <div class="lep-section-title" title="Position offset in model units. X mirrors left (−)/right (+), Y is up (+), Z is front (+)/back (−).">Position</div>
+    <div class="lep-axes">
+      <label class="lep-axis" title="X — left −/right +"><span class="lep-ax">X</span><input type="number" id="layout-pos-x" step="0.01" autocomplete="off"></label>
+      <label class="lep-axis" title="Y — up +"><span class="lep-ax">Y</span><input type="number" id="layout-pos-y" step="0.01" autocomplete="off"></label>
+      <label class="lep-axis" title="Z — front +/back −"><span class="lep-ax">Z</span><input type="number" id="layout-pos-z" step="0.01" autocomplete="off"></label>
+    </div>
+  </div>
+  <div class="lep-section">
+    <div class="lep-section-title" title="Rotation in degrees: pitch (X), yaw (Y), roll (Z).">Rotation°</div>
+    <div class="lep-axes">
+      <label class="lep-axis" title="Pitch — X"><span class="lep-ax">X</span><input type="number" id="layout-rot-x" step="1" autocomplete="off"></label>
+      <label class="lep-axis" title="Yaw — Y"><span class="lep-ax">Y</span><input type="number" id="layout-rot-y" step="1" autocomplete="off"></label>
+      <label class="lep-axis" title="Roll — Z"><span class="lep-ax">Z</span><input type="number" id="layout-rot-z" step="1" autocomplete="off"></label>
+    </div>
+  </div>
+  <button class="lep-reset" id="lep-reset-part" title="Reset just this part to its default position">Reset this part</button>
+  <div class="lep-hint">In a field, ↑/↓ nudges; hold <b>Shift</b> for fine steps (Position 0.001, Rotation 0.1°). Drag the header to move this editor. Tip: mirror left/right by negating X.</div>
 </div>
 
 <!-- Test Report modal — guided HID capture wizard -->
