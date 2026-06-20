@@ -45,3 +45,20 @@ export {
   formatSerial,
   isMacSerial,
 } from './controller-inventory.js';
+
+// ── Input architecture (#80): WebHID-first sources + arbiter ──
+export {
+  SOURCE,
+  SOURCE_PRIORITY,
+  STANDARD_BUTTON_COUNT,
+  makeEmptyFrame,
+  frameFromGamepad,
+  quatToPlain,
+  identityMatchKey,
+  chooseSource,
+} from './input-frame.js';
+
+export { InputArbiter } from './input-arbiter.js';
+export { ControllerSource } from './sources/base-source.js';
+export { WebHIDSource } from './sources/webhid-source.js';
+export { GamepadAPISource } from './sources/gamepad-source.js';
