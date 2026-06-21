@@ -12,6 +12,9 @@
     "./controller-inventory": "./src/controller-inventory.js",
     "./sensor-fusion": "./src/sensor-fusion.js",
     "./imu-analysis": "./src/imu-analysis.js",
+    "./input-frame": "./src/input-frame.js",
+    "./input-arbiter": "./src/input-arbiter.js",
+    "./sources/*": "./src/sources/*.js",
     "./drivers/*": "./src/drivers/*.js"
   },
   "files": [
