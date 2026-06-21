@@ -62,22 +62,56 @@ export class PlayStationDriver extends ControllerDriver {
     // back to the mode/transport default offset.
     const probe = await this._probeImuOffset();
     if (probe) {
-      // At-rest accel magnitude is ambiguous to ±2 bytes: gravity sits on a
-      // single axis that's shared between an offset and its neighbour-by-2, so
-      // both score ~1g. If the pad isn't perfectly still during the probe, the
-      // gyro tie-breaker can flip to the wrong (off-by-2) neighbour — which
-      // reads an accel axis as gyro and makes steering jerk hard side to side.
-      // So: trust the DOCUMENTED default offset whenever it scored plausibly
-      // (~1g); only let the probe override when the default is clearly wrong
-      // (a clone with a genuinely different layout).
-      const defaultOffset = this._defaultGyroOffset();
-      const defaultScore = probe.scores?.find((s) => s.gyroOffset === defaultOffset);
-      const plausible = (s) => s && s.meanAccelMag > 6500 && s.meanAccelMag < 11500;
-      const chosen = plausible(defaultScore) ? defaultScore : probe;
+      const chosen = this._chooseImuOffset(probe);
       this._detectedImuOffset = chosen;
       this._detectedImuFamily = PlayStationDriver._imuFamilyFor(chosen.gyroOffset, chosen.baseOffset);
-      console.log(`PlayStation IMU offset=${chosen.gyroOffset} (default=${defaultOffset}, probe-best=${probe.gyroOffset}, accelMag≈${chosen.meanAccelMag.toFixed(0)}) → family='${this._detectedImuFamily}' (${this.entry?.name || 'unknown'})`);
+      const defaultOffset = this._defaultGyroOffset();
+      console.log(`PlayStation IMU offset=${chosen.gyroOffset} (default=${defaultOffset}, probe-best=${probe.gyroOffset}, accelMag≈${chosen.meanAccelMag.toFixed(0)}, gyroAbs≈${chosen.meanGyroAbs?.toFixed(0)}) → family='${this._detectedImuFamily}' (${this.entry?.name || 'unknown'})`);
     }
+  }
+
+  /**
+   * Pick the IMU gyro offset from a probe result.
+   *
+   * Prefer the DOCUMENTED default offset when it looks right: at-rest accel
+   * magnitude ≈ 1g AND an at-rest gyro that ISN'T pinned near gravity. That
+   * second guard is the new part (issue #83): an offset that is shifted by a
+   * byte — e.g. macOS/IOKit including the leading report-ID byte in the BT
+   * `0x31` DataView — reads an accelerometer axis *as a gyro axis*, so its
+   * "gyro" sits around gravity (~8192 raw) at rest. Fusion then integrates
+   * gravity as rotation and the model swings hard side to side (the reported
+   * symptom). The old check only looked at accel magnitude, so such a shifted
+   * default could still score "plausible" and win.
+   *
+   * Only when the default is implausible OR is reading accel-as-gyro do we look
+   * for a cleaner candidate (≈1g accel AND near-zero gyro). The high-gyro gate
+   * means a small real at-rest bias — or a pad that's merely being handled
+   * during the probe — never trips the override, so the existing off-by-2
+   * still-pad protection is preserved.
+   */
+  _chooseImuOffset(probe) {
+    const ACCEL_MIN = 6500, ACCEL_MAX = 11500; // ~1g (8192 raw) window
+    const ACCEL_AS_GYRO = 4000; // at-rest |gyro| this large ⇒ reading accel as gyro
+    const CLEAN_GYRO = 2000;    // at-rest |gyro| below this ⇒ a trustworthy axis
+    const accelOK = (s) => s && s.meanAccelMag > ACCEL_MIN && s.meanAccelMag < ACCEL_MAX;
+
+    const defaultOffset = this._defaultGyroOffset();
+    const def = probe.scores?.find((s) => s.gyroOffset === defaultOffset);
+
+    // Default is trustworthy: right magnitude AND not bleeding gravity into gyro.
+    if (accelOK(def) && def.meanGyroAbs < ACCEL_AS_GYRO) return def;
+
+    // Default is implausible or accel-bleeding-into-gyro (the macOS BT
+    // report-ID-byte shift). Recover the cleanest candidate that has BOTH ≈1g
+    // accel and near-zero gyro.
+    const clean = (probe.scores || [])
+      .filter((s) => accelOK(s) && s.meanGyroAbs < CLEAN_GYRO)
+      .sort((a, b) => a.score - b.score)[0];
+    if (clean) return clean;
+
+    // Nothing clean (e.g. the pad was in motion the whole probe) — keep the
+    // documented default if it at least read ≈1g, else the raw probe best.
+    return accelOK(def) ? def : probe;
   }
 
   /**
@@ -203,16 +237,17 @@ export class PlayStationDriver extends ControllerDriver {
   /**
    * One-shot IMU layout probe. Listens to inputreport for up to `timeoutMs`,
    * collecting up to 10 reports, then scores each candidate gyro offset by
-   * how close the at-rest accel magnitude is to 8192 (1g). Returns the
-   * winner, or null if no usable reports arrived.
+   * how close the at-rest accel magnitude is to 8192 (1g) with gyro near zero.
+   * Returns the winner (plus the full `scores` table), or null if no usable
+   * reports arrived.
    *
-   * Only runs on USB report 0x01 today. BT branch differs (offset shifts
-   * with the leading counter byte) and the offset relationship is the same
-   * up to that constant, so the same probe-then-add-baseOffset logic could
-   * extend to BT later — punted for now since the immediate case is USB.
+   * Runs over USB (`0x01`) AND Bluetooth (DS5 `0x31` / DS4 `0x11`) — see
+   * `_probeConfig()` for the per-transport report id, base offset (BT prepends
+   * a counter byte), and candidate gyro offsets. `init()` → `_chooseImuOffset()`
+   * turns the scores into the offset parseReport uses.
    *
-   * @param {number} [timeoutMs=500]
-   * @returns {Promise<{gyroOffset:number, accelOffset:number, meanAccelMag:number}|null>}
+   * @param {number} [timeoutMs=600]
+   * @returns {Promise<{gyroOffset:number, accelOffset:number, baseOffset:number, meanAccelMag:number, meanGyroAbs:number, score:number, scores:Array}|null>}
    */
   // Per-transport probe configuration: which input report carries the IMU,
   // the byte its payload starts at (BT prepends counter/header bytes — DS5
@@ -266,6 +301,15 @@ export class PlayStationDriver extends ControllerDriver {
         // Diagnostic: full candidate table (report id + length + per-offset).
         console.log(`PlayStation IMU probe scan (report 0x${wantId.toString(16)}, ${reports[0].byteLength}B):`,
           scores.map(s => `g=${s.gyroOffset} accel≈${s.meanAccelMag.toFixed(0)} gyro≈${s.meanGyroAbs.toFixed(0)}`).join('  |  '));
+        // Raw-bytes preview of the first report — the capture needed to confirm
+        // a platform offset shift (issue #83: macOS BT report-ID-byte). Logs the
+        // leading header/IMU window so USB-vs-macOS-BT byteLength + layout can be
+        // diffed straight from the console.
+        const d0 = reports[0];
+        const hexPreview = Array.from(
+          new Uint8Array(d0.buffer, d0.byteOffset, Math.min(d0.byteLength, 32))
+        ).map((b) => b.toString(16).padStart(2, '0')).join(' ');
+        console.log(`PlayStation IMU probe bytes (${this.connectionType} 0x${wantId.toString(16)}, len=${d0.byteLength}, baseOffset=${baseOffset}): ${hexPreview}…`);
         resolve({ ...scores[0], scores });
       };
 
