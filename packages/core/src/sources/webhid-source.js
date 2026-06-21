@@ -103,8 +103,10 @@ export class WebHIDSource extends ControllerSource {
 
   _motionForSlot(slot) {
     const fusion = slot.fusion;
-    if (!fusion || typeof fusion.getQuaternion !== 'function') return null;
-    const quat = quatToPlain(fusion.getQuaternion());
+    // SensorFusion exposes its world-space orientation as a live
+    // THREE.Quaternion on `.orientation` (it has no getQuaternion()).
+    if (!fusion || !fusion.orientation) return null;
+    const quat = quatToPlain(fusion.orientation);
     if (!quat) return null;
     return {
       quaternion: quat,

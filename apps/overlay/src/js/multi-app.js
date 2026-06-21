@@ -14,14 +14,61 @@
 // the design doc, #224 for the consolidation plan.
 // ============================================================
 
+import * as THREE from 'three';
 import { ControllerOverlay, detectControllerType } from '@usersfirst/controller-visualizer';
-import { ControllerRegistry, ControllerManager, gamepadHasActivity } from '@usersfirst/controller-core';
+import {
+  ControllerRegistry, ControllerManager, gamepadHasActivity,
+  InputArbiter, WebHIDSource, GamepadAPISource, identityMatchKey,
+} from '@usersfirst/controller-core';
 
 const SLOT_IDS = ['P1', 'P2', 'P3', 'P4'];
 
 const manager = new ControllerManager({ slotIds: SLOT_IDS });
 // Expose for DevTools debugging.
 window.__manager = manager;
+
+// ── #80 InputArbiter (flag-gated) ──
+// Off by default — the proven slot.effectiveGamepad path drives the overlay.
+// Enable to drive the overlay from the new source-agnostic InputFrame
+// pipeline (WebHID-first, deduped across sources) so the architecture can
+// be validated against real hardware:
+//   • web build:    add ?arbiter to the URL  (?arbiter=0 forces off)
+//   • Electron/dev: localStorage.setItem('overlay:arbiter','1') then reload
+const USE_ARBITER = (() => {
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.has('arbiter')) return q.get('arbiter') !== '0';
+    return localStorage.getItem('overlay:arbiter') === '1';
+  } catch { return false; }
+})();
+
+let arbiter = null;
+let webhidSource = null;
+let gamepadSource = null;
+if (USE_ARBITER) {
+  webhidSource = new WebHIDSource(manager);
+  gamepadSource = new GamepadAPISource();
+  arbiter = new InputArbiter();
+  arbiter.addSource(webhidSource).addSource(gamepadSource); // WebHID first
+  window.__arbiter = arbiter;
+  console.log('[overlay] InputArbiter mode ENABLED (#80) — WebHID-first, deduped');
+}
+
+/**
+ * The arbiter keys frames by physical-controller identity. A claimed slot's
+ * identity is derived from its controllerLabel exactly as WebHIDSource does,
+ * so a slot can look up its own resolved frame.
+ */
+function slotMatchKey(slot) {
+  const vp = ControllerRegistry.parseGamepadVendorProduct(slot.controllerLabel || '');
+  const unitId = vp ? `vidpid:${vp.vendorId}:${vp.productId}` : null;
+  return identityMatchKey({
+    unitId,
+    vendorId: vp?.vendorId ?? null,
+    productId: vp?.productId ?? null,
+    label: slot.controllerLabel || '',
+  });
+}
 
 // ── View: per-slot DOM wiring ──
 
@@ -42,6 +89,8 @@ class SlotView {
     this.overlay = null;
     this.controllerType = 'dualsense';
     this._diagLastUpdate = 0;
+    this._gyroScratch = new THREE.Quaternion(); // arbiter mode: plain frame quat → THREE
+    this._lastSourceId = null;                   // arbiter mode: which source drove this slot
 
     root.classList.toggle('p1', slot.id === 'P1');
     root.classList.toggle('p2', slot.id === 'P2');
@@ -177,7 +226,7 @@ class SlotView {
    * Called each frame. Pushes the effective gamepad + gyro quaternion into
    * the 3D overlay, and updates the calibration-finished hint text.
    */
-  tick(pads) {
+  tick(pads, frameByKey) {
     const s = this.slot;
     // Calibration-complete transition
     const isCalibrating = !!(s.fusion && s.fusion.calibrating);
@@ -189,6 +238,26 @@ class SlotView {
     }
     s._wasCalibrating = isCalibrating;
 
+    // ── Arbiter path (#80): drive the overlay from the resolved InputFrame ──
+    if (frameByKey) {
+      if (s.state !== 'claimed') { this.overlay?.update(null, null); return; }
+      const frame = frameByKey.get(slotMatchKey(s));
+      this._lastSourceId = frame ? frame.sourceId : null;
+      if (!frame) { this.overlay?.update(null, null); return; }
+      // frame.buttons/axes already match the standard Gamepad shape the
+      // visualizer reads; motion.quaternion is a plain {x,y,z,w} that must
+      // be promoted to a THREE.Quaternion for slerp().
+      const gpView = { buttons: frame.buttons, axes: frame.axes, mapping: 'standard', id: frame.identity.label, connected: true };
+      let gyroQ = null;
+      if (frame.motion) {
+        const q = frame.motion.quaternion;
+        gyroQ = this._gyroScratch.set(q.x, q.y, q.z, q.w);
+      }
+      this.overlay?.update(gpView, gyroQ);
+      return;
+    }
+
+    // ── Default path (proven) ──
     const gp = s.effectiveGamepad(pads);
     // Gyro only applies once the slot is claimed — unclaimed slots stay
     // still even though the fusion keeps running in the background.
@@ -272,7 +341,15 @@ const debugEl = document.getElementById('debug-readout');
 
 function renderDebugStrip(pads, views) {
   if (!debugEl) return;
-  const lines = [`pads array length: ${pads.length}`];
+  const lines = [];
+  if (USE_ARBITER) {
+    const srcBySlot = views
+      .filter((v) => v.slot.state === 'claimed')
+      .map((v) => `${v.slot.id}=${v._lastSourceId || '—'}`)
+      .join(' ');
+    lines.push(`⚙ InputArbiter ON (#80) — sources: webhid,gamepad-api  read: ${srcBySlot || '(none claimed)'}`);
+  }
+  lines.push(`pads array length: ${pads.length}`);
   let seen = 0;
   for (let i = 0; i < pads.length; i++) {
     const gp = pads[i];
@@ -355,8 +432,20 @@ function loop() {
 
   manager.ingestFrame(pads, now);
 
+  // Arbiter mode: resolve one InputFrame per physical controller (WebHID-
+  // first, deduped), keyed by identity for per-slot lookup. Claim/release
+  // lifecycle still runs on the manager above — the arbiter only owns the
+  // per-frame input read.
+  let frameByKey = null;
+  if (USE_ARBITER) {
+    webhidSource.setPads(pads);
+    gamepadSource.setPads(pads);
+    const frames = arbiter.resolve();
+    frameByKey = new Map(frames.map((f) => [identityMatchKey(f.identity), f]));
+  }
+
   for (const v of views) {
-    v.tick(pads);
+    v.tick(pads, frameByKey);
     renderSlotDiagnostics(v, pads);
   }
 
