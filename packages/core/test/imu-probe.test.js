@@ -104,6 +104,73 @@ test('init keeps the documented BT default (14) when the probe ties to the off-b
   assert.equal(d._detectedImuOffset.gyroOffset, 14);
 });
 
+// ── _chooseImuOffset: default-vs-recover selection (issue #83) ──
+// The selection runs on the probe's score table. A score is
+// { gyroOffset, baseOffset, meanAccelMag, meanGyroAbs, score }.
+
+/** Minimal driver with a fixed transport/mode for exercising _chooseImuOffset. */
+function chooser(connectionType, mode) {
+  return new PlayStationDriver(new FakeHidDevice([]), connectionType, { mode });
+}
+/** Build a probe-shaped result from raw score rows (auto-fills score + best). */
+function probeFrom(rows) {
+  const scores = rows.map((r) => ({
+    baseOffset: r.baseOffset ?? 0,
+    score: Math.abs(r.meanAccelMag - 8192) + r.meanGyroAbs,
+    ...r,
+  }));
+  const best = [...scores].sort((a, b) => a.score - b.score)[0];
+  return { ...best, scores };
+}
+
+test('chooseImuOffset keeps the documented default when it reads ~1g with low gyro', () => {
+  const d = chooser('bluetooth', 'ds5'); // default BT DS5 = 16
+  const chosen = d._chooseImuOffset(probeFrom([
+    { gyroOffset: 16, baseOffset: 1, meanAccelMag: 8192, meanGyroAbs: 40 },
+    { gyroOffset: 15, baseOffset: 1, meanAccelMag: 31000, meanGyroAbs: 9000 },
+    { gyroOffset: 17, baseOffset: 1, meanAccelMag: 33, meanGyroAbs: 12000 },
+  ]));
+  assert.equal(chosen.gyroOffset, 16);
+});
+
+test('chooseImuOffset recovers the shifted offset when the default reads accel-as-gyro (macOS BT, side-to-side)', () => {
+  // The #83 signature: the documented default (16) shows ~1g accel BUT its
+  // at-rest gyro sits near gravity (~8192) because a leading-byte shift makes
+  // it read an accel axis as a gyro axis. The true offset (17, shifted +1) is
+  // clean: ~1g accel, gyro ~0. Old logic (accel-only) wrongly kept 16.
+  const d = chooser('bluetooth', 'ds5'); // default BT DS5 = 16
+  const chosen = d._chooseImuOffset(probeFrom([
+    { gyroOffset: 16, baseOffset: 1, meanAccelMag: 8200, meanGyroAbs: 8190 }, // default: accel-as-gyro
+    { gyroOffset: 17, baseOffset: 1, meanAccelMag: 8192, meanGyroAbs: 25 },   // true (shifted +1): clean
+    { gyroOffset: 15, baseOffset: 1, meanAccelMag: 22000, meanGyroAbs: 14000 },
+  ]));
+  assert.equal(chosen.gyroOffset, 17, 'should recover the clean +1-shifted offset');
+});
+
+test('chooseImuOffset does NOT override on a small real bias (off-by-2 still-pad protection)', () => {
+  // Default 14 has a small real bias (gyro 100), neighbour 16 reads accelX (0)
+  // as gyro so its gyro is even lower — but 14 is correct. The high-gyro gate
+  // means the small bias never trips the override, so 14 is kept.
+  const d = chooser('bluetooth', 'ds4'); // default BT DS4 = 14
+  const chosen = d._chooseImuOffset(probeFrom([
+    { gyroOffset: 14, baseOffset: 2, meanAccelMag: 8192, meanGyroAbs: 100 },
+    { gyroOffset: 16, baseOffset: 2, meanAccelMag: 8192, meanGyroAbs: 0 },
+  ]));
+  assert.equal(chosen.gyroOffset, 14);
+});
+
+test('chooseImuOffset falls back to the documented default when nothing is clean (pad in motion)', () => {
+  // Every offset has high gyro (pad moving throughout the probe) — no clean
+  // candidate exists, so keep the documented default that at least read ~1g.
+  const d = chooser('bluetooth', 'ds5'); // default 16
+  const chosen = d._chooseImuOffset(probeFrom([
+    { gyroOffset: 16, baseOffset: 1, meanAccelMag: 8300, meanGyroAbs: 6000 },
+    { gyroOffset: 15, baseOffset: 1, meanAccelMag: 9000, meanGyroAbs: 7000 },
+    { gyroOffset: 17, baseOffset: 1, meanAccelMag: 7000, meanGyroAbs: 9000 },
+  ]));
+  assert.equal(chosen.gyroOffset, 16);
+});
+
 test('probe returns null over Bluetooth when no reports arrive', async () => {
   const d = new PlayStationDriver(new FakeHidDevice([]), 'bluetooth', { mode: 'ds4' });
   assert.equal(await d._probeImuOffset(50), null);
