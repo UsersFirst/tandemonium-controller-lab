@@ -99,6 +99,41 @@ an **absolute, internally-fused orientation** somewhere in the report, using it
 would bypass the entire integrate-and-drift loop and is the definitive fix. Whether
 that data exists on 2026 firmware is an open question this plan reopens (Phase 0).
 
+### 1.5 Calibrate vs Recenter — the two-knob mental model
+
+These two actions get confused constantly (they both "fix the gyro"), but they
+address *different* errors and cost *different* amounts. The clean way to hold
+it: a gyro is like a **clock that runs slightly fast or slow**.
+
+- **Calibrate = fix the clock's *speed*.** A gyro measures rotation *rate*; the
+  app adds those rates up over time to get an angle. If the gyro's "I'm holding
+  still" reading isn't exactly zero (its *bias*), that error adds up and the
+  model **slowly turns on its own** — drift. Calibrate re-measures the true zero
+  so the drift *stops happening*. It needs the controller held still (~1.5 s), it
+  resets orientation, and it throws away the old bias estimate. It fixes the
+  **cause** (the ongoing error).
+
+- **Recenter = set the clock's *hands* to the right time now.** It makes no
+  attempt to fix the sensor. It just declares "whatever heading I'm pointing at
+  this instant is *forward*." Instant, keeps the existing calibration, and keeps
+  the gravity-true tilt. It fixes the **symptom** (the accumulated offset right
+  now).
+
+Why a user cares about both, as separate things:
+
+| Symptom the user sees | Right tool | Why the other one is wrong |
+|---|---|---|
+| "It's sitting a bit to the left." | **Recenter** | Calibrate works too, but it's a 1.5 s freeze that also flattens tilt and re-rolls the dice on bias — overkill for a cosmetic offset. |
+| "It won't stop slowly rotating on its own." | **Calibrate** | Recenter only straightens it for a second; the bad zero is still there, so it drifts off again immediately. |
+
+The user's exact report — *"no matter how many times I re-center, it drifts back
+and sits left"* — is the classic case of **reaching for the hands when the clock
+is running fast**: recentering keeps fixing the offset while the underlying yaw
+issue keeps re-creating it. The Phase 1 fix makes the app do the "set the hands"
+step **automatically whenever the controller rests**, so the user rarely has to
+touch either knob; the manual Recenter is there for an immediate snap mid-use,
+and Calibrate remains the heavier "the sensor itself is off" reset.
+
 ---
 
 ## 2. Approaches
