@@ -44,6 +44,7 @@ const controllerTypeSelect = document.getElementById('controller-type');
 })();
 const connectGyroBtn = document.getElementById('connect-gyro-btn');
 const driftModeSelect = document.getElementById('drift-mode');
+const yawReturnSelect = document.getElementById('yaw-return-mode');
 const gamepadStatusEl = document.getElementById('gamepad-status');
 // Gyro status shown via the gyro toggle button (no separate text badge)
 const gyroToggleBtn = document.getElementById('gyro-toggle');
@@ -161,6 +162,7 @@ const DEFAULT_COMBOS = {
   settings:   [8, 9],    // Select + Start
   gyroToggle: [8, 11],   // Select + R3
   calibrate:  [10, 11],  // L3 + R3
+  recenter:   [8, 10],   // Select + L3 — instant yaw recenter (no recalibration)
 };
 
 // Load saved combos from localStorage, fall back to defaults
@@ -199,6 +201,14 @@ let remapTarget = null;  // which combo key is being remapped
 const GRAVITY_MODES = { off: 0, gentle: 0.5, strong: 1.0 };
 let gravityMode = 'gentle';
 gyroFusion.gravityMode = GRAVITY_MODES[gravityMode];
+
+// Yaw-drift return-to-neutral at rest (issue #88). Gravity correction can't fix
+// yaw, so this slowly bleeds the displayed heading back to center while the
+// controller rests. Values are the return half-life in seconds; 0 = off.
+const YAW_RETURN_MODES = { off: 0, gentle: 2.0, strong: 0.6 };
+let yawReturnMode = localStorage.getItem('overlay:yawReturn') || 'gentle';
+if (!(yawReturnMode in YAW_RETURN_MODES)) yawReturnMode = 'gentle';
+gyroFusion.yawReturnHalfLife = YAW_RETURN_MODES[yawReturnMode];
 
 const isDesktop = typeof window !== 'undefined' &&
   (window.electronAPI || navigator.userAgent.includes('Electron'));
@@ -1102,10 +1112,14 @@ function loop() {
           console.log('Gyro recalibrating');
         }
       });
+      checkCombo(gamepad, 'recenter', recenterHeading);
     }
   }
 
-  overlay.update(gamepad, gyroActive ? gyroFusion.orientation : null);
+  // displayOrientation is the recentered/yaw-returned orientation (issue #88);
+  // pitch/roll are identical to the raw orientation, only the heading offset
+  // differs, so every visual consumer reads it for a consistent picture.
+  overlay.update(gamepad, gyroActive ? gyroFusion.displayOrientation : null);
 
   // Drive the 2D button HUD (cheap; ~30 DOM class flips per frame).
   if (document.body.classList.contains('show-button-hud')) {
@@ -1125,9 +1139,9 @@ function loop() {
   }
 
   // Forward gyro orientation to the detached Gyro HUD window (no-op if closed).
-  // gyroFusion.orientation is a THREE.Quaternion → serialize to {x,y,z,w}.
+  // displayOrientation is a THREE.Quaternion → serialize to {x,y,z,w}.
   if (window.electronAPI?.sendHudState) {
-    const o = gyroFusion.orientation;
+    const o = gyroFusion.displayOrientation;
     window.electronAPI.sendHudState('gyro', {
       q: { x: o.x, y: o.y, z: o.z, w: o.w },
       active: gyroActive,
@@ -1138,13 +1152,13 @@ function loop() {
 
   // Drive the Gyro HUD (3D gimbal widget) when visible
   if (gimbal && document.body.classList.contains('show-gyro-hud')) {
-    gimbal.update(gyroActive ? gyroFusion.orientation : null);
+    gimbal.update(gyroActive ? gyroFusion.displayOrientation : null);
   }
 
   // Axis values (pitch/roll/yaw degrees, swing-twist per axis) \u2014 drive the
   // in-overlay readout and forward to the detached Axis window.
   {
-    const q = gyroActive ? gyroFusion.orientation : null;
+    const q = gyroActive ? gyroFusion.displayOrientation : null;
     const toDeg = 180 / Math.PI;
     const twist = (ax, ay, az) => {
       if (!q) return 0;
@@ -1166,7 +1180,7 @@ function loop() {
 
   // Update gyro HUD
   if (gyroActive) {
-    _hudEuler.setFromQuaternion(gyroFusion.orientation, 'XYZ');
+    _hudEuler.setFromQuaternion(gyroFusion.displayOrientation, 'XYZ');
     const leanDeg = -_hudEuler.z * (180 / Math.PI);
     updateGyroHud(leanDeg);
 
@@ -1190,7 +1204,7 @@ function loop() {
   if (window.electronAPI?.sendHudState) {
     let leanDeg = 0;
     if (gyroActive) {
-      _hudEuler.setFromQuaternion(gyroFusion.orientation, 'XYZ');
+      _hudEuler.setFromQuaternion(gyroFusion.displayOrientation, 'XYZ');
       leanDeg = -_hudEuler.z * (180 / Math.PI);
     }
     window.electronAPI.sendHudState('roll', { leanDeg, active: gyroActive, colors: leanColors, labelBright: rollLabelBright });
@@ -1766,6 +1780,16 @@ function handleInputReport(event) {
 }
 // ── Calibration ──
 
+// Instant yaw recenter: zero the *displayed* heading with no full recalibration
+// — no bias re-sample, no orientation reset, no "Calibrating…" interruption.
+// Pitch/roll stay gravity-true (only the heading offset moves). Complements the
+// at-rest auto-return for when the user wants to snap forward mid-use.
+function recenterHeading() {
+  if (!gyroActive) return;
+  gyroFusion.recenter();
+  console.log('Gyro heading recentered');
+}
+
 function startCalibration() {
   calibrating = true;
   calibSamples = [];
@@ -2096,6 +2120,18 @@ driftModeSelect.addEventListener('change', (e) => {
   gravityMode = e.target.value;
   gyroFusion.gravityMode = GRAVITY_MODES[gravityMode] || 0;
 });
+
+if (yawReturnSelect) {
+  yawReturnSelect.value = yawReturnMode;
+  yawReturnSelect.addEventListener('change', (e) => {
+    yawReturnMode = e.target.value;
+    gyroFusion.yawReturnHalfLife = YAW_RETURN_MODES[yawReturnMode] ?? 0;
+    localStorage.setItem('overlay:yawReturn', yawReturnMode);
+  });
+}
+
+const recenterBtn = document.getElementById('recenter-btn');
+if (recenterBtn) recenterBtn.addEventListener('click', recenterHeading);
 
 const opacitySlider = document.getElementById('opacity-slider');
 const opacityValue = document.getElementById('opacity-value');
