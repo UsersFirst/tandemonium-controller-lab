@@ -162,6 +162,7 @@ const DEFAULT_COMBOS = {
   settings:   [8, 9],    // Select + Start
   gyroToggle: [8, 11],   // Select + R3
   calibrate:  [10, 11],  // L3 + R3
+  recenter:   [8, 10],   // Select + L3 — instant yaw recenter (no recalibration)
 };
 
 // Load saved combos from localStorage, fall back to defaults
@@ -1111,6 +1112,7 @@ function loop() {
           console.log('Gyro recalibrating');
         }
       });
+      checkCombo(gamepad, 'recenter', recenterHeading);
     }
   }
 
@@ -1778,6 +1780,16 @@ function handleInputReport(event) {
 }
 // ── Calibration ──
 
+// Instant yaw recenter: zero the *displayed* heading with no full recalibration
+// — no bias re-sample, no orientation reset, no "Calibrating…" interruption.
+// Pitch/roll stay gravity-true (only the heading offset moves). Complements the
+// at-rest auto-return for when the user wants to snap forward mid-use.
+function recenterHeading() {
+  if (!gyroActive) return;
+  gyroFusion.recenter();
+  console.log('Gyro heading recentered');
+}
+
 function startCalibration() {
   calibrating = true;
   calibSamples = [];
@@ -2117,6 +2129,9 @@ if (yawReturnSelect) {
     localStorage.setItem('overlay:yawReturn', yawReturnMode);
   });
 }
+
+const recenterBtn = document.getElementById('recenter-btn');
+if (recenterBtn) recenterBtn.addEventListener('click', recenterHeading);
 
 const opacitySlider = document.getElementById('opacity-slider');
 const opacityValue = document.getElementById('opacity-value');
