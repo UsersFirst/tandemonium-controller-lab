@@ -918,6 +918,15 @@
   </div>
 
   <div class="setting-row">
+    <label title="Gravity can't correct heading, so yaw slowly drifts. This re-centers the heading while the controller rests.">Yaw Drift</label>
+    <select id="yaw-return-mode">
+      <option value="off">Off</option>
+      <option value="gentle" selected>Gentle</option>
+      <option value="strong">Strong</option>
+    </select>
+  </div>
+
+  <div class="setting-row">
     <label>Opacity</label>
     <input type="range" id="opacity-slider" min="10" max="100" value="98" style="width:90px;accent-color:#3388ff;">
     <span id="opacity-value" style="min-width:28px;text-align:right;font-size:11px;">98%</span>
