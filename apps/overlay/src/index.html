@@ -918,6 +918,20 @@
   </div>
 
   <div class="setting-row">
+    <label title="Gravity can't correct heading, so yaw slowly drifts. This re-centers the heading while the controller rests.">Yaw Drift</label>
+    <select id="yaw-return-mode">
+      <option value="off">Off</option>
+      <option value="gentle" selected>Gentle</option>
+      <option value="strong">Strong</option>
+    </select>
+  </div>
+
+  <div class="setting-row">
+    <label title="Fixes where it's pointing NOW: snaps 'forward' to your current heading. Instant — keeps your calibration and true tilt. Use when the view sits a bit off-center.">Recenter heading</label>
+    <button id="recenter-btn">Recenter</button>
+  </div>
+
+  <div class="setting-row">
     <label>Opacity</label>
     <input type="range" id="opacity-slider" min="10" max="100" value="98" style="width:90px;accent-color:#3388ff;">
     <span id="opacity-value" style="min-width:28px;text-align:right;font-size:11px;">98%</span>
@@ -1117,9 +1131,14 @@
     <button data-remap="gyroToggle" id="combo-remap-gyroToggle">Remap</button>
   </div>
   <div class="setting-row">
-    <label>Calibrate</label>
+    <label title="Fixes ONGOING drift: re-measures the gyro's zero so the model stops slowly turning on its own. Hold the controller still for ~1.5s.">Calibrate</label>
     <span class="combo-display" id="combo-label-calibrate">L3 + R3</span>
     <button data-remap="calibrate" id="combo-remap-calibrate">Remap</button>
+  </div>
+  <div class="setting-row">
+    <label title="Fixes where it's pointing NOW: snaps 'forward' to your current heading. Instant — keeps your calibration and true tilt.">Recenter</label>
+    <span class="combo-display" id="combo-label-recenter">Select + L3</span>
+    <button data-remap="recenter" id="combo-remap-recenter">Remap</button>
   </div>
 
   <hr class="settings-divider">
