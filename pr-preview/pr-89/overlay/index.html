@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Controller Overlay</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: transparent;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #eee;
+    user-select: none;
+  }
+
+  #canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* ── Title bar region ──
+     Cosmetic only (shown when "Show Title Bar" is on). Window dragging is
+     handled in JS (see wireWindowDrag in app.js): the user can grab any
+     non-interactive part of the window, not just this strip — so the overlay
+     is always repositionable regardless of this toggle. */
+  #drag-bar {
+    position: fixed;
+    top: 0; left: 0; right: 80px;
+    height: 40px;
+    cursor: grab;
+    z-index: 100;
+  }
+
+  /* While a drag is in progress, show the "grabbing" cursor everywhere so the
+     feedback is consistent no matter where the user grabbed the window. */
+  html.is-dragging, html.is-dragging * { cursor: grabbing !important; }
+
+  /* ── Settings gear ── */
+  #settings-toggle {
+    position: fixed;
+    top: 6px; right: 8px;
+    width: 28px; height: 28px;
+    background: rgba(255,255,255,0.12);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-app-region: no-drag;  /* clickable */
+    z-index: 110;
+    transition: background 0.2s;
+  }
+  #settings-toggle:hover { background: rgba(255,255,255,0.25); }
+  #settings-toggle svg { fill: #ccc; width: 16px; height: 16px; }
+
+  /* ── Settings panel ── */
+  #settings-panel {
+    position: fixed;
+    top: 38px; right: 8px;
+    width: 240px;
+    max-height: calc(100vh - 50px);
+    overflow-y: auto;
+    background: rgba(30,30,35,0.92);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 14px;
+    z-index: 120;
+    display: none;
+    backdrop-filter: blur(10px);
+    -webkit-app-region: no-drag;
+  }
+  #settings-panel.visible { display: block; }
+
+  #settings-close {
+    position: absolute;
+    top: 8px; right: 8px;
+    width: 22px; height: 22px;
+    background: rgba(255,255,255,0.08);
+    border: none;
+    border-radius: 50%;
+    color: #888;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #settings-close:hover { background: rgba(255,255,255,0.2); color: #fff; }
+
+  #settings-panel h3 {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+  .setting-row label { color: #bbb; }
+
+  .setting-row select,
+  .setting-row button {
+    background: rgba(255,255,255,0.08);
+    color: #eee;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .setting-row select:hover,
+  .setting-row button:hover {
+    background: rgba(255,255,255,0.15);
+  }
+  /* The select's translucent dark bg + light text looks right on the panel,
+     but the OPEN option list is drawn by the OS — on Windows it came up
+     light-mode, leaving unselected options as light text on a white popup
+     (unreadable). `color-scheme: dark` renders the native popup dark; the
+     explicit option colors are a solid-background fallback across platforms. */
+  .setting-row select { color-scheme: dark; }
+  .setting-row select option {
+    background: #26262c;
+    color: #eee;
+  }
+
+  .setting-row input[type="color"] {
+    width: 32px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    -webkit-appearance: none;
+  }
+  .setting-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+  .setting-row input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+
+  .setting-row input[type="checkbox"] {
+    width: 14px; height: 14px;
+    accent-color: #3388ff;
+    cursor: pointer;
+  }
+
+  /* Floating numeric editor for the selected Edit-Layout part. Lives OUTSIDE the
+     settings panel so it stays visible while the panel is closed and the user
+     drags parts in the 3D view (that's why the inline fields felt "missing").
+     Shown on selection; draggable by its header so it never blocks the part. */
+  #layout-editor-popup {
+    display: none;
+    position: fixed;
+    top: 38px; left: 8px;
+    width: 340px;
+    background: rgba(30,30,35,0.95);
+    border: 1px solid rgba(51,136,255,0.55);
+    border-radius: 10px;
+    padding: 10px 12px 12px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+    backdrop-filter: blur(10px);
+    z-index: 50;
+    font-size: 12px;
+    user-select: none;
+  }
+  #layout-editor-popup .lep-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; cursor: move; margin-bottom: 8px;
+  }
+  #layout-editor-popup .lep-title {
+    color: #8af; font-family: monospace; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #layout-editor-popup .lep-close {
+    flex: none; width: 22px; height: 22px; line-height: 1; font-size: 14px;
+    border: none; border-radius: 5px; cursor: pointer;
+    background: rgba(255,255,255,0.08); color: #ccc;
+  }
+  #layout-editor-popup .lep-close:hover { background: rgba(255,255,255,0.2); color: #fff; }
+  #layout-editor-popup .lep-reset {
+    width: 100%; margin-top: 8px; padding: 6px; border: none; border-radius: 6px;
+    background: rgba(255,255,255,0.1); color: #ddd; font-size: 11px; cursor: pointer;
+  }
+  #layout-editor-popup .lep-reset:hover { background: rgba(255,255,255,0.18); }
+  #layout-editor-popup .lep-hint {
+    margin-top: 6px; font-size: 10px; color: rgba(255,255,255,0.4); line-height: 1.3;
+  }
+  /* Position/Rotation sections: a small title, then three axis-labelled inputs
+     that share the width evenly. Roomy enough that the full value (and its live
+     changes) stay readable. */
+  #layout-editor-popup .lep-header { margin-bottom: 10px; }
+  #layout-editor-popup .lep-title { font-size: 13px; }
+  #layout-editor-popup .lep-section { margin-bottom: 10px; }
+  #layout-editor-popup .lep-section-title { color: #bbb; font-size: 13px; margin-bottom: 5px; }
+  #layout-editor-popup .lep-axes { display: flex; gap: 8px; }
+  #layout-editor-popup .lep-axis { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
+  #layout-editor-popup .lep-ax { color: #8af; font-family: monospace; font-size: 13px; font-weight: 600; }
+  #layout-editor-popup input[type="number"] {
+    flex: 1; min-width: 0;
+    background: rgba(255,255,255,0.08);
+    color: #eee;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 5px;
+    padding: 7px 8px;
+    font-size: 14px;
+    text-align: right;
+  }
+  #layout-editor-popup input[type="number"]:focus { outline: none; border-color: #3388ff; }
+
+  .window-size-fields { display: flex; align-items: center; gap: 4px; }
+  .window-size-x { color: #888; font-size: 11px; }
+  .setting-row input[type="number"] {
+    width: 52px;
+    background: rgba(255,255,255,0.08);
+    color: #eee;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 5px;
+    padding: 4px 6px;
+    font-size: 11px;
+    text-align: right;
+  }
+  .setting-row input[type="number"]:focus {
+    outline: none;
+    border-color: #3388ff;
+  }
+  .settings-divider {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    margin: 10px 0;
+  }
+
+  /* Build stamp — commit + UTC build time, injected by the desktop/web
+     GitHub Actions builds (see the "Stamp build version" steps). The literal
+     "dev build" text is what ships in the repo; CI rewrites it in place. */
+  .build-stamp {
+    margin-top: 4px;
+    text-align: center;
+    font-size: 10px;
+    font-family: monospace;
+    color: rgba(255,255,255,0.3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .build-stamp a { color: inherit; text-decoration: none; }
+  .build-stamp a:hover { color: rgba(255,255,255,0.6); }
+
+  .combo-display {
+    font-size: 10px;
+    color: #8af;
+    font-family: monospace;
+    white-space: nowrap;
+  }
+
+  .settings-action-btn {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: opacity 0.15s;
+  }
+  .settings-action-btn:hover { opacity: 0.85; }
+  .settings-action-btn.close { background: #2266cc; color: #fff; }
+  .settings-action-btn.exit { background: #cc2222; color: #fff; }
+  .settings-action-btn.capture { background: #2a9d4f; color: #fff; }
+
+  /* ── Test Report modal ── */
+  #test-report-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+    -webkit-app-region: no-drag;
+  }
+  #test-report-modal.visible { display: flex; }
+  #test-report-modal .dialog {
+    background: #1a1a20;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    width: min(520px, 92vw);
+    max-height: 86vh;
+    overflow-y: auto;
+    padding: 20px 24px;
+    color: #eee;
+    font-size: 13px;
+  }
+  #test-report-modal h2 {
+    margin: 0 0 4px;
+    font-size: 15px;
+    color: #9ad;
+    letter-spacing: 0.04em;
+  }
+  #test-report-modal h3 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: #fff;
+    font-weight: 600;
+  }
+  #test-report-modal p {
+    margin: 0 0 14px;
+    color: #ccc;
+    line-height: 1.45;
+  }
+  #test-report-modal .progress-bar {
+    height: 6px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 10px 0 16px;
+  }
+  #test-report-modal .progress-bar > div {
+    height: 100%;
+    background: #2a9d4f;
+    width: 0%;
+    transition: width 100ms linear;
+  }
+  #test-report-modal .device-line {
+    font-size: 11px;
+    color: #888;
+    font-family: monospace;
+    margin-bottom: 14px;
+  }
+  #test-report-modal .device-line strong { color: #ccc; }
+  #test-report-modal .actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+  #test-report-modal .actions button {
+    padding: 8px 16px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.06);
+    color: #eee;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  #test-report-modal .actions button.primary {
+    background: #2a9d4f;
+    border-color: #2a9d4f;
+    color: #fff;
+    font-weight: 600;
+  }
+  #test-report-modal .actions button.primary:hover { background: #34b85a; }
+  #test-report-modal .actions button:hover { background: rgba(255,255,255,0.12); }
+  #test-report-modal .actions button[disabled] { opacity: 0.5; cursor: not-allowed; }
+  #test-report-modal .status {
+    color: #8af;
+    font-size: 11px;
+    font-family: monospace;
+    margin-top: 8px;
+  }
+  #test-report-modal .status.error { color: #f88; }
+  #test-report-modal .status.success { color: #6f6; }
+
+  /* ── Exit confirmation dialog ── */
+  #exit-confirm {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    background: rgba(0,0,0,0.6);
+    -webkit-app-region: no-drag;
+  }
+  #exit-confirm.visible { display: flex; }
+  #exit-confirm .dialog {
+    background: rgba(30,30,35,0.95);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+    max-width: 280px;
+  }
+  #exit-confirm .dialog p {
+    font-size: 14px;
+    margin-bottom: 18px;
+    color: #ddd;
+  }
+  #exit-confirm .dialog-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  #exit-confirm .dialog-buttons button {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #exit-confirm .btn-cancel { background: rgba(255,255,255,0.12); color: #ccc; }
+  #exit-confirm .btn-cancel:hover { background: rgba(255,255,255,0.2); }
+  #exit-confirm .btn-exit-yes { background: #cc2222; color: #fff; }
+  #exit-confirm .btn-exit-yes:hover { opacity: 0.85; }
+
+  /* Window display toggles — cosmetic only, hidden by default.
+     When "Show" is checked, the class is removed and element appears. */
+  body:not(.show-title) #drag-bar,
+  body:not(.show-title) #status-bar { opacity: 0; pointer-events: none; }
+  body:not(.show-gyro) #gyro-toggle { opacity: 0; pointer-events: none; }
+  body:not(.show-gear) #settings-toggle { opacity: 0; pointer-events: none; }
+  body.hide-roll-hud #gyro-hud { display: none !important; }
+
+  .camera-presets {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .camera-presets button {
+    flex: 1;
+    min-width: 48px;
+    text-align: center;
+    padding: 4px 2px;
+    font-size: 10px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .camera-presets button.selected {
+    background: rgba(51,136,255,0.3);
+    border-color: rgba(51,136,255,0.6);
+    color: #fff;
+  }
+  .camera-presets button.nav-hover {
+    outline: 2px solid rgba(255,255,255,0.6);
+    outline-offset: 1px;
+  }
+
+  /* ── Status badges (top-right, left of gear) ── */
+  #status-bar {
+    position: fixed;
+    top: 8px; right: 42px;
+    display: flex;
+    gap: 6px;
+    z-index: 110;
+    align-items: center;
+  }
+  .status-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(80,0,0,0.5);
+    color: #c44;
+    white-space: nowrap;
+  }
+  .status-badge.connected { color: #4f4; background: rgba(0,80,0,0.5); }
+
+  #axis-readout {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    gap: 14px;
+    font-family: monospace;
+    font-size: 24px;
+    font-weight: 600;
+    z-index: 110;
+    background: rgba(0,0,0,0.45);
+    padding: 4px 14px;
+    border-radius: 14px;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  body.show-axis-readout #axis-readout { display: flex; }
+  /* Per-axis (Pitch/Roll/Yaw) colors — configurable via CSS vars set from settings. */
+  #axis-readout .ax-pitch { color: var(--ax-pitch, #44dd66); }
+  #axis-readout .ax-roll  { color: var(--ax-roll,  #ee4455); }
+  #axis-readout .ax-yaw   { color: var(--ax-yaw,   #4488ff); }
+
+  /* ── Gyro toggle button (emoji) ── */
+  #gyro-toggle {
+    position: fixed;
+    top: 2px; right: 42px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    -webkit-app-region: no-drag;
+    z-index: 110;
+    font-size: 14px;
+    line-height: 1;
+    padding: 4px;
+    gap: 1px;
+  }
+  #gyro-toggle .gyro-controller { font-size: 20px; }
+  #gyro-toggle .gyro-indicator { font-size: 12px; }
+  #gyro-toggle:hover { opacity: 0.8; }
+  #gyro-toggle.visible { display: flex; }
+
+  /* ── Steam Controller Puck status banner ── */
+  /* Top-of-window informational strip that appears while a Puck is
+     connected. The driver's 800ms heartbeat suppresses the firmware's
+     lizard-mode mouse/keyboard emulation, so this is just a status
+     note (not a warning). Sits below the 40px drag bar so it doesn't
+     interfere with window-drag. Dismissible per session. */
+  #puck-status-banner {
+    position: fixed;
+    top: 40px;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: rgba(40, 60, 100, 0.85);
+    color: #e8ecf2;
+    padding: 0.4rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    line-height: 1.3;
+    -webkit-app-region: no-drag;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+  #puck-status-banner[hidden] { display: none; }
+  #puck-status-banner .banner-text { flex: 1; }
+  #puck-status-banner a { color: #9cc8ff; text-decoration: underline; }
+  #puck-status-banner #puck-status-dismiss {
+    background: transparent;
+    border: none;
+    color: #e8ecf2;
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.4rem;
+  }
+
+  /* ── No-controller splash ── */
+  /* Sits no-drag so right-click reaches the page's contextmenu handler
+     (which opens the settings panel). Without this, the splash covers
+     the whole window AND inherits drag behavior, so right-click fires
+     the OS title-bar system menu instead of our settings — leaving
+     first-time users with no visible way in. The top 40px drag-bar
+     element above the splash still handles window-drag, so users can
+     still reposition the window even with the splash visible. */
+  #no-controller {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    -webkit-app-region: no-drag;
+    transition: opacity 0.4s ease;
+  }
+  #no-controller.hidden { display: none; }
+  /* Conditional hint under the splash — revealed by app.js when a Puck
+     is connected but no paired controller is sending STATE reports. */
+  #no-controller .splash-hint {
+    margin-top: 2rem;
+    max-width: 32rem;
+    padding: 0 2rem;
+    text-align: center;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    color: #d0d0d8;
+    opacity: 0.9;
+  }
+  #no-controller .splash-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #no-controller .splash-emoji {
+    font-size: min(45vw, 45vh);
+    line-height: 1;
+    filter: grayscale(0.3);
+  }
+  #no-controller .splash-prohibit {
+    position: absolute;
+    width: min(60vw, 60vh);
+    height: min(60vw, 60vh);
+  }
+  #no-controller .splash-prohibit circle,
+  #no-controller .splash-prohibit line {
+    stroke: #cc3333;
+    stroke-width: 8;
+    fill: none;
+    opacity: 0.85;
+  }
+
+  /* ── Button HUD — compact 2D readout of gamepad state ── */
+  /* Renders face buttons, dpad, shoulders, analog triggers, stick positions,
+     and system buttons. Each element flips between 'idle' and 'pressed' via
+     a .pressed class toggled by updateButtonHud() in app.js. Hidden by
+     default; toggleable in settings; remembers position via a body class. */
+  #button-hud {
+    position: fixed;
+    left: 12px;
+    bottom: 12px;
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    background: rgba(15, 15, 20, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    pointer-events: none;
+    z-index: 50;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-app-region: no-drag;
+    user-select: none;
+  }
+  body.show-button-hud #button-hud { display: flex; }
+  #button-hud.pos-top-left    { left: 12px; top: 12px;    bottom: auto; right: auto; }
+  #button-hud.pos-top-right   { right: 12px; top: 12px;   bottom: auto; left: auto; }
+  #button-hud.pos-bottom-right{ right: 12px; bottom: 12px; top: auto; left: auto; }
+  #button-hud.pos-bottom-left { left: 12px; bottom: 12px;  top: auto; right: auto; }
+
+  #button-hud .bh-section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  /* Buttons: small rounded squares; light up cyan on press */
+  #button-hud .bh-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #999;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    transition: background 60ms linear, color 60ms linear, transform 60ms linear;
+  }
+  #button-hud .bh-btn.bh-sm { width: 20px; height: 16px; font-size: 9px; }
+  #button-hud .bh-btn.bh-dp { width: 18px; height: 18px; font-size: 8px; color: #777; }
+  #button-hud .bh-btn.pressed {
+    background: var(--hl-color, #3388ff);
+    color: #fff;
+    border-color: var(--hl-color, #3388ff);
+    transform: scale(1.08);
+    box-shadow: 0 0 6px var(--hl-color, #3388ff);
+  }
+  /* Face button accents — keep their familiar colors */
+  #button-hud .bh-face-a.pressed { background: #2ec27e; border-color: #2ec27e; box-shadow: 0 0 6px rgba(46,194,126,0.65); }
+  #button-hud .bh-face-b.pressed { background: #ed333b; border-color: #ed333b; box-shadow: 0 0 6px rgba(237,51,59,0.65); }
+  #button-hud .bh-face-x.pressed { background: #3388ff; border-color: #3388ff; box-shadow: 0 0 6px rgba(51,136,255,0.65); }
+  #button-hud .bh-face-y.pressed { background: #f6c343; border-color: #f6c343; color: #222; box-shadow: 0 0 6px rgba(246,195,67,0.65); }
+
+  /* Dpad: 3-column grid (up centered, ←  → on a row, down centered) */
+  #button-hud .bh-dpad {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    grid-template-rows: repeat(3, auto);
+    gap: 2px;
+  }
+  #button-hud .bh-dpad .bh-btn:nth-child(1) { grid-area: 1 / 2; }
+  #button-hud .bh-dpad .bh-btn:nth-child(2) { grid-area: 2 / 1; }
+  #button-hud .bh-dpad .bh-btn:nth-child(3) { grid-area: 2 / 3; }
+  #button-hud .bh-dpad .bh-btn:nth-child(4) { grid-area: 3 / 2; }
+
+  /* Face buttons: 3-column grid (Y top, X-B middle, A bottom — diamond layout) */
+  #button-hud .bh-face {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    grid-template-rows: repeat(3, auto);
+    gap: 2px;
+  }
+  #button-hud .bh-face .bh-face-y { grid-area: 1 / 2; }
+  #button-hud .bh-face .bh-face-x { grid-area: 2 / 1; }
+  #button-hud .bh-face .bh-face-b { grid-area: 2 / 3; }
+  #button-hud .bh-face .bh-face-a { grid-area: 3 / 2; }
+
+  .bh-main { display: flex; gap: 12px; }
+
+  /* Analog triggers: vertical bars whose fill grows with value 0-1 */
+  .bh-triggers { gap: 10px; }
+  #button-hud .bh-trigger {
+    position: relative;
+    width: 18px; height: 30px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #button-hud .bh-trigger-fill {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 0%;
+    background: linear-gradient(to top, #3388ff, #66bbff);
+    transition: height 50ms linear;
+  }
+  #button-hud .bh-trigger-label {
+    position: absolute;
+    left: 0; right: 0; bottom: 1px;
+    text-align: center;
+    color: #ccc;
+    font-size: 8px;
+    font-weight: 600;
+    text-shadow: 0 0 2px rgba(0,0,0,0.8);
+    pointer-events: none;
+  }
+
+  /* Sticks: small square with a moving dot showing current XY; border lights up on click */
+  .bh-sticks { gap: 8px; }
+  #button-hud .bh-stick {
+    position: relative;
+    width: 28px; height: 28px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    transition: border-color 60ms linear, box-shadow 60ms linear;
+  }
+  #button-hud .bh-stick.pressed {
+    border-color: var(--hl-color, #3388ff);
+    box-shadow: 0 0 6px var(--hl-color, #3388ff);
+  }
+  #button-hud .bh-stick-dot {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 6px; height: 6px;
+    background: #cfd;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 1; /* above the connector line */
+  }
+  /* Thin connector from the stick center to the dot (width + rotation set in
+     JS each frame). transform-origin at the left edge = the stick center. */
+  #button-hud .bh-stick-line {
+    position: absolute;
+    left: 50%; top: 50%;
+    height: 2px; width: 0;
+    margin-top: -1px;
+    background: #cfd;
+    opacity: 0.55;
+    border-radius: 1px;
+    transform-origin: 0 50%;
+    pointer-events: none;
+  }
+  /* Back-paddle HUD row: hidden unless the active controller maps paddles. */
+  #button-hud .bh-paddles { display: none; }
+  body.has-paddles #button-hud .bh-paddles { display: flex; }
+  #button-hud .bh-stick-label {
+    position: absolute;
+    left: 50%; bottom: -10px;
+    transform: translateX(-50%);
+    color: #888;
+    font-size: 8px;
+    font-weight: 600;
+    pointer-events: none;
+  }
+
+  /* ── Gyro HUD (arc, arrows, calibration text) ── */
+  #gyro-hud {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 40;
+  }
+  #gyro-hud.visible { display: block; position: fixed; }
+
+  #gyro-hud.pos-below { bottom: 4%; }
+  #gyro-hud.pos-above { top: 4%; }
+
+  /* Roll HUD static markings (band + ticks + degree labels) share one color
+     (the Roll "Normal" lean color) and one brightness multiplier, both set as
+     CSS vars from app.js. The needle/arrows stay lean-banded. CSS presentation
+     properties here override the SVG fill/stroke attributes in the markup. */
+  #gyro-hud { --roll-label-color: #ffffff; --roll-label-bright: 1; }
+  #gyro-hud #arc-band {
+    fill: var(--roll-label-color); stroke: var(--roll-label-color);
+    fill-opacity: calc(0.08 * var(--roll-label-bright));
+    stroke-opacity: calc(0.25 * var(--roll-label-bright));
+  }
+  #gyro-hud #arc-ticks { stroke: var(--roll-label-color); opacity: var(--roll-label-bright); }
+  #gyro-hud #arc-labels {
+    fill: var(--roll-label-color); opacity: var(--roll-label-bright);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-weight: 600;
+  }
+
+  #arc-svg {
+    display: block;
+    width: min(55vw, 240px);
+    height: auto;
+  }
+
+  .gyro-hud-footer {
+    position: absolute;
+    left: 0; right: 0;
+    top: 48%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  #lean-arrow-left, #lean-arrow-right {
+    font-size: 18px;
+    opacity: 0.1;
+    transition: opacity 0.05s;
+    user-select: none;
+  }
+
+  #calib-hint {
+    font-size: 9px;
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    transition: opacity 0.5s;
+    min-width: 100px;
+  }
+  #calib-hint.hidden { opacity: 0; }
+
+  /* ── Gyro HUD — 3D nested-ring gyro widget (above controller) ── */
+  #gyro-hud-canvas {
+    position: fixed;
+    top: 4%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(36vw, 220px);
+    height: min(36vw, 220px);
+    pointer-events: none;
+    z-index: 45;
+    display: none;
+  }
+  body.show-gyro-hud #gyro-hud-canvas { display: block; }
+
+  /* ── Click-through indicator ── */
+  #click-through-indicator {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border: 2px solid rgba(255,100,0,0.4);
+    pointer-events: none;
+    z-index: 200;
+    display: none;
+    border-radius: 4px;
+  }
+  #click-through-indicator.active { display: block; }
+
+  /* ── Grip-sense row in the Button HUD ──
+     Shown only for controllers that report capacitive grips (body.has-grips).
+     Glows with the shared highlight color when a grip is held. */
+  #button-hud .bh-grips { display: none; }
+  body.has-grips #button-hud .bh-grips { display: flex; }
+  #button-hud .bh-grip.active {
+    background: var(--hl-color, #3388ff);
+    border-color: var(--hl-color, #3388ff);
+    color: #fff;
+    box-shadow: 0 0 6px var(--hl-color, #3388ff);
+  }
+</style>
+</head>
+<body>
+
+<!-- Drag region for window repositioning -->
+<div id="drag-bar"></div>
+
+<!-- Gyro toggle button (appears when gyro-capable controller connected) -->
+<button id="gyro-toggle" title="Gyro: click to toggle"><span class="gyro-controller">&#x1F3AE;</span><span class="gyro-indicator">&#x274C;</span></button>
+
+<!-- Settings gear button -->
+<button id="settings-toggle" title="Settings">
+  <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.26.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
+</button>
+
+<!-- Settings panel -->
+<div id="settings-panel">
+  <button id="settings-close" title="Close">&times;</button>
+  <h3>Controller Overlay</h3>
+
+  <div class="setting-row">
+    <label>Controller</label>
+    <select id="controller-type">
+      <option value="auto">Auto-detect</option>
+      <option value="dualsense">DualSense</option>
+      <option value="switch-pro">Switch Pro</option>
+    </select>
+  </div>
+
+  <div class="setting-row">
+    <label>Gyro (WebHID)</label>
+    <button id="connect-gyro-btn">Connect</button>
+  </div>
+
+  <div class="setting-row">
+    <label>Gravity Correction</label>
+    <select id="drift-mode">
+      <option value="off">Off</option>
+      <option value="gentle" selected>Gentle</option>
+      <option value="strong">Strong</option>
+    </select>
+  </div>
+
+  <div class="setting-row">
+    <label title="Gravity can't correct heading, so yaw slowly drifts. This re-centers the heading while the controller rests.">Yaw Drift</label>
+    <select id="yaw-return-mode">
+      <option value="off">Off</option>
+      <option value="gentle" selected>Gentle</option>
+      <option value="strong">Strong</option>
+    </select>
+  </div>
+
+  <div class="setting-row">
+    <label>Opacity</label>
+    <input type="range" id="opacity-slider" min="10" max="100" value="98" style="width:90px;accent-color:#3388ff;">
+    <span id="opacity-value" style="min-width:28px;text-align:right;font-size:11px;">98%</span>
+  </div>
+
+  <div class="setting-row">
+    <label>Body Color</label>
+    <input type="color" id="body-color" value="#e8e8ec">
+  </div>
+
+  <div class="setting-row">
+    <label>Accent Color</label>
+    <input type="color" id="accent-color" value="#1a1a1e">
+  </div>
+
+  <div class="setting-row">
+    <label title="Glossy reflective sheen on the controller. 0 = matte.">Shine</label>
+    <input type="range" id="shine-slider" min="0" max="100" value="35" style="width:90px;accent-color:#3388ff;">
+  </div>
+
+  <!-- Single shared highlight-color picker. Drives the 2D HUD .pressed states
+       (--hl-color), the 3D button/trigger press glow (setPressColor, #45), and
+       the 3D grip-sense markers/glow (setGripColor, #49) — see applyHighlightColor. -->
+  <div class="setting-row">
+    <label>Highlight Color</label>
+    <input type="color" id="highlight-color" value="#ff0000">
+  </div>
+
+  <div class="setting-row">
+    <label>Camera</label>
+  </div>
+  <div class="camera-presets" data-row="0">
+    <button data-preset="front">Front</button>
+    <button data-preset="back">Back</button>
+    <button data-preset="left">Left</button>
+    <button data-preset="right">Right</button>
+  </div>
+  <div class="camera-presets" data-row="1">
+    <button data-preset="player">Player</button>
+    <button data-preset="top">Top</button>
+  </div>
+
+  <div class="setting-row">
+    <label title="Overlay window size in pixels. Updates live as you resize the window, and editing a value resizes the window to match. The last size is remembered between launches.">Window Size</label>
+    <span class="window-size-fields">
+      <input type="number" id="window-width" min="200" max="8000" step="1" autocomplete="off" title="Width (px)">
+      <span class="window-size-x">×</span>
+      <input type="number" id="window-height" min="200" max="8000" step="1" autocomplete="off" title="Height (px)">
+    </span>
+  </div>
+
+  <div class="setting-row">
+    <label title="Float the triggers, bumpers & back paddles clear of the body so they're visible at any angle">Float Controls</label>
+    <input type="checkbox" id="float-controls" checked autocomplete="off">
+  </div>
+  <div class="setting-row">
+    <label title="Steam Controller: suppress the firmware's keyboard/mouse (lizard-mode) emulation while the overlay runs. Turn OFF to keep keyboard/mouse (e.g. when Steam Input is running). Takes effect on the next controller connect.">Suppress Kbd/Mouse (Steam)</label>
+    <input type="checkbox" id="suppress-lizard" checked autocomplete="off">
+  </div>
+
+  <div class="setting-row">
+    <label>Roll HUD Position</label>
+    <select id="hud-position">
+      <option value="above">Above</option>
+      <option value="below" selected>Below</option>
+    </select>
+  </div>
+
+  <hr class="settings-divider">
+  <h3>Window Display</h3>
+  <div class="setting-row">
+    <label>Show Title Bar</label>
+    <input type="checkbox" id="show-title">
+  </div>
+  <div class="setting-row">
+    <label>Show Gyro Toggle</label>
+    <input type="checkbox" id="show-gyro">
+  </div>
+  <div class="setting-row">
+    <label>Show Gear Icon</label>
+    <!-- autocomplete=off so a reload can't restore a stale "unchecked" state and
+         strand the user with a hidden gear; it honors the `checked` default. -->
+    <input type="checkbox" id="show-gear" checked autocomplete="off">
+  </div>
+  <div class="setting-row">
+    <label>Show Roll HUD</label>
+    <input type="checkbox" id="show-roll-hud" autocomplete="off">
+  </div>
+  <div class="setting-row">
+    <label title="Roll HUD needle/label colors by lean band (near-center / mid / high lean).">Roll Colors (Normal / Mid / High)</label>
+    <span style="display:flex; gap:4px;">
+      <input type="color" id="lean-color-normal" value="#ffffff" title="Normal (near center)">
+      <input type="color" id="lean-color-mid" value="#ffaa22" title="Mid lean">
+      <input type="color" id="lean-color-high" value="#ff4444" title="High lean">
+    </span>
+  </div>
+  <div class="setting-row">
+    <label title="Brightness of the Roll HUD's band, tick marks, and degree labels (uses the Normal color).">Roll Labels Brightness</label>
+    <input type="range" id="roll-label-brightness" min="0" max="100" value="100" style="width:90px;accent-color:#3388ff;">
+  </div>
+  <div class="setting-row">
+    <label>Show Axis HUD</label>
+    <input type="checkbox" id="show-axis-readout">
+  </div>
+  <div class="setting-row">
+    <label title="Per-axis colors for the Pitch / Roll / Yaw readout.">Axis Colors (Pitch / Roll / Yaw)</label>
+    <span style="display:flex; gap:4px;">
+      <input type="color" id="axis-color-pitch" value="#44dd66" title="Pitch">
+      <input type="color" id="axis-color-roll" value="#ee4455" title="Roll">
+      <input type="color" id="axis-color-yaw" value="#4488ff" title="Yaw">
+    </span>
+  </div>
+  <div class="setting-row">
+    <label>Show Gyro HUD</label>
+    <input type="checkbox" id="show-gyro-hud">
+  </div>
+  <div class="setting-row">
+    <label>Gyro HUD: full orientation</label>
+    <input type="checkbox" id="gyro-hud-full-mode">
+  </div>
+  <div class="setting-row">
+    <label>Show Button HUD</label>
+    <input type="checkbox" id="show-button-hud">
+  </div>
+  <div class="setting-row">
+    <label title="On-top grip glow markers, shown while a grip is held (Steam Controller). Independent of the bars; grip state also shows in the Button HUD.">Show Grip Sense Glow</label>
+    <input type="checkbox" id="grip-viz-toggle" checked>
+  </div>
+  <div class="setting-row">
+    <label title="Across-handle width of the grip glow (1–5). Width 1 + Length 1 = a small circle.">Grip Sense Glow Width</label>
+    <input type="range" id="grip-glow-width" min="1" max="5" step="1" value="2" style="width:90px;accent-color:#33ddaa;">
+  </div>
+  <div class="setting-row">
+    <label title="Front-to-back length of the grip glow along the handle (1–5). Width 1 + Length 1 = a small circle.">Grip Sense Glow Length</label>
+    <input type="range" id="grip-glow-length" min="1" max="5" step="1" value="4" style="width:90px;accent-color:#33ddaa;">
+  </div>
+  <div class="setting-row">
+    <label title="Show the grip-sense bars on the controller's left/right sides (Steam Controller). The bars sit grey at rest and light up to the grip color while that side is gripped — independent of the Grip Sense Glow.">Show Grip Sense Bars</label>
+    <input type="checkbox" id="grip-bars-toggle" autocomplete="off">
+  </div>
+  <div class="setting-row">
+    <label title="Peak brightness of the Grip Sense Glow while a grip is held. Affects the glow only, not the bars.">Grip Glow Brightness</label>
+    <input type="range" id="grip-brightness" min="10" max="100" value="50" style="width:90px;accent-color:#33ddaa;">
+  </div>
+  <div class="setting-row">
+    <label title="Color of the grip-sense glow and the lit grip bars. Defaults to the Highlight Color; set here to override it.">Grip Sense Color</label>
+    <input type="color" id="grip-color" value="#ff0000">
+  </div>
+  <div class="setting-row">
+    <label>Button HUD position</label>
+    <select id="button-hud-position">
+      <option value="bottom-left" selected>Bottom-left</option>
+      <option value="bottom-right">Bottom-right</option>
+      <option value="top-left">Top-left</option>
+      <option value="top-right">Top-right</option>
+    </select>
+  </div>
+  <div class="setting-row">
+    <label>Button HUD window</label>
+    <button id="detach-button-hud" title="Open the Button HUD in its own draggable window">Detach</button>
+  </div>
+  <div class="setting-row">
+    <label title="Open the Gyro HUD (3D gyro) in its own transparent, always-on-top window">Gyro HUD window</label>
+    <button id="detach-gyro-hud" title="Open the 3D Gyro in its own draggable window">Detach</button>
+  </div>
+  <div class="setting-row">
+    <label title="Open the Axis HUD (pitch/roll/yaw readout) in its own transparent window">Axis HUD window</label>
+    <button id="detach-axis-hud" title="Open the Axis Values in its own draggable window">Detach</button>
+  </div>
+  <div class="setting-row">
+    <label title="Open the Roll HUD in its own transparent window">Roll HUD window</label>
+    <button id="detach-roll-hud" title="Open the Roll HUD in its own draggable window">Detach</button>
+  </div>
+  <div class="setting-row">
+    <label title="Paint a solid keyable color behind the overlay for chroma-key compositing">Green-Screen Background</label>
+    <input type="checkbox" id="green-screen-toggle">
+  </div>
+  <div class="setting-row">
+    <label>Green-Screen Color</label>
+    <input type="color" id="green-screen-color" value="#00b140">
+  </div>
+
+  <hr class="settings-divider">
+  <h3>Shortcuts</h3>
+  <div class="build-stamp" style="text-align:left; white-space:normal; margin:0 0 8px; line-height:1.4;">
+    Mouse: <strong>Ctrl + Right-Click</strong> shows/hides settings ·
+    <strong>Ctrl + Left-Click drag</strong> moves the window (use if normal click-drag won't grab).
+  </div>
+  <div class="setting-row">
+    <label>Settings</label>
+    <span class="combo-display" id="combo-label-settings">Select + Start</span>
+    <button data-remap="settings" id="combo-remap-settings">Remap</button>
+  </div>
+  <div class="setting-row">
+    <label>Gyro On/Off</label>
+    <span class="combo-display" id="combo-label-gyroToggle">Select + R3</span>
+    <button data-remap="gyroToggle" id="combo-remap-gyroToggle">Remap</button>
+  </div>
+  <div class="setting-row">
+    <label>Calibrate</label>
+    <span class="combo-display" id="combo-label-calibrate">L3 + R3</span>
+    <button data-remap="calibrate" id="combo-remap-calibrate">Remap</button>
+  </div>
+
+  <hr class="settings-divider">
+  <h3>Edit Layout</h3>
+  <div class="setting-row">
+    <label title="Click-drag the triggers, bumpers and back paddles to position them; rotate the selected one with the keyboard.">Edit float layout</label>
+    <input type="checkbox" id="edit-layout-toggle">
+  </div>
+  <div class="setting-row">
+    <label title="Relative: parts move/rotate with the controller. Absolute: parts stay fixed in space and don't move with the controller.">Positioning</label>
+    <select id="layout-mode">
+      <option value="relative" selected>Relative to body</option>
+      <option value="absolute">Absolute (fixed)</option>
+    </select>
+  </div>
+  <div id="edit-layout-help" class="build-stamp" style="display:none; text-align:left; margin-top:2px; white-space:normal;">
+    Click a part to select — a numeric editor pops up. Drag to move, or type exact values. Rotate with arrows (pitch/yaw), Q/E (roll); Shift = fine, R = reset rotation, Esc = deselect.
+  </div>
+  <div class="setting-row">
+    <button class="settings-action-btn" id="reset-layout">RESET LAYOUT</button>
+  </div>
+
+  <hr class="settings-divider">
+  <h3>Diagnostics</h3>
+  <div class="setting-row">
+    <button class="settings-action-btn capture" id="btn-capture-report">CAPTURE HID REPORT</button>
+  </div>
+
+  <hr class="settings-divider">
+  <div class="setting-row">
+    <button class="settings-action-btn" id="btn-reset-defaults" title="Clear all saved overlay settings and reload with defaults">RESET TO ALL DEFAULTS</button>
+  </div>
+
+  <hr class="settings-divider">
+  <div class="setting-row">
+    <button class="settings-action-btn close" id="btn-close-settings">CLOSE SETTINGS</button>
+  </div>
+  <div class="setting-row">
+    <button class="settings-action-btn exit" id="btn-exit-app">EXIT APPLICATION</button>
+  </div>
+
+  <hr class="settings-divider">
+  <!-- Build stamp. CI rewrites the inner content of #build-version with the
+       commit short SHA + UTC build time (see the "Stamp build version" steps
+       in build-desktop.yml and deploy-pages.yml). Stays "dev build" locally. -->
+  <div class="build-stamp"><span id="build-version">PR #89 &middot; <a href="https://github.com/UsersFirst/tandemonium-controller-lab/commit/c11619bc8ff866eb56271ec0ff93afc594389bc4" target="_blank" rel="noopener">v.c11619b</a> &middot; 2026-07-01 23:27 UTC</span></div>
+</div>
+
+<!-- Floating numeric editor for the selected Edit-Layout part. Outside the
+     settings panel so it's usable while dragging parts with the panel closed. -->
+<div id="layout-editor-popup">
+  <div class="lep-header" id="lep-drag">
+    <span class="lep-title" id="edit-layout-selected">none</span>
+    <button class="lep-close" id="lep-close" title="Deselect (Esc)">×</button>
+  </div>
+  <div class="lep-section">
+    <div class="lep-section-title" title="Position offset in model units. X mirrors left (−)/right (+), Y is up (+), Z is front (+)/back (−).">Position</div>
+    <div class="lep-axes">
+      <label class="lep-axis" title="X — left −/right +"><span class="lep-ax">X</span><input type="number" id="layout-pos-x" step="0.01" autocomplete="off"></label>
+      <label class="lep-axis" title="Y — up +"><span class="lep-ax">Y</span><input type="number" id="layout-pos-y" step="0.01" autocomplete="off"></label>
+      <label class="lep-axis" title="Z — front +/back −"><span class="lep-ax">Z</span><input type="number" id="layout-pos-z" step="0.01" autocomplete="off"></label>
+    </div>
+  </div>
+  <div class="lep-section">
+    <div class="lep-section-title" title="Rotation in degrees: pitch (X), yaw (Y), roll (Z).">Rotation°</div>
+    <div class="lep-axes">
+      <label class="lep-axis" title="Pitch — X"><span class="lep-ax">X</span><input type="number" id="layout-rot-x" step="1" autocomplete="off"></label>
+      <label class="lep-axis" title="Yaw — Y"><span class="lep-ax">Y</span><input type="number" id="layout-rot-y" step="1" autocomplete="off"></label>
+      <label class="lep-axis" title="Roll — Z"><span class="lep-ax">Z</span><input type="number" id="layout-rot-z" step="1" autocomplete="off"></label>
+    </div>
+  </div>
+  <button class="lep-reset" id="lep-reset-part" title="Reset just this part to its default position">Reset this part</button>
+  <div class="lep-hint">In a field, ↑/↓ nudges; hold <b>Shift</b> for fine steps (Position 0.001, Rotation 0.1°). Drag the header to move this editor. Tip: mirror left/right by negating X.</div>
+</div>
+
+<!-- Test Report modal — guided HID capture wizard -->
+<div id="test-report-modal">
+  <div class="dialog">
+    <h2 id="tr-step-title">Capture HID Report</h2>
+    <h3 id="tr-step-prompt-title"></h3>
+    <p id="tr-step-prompt"></p>
+    <div class="progress-bar"><div id="tr-progress"></div></div>
+    <div class="device-line" id="tr-device-line"></div>
+    <div id="tr-alias-row" style="display:none; margin: 10px 0 4px;">
+      <label for="tr-alias" style="display:block; color:#9ad; font-size:11px; margin-bottom:4px;">Controller name (used in filename and embedded in the JSON)</label>
+      <input type="text" id="tr-alias" maxlength="60" style="width:100%; box-sizing:border-box; padding:6px 8px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:5px; color:#eee; font-size:12px;">
+      <label for="tr-note" style="display:block; color:#9ad; font-size:11px; margin:8px 0 4px;">Optional note (e.g. "back paddles clicked twice during step 9")</label>
+      <input type="text" id="tr-note" maxlength="200" style="width:100%; box-sizing:border-box; padding:6px 8px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:5px; color:#eee; font-size:12px;">
+    </div>
+    <div class="status" id="tr-status"></div>
+    <div class="actions">
+      <button id="tr-cancel">Cancel</button>
+      <button id="tr-skip" style="display:none;">Skip</button>
+      <button id="tr-primary" class="primary">Start</button>
+    </div>
+  </div>
+</div>
+
+<!-- Exit confirmation dialog -->
+<div id="exit-confirm">
+  <div class="dialog">
+    <p>Are you sure you want to exit the application?</p>
+    <div class="dialog-buttons">
+      <button class="btn-cancel" id="exit-cancel">Cancel</button>
+      <button class="btn-exit-yes" id="exit-yes">Exit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Status indicator -->
+<div id="status-bar">
+  <span class="status-badge" id="gamepad-status">No gamepad</span>
+</div>
+
+<!-- Live axis readout (pitch/yaw/roll in degrees) -->
+<div id="axis-readout">
+  <span class="ax-pitch">P <span id="ax-pitch-val">0°</span></span>
+  <span class="ax-roll">R <span id="ax-roll-val">0°</span></span>
+  <span class="ax-yaw">Y <span id="ax-yaw-val">0°</span></span>
+</div>
+
+<!-- Gyro HUD -->
+<div id="gyro-hud">
+  <svg id="arc-svg" viewBox="-120 -105 240 115">
+    <!-- Arc band background -->
+    <path id="arc-band" d="" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+    <!-- Tick marks -->
+    <g id="arc-ticks" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"></g>
+    <!-- Degree labels (0 / ±20 / ±40) -->
+    <g id="arc-labels"></g>
+    <!-- Needle -->
+    <line id="arc-needle" x1="0" y1="-4" x2="0" y2="-22" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- Center dot -->
+    <circle cx="0" cy="0" r="2" fill="rgba(255,255,255,0.4)"/>
+  </svg>
+  <div class="gyro-hud-footer">
+    <span id="lean-arrow-left">&#x25C0;</span>
+    <span id="calib-hint" class="hidden"></span>
+    <span id="lean-arrow-right">&#x25B6;</span>
+  </div>
+</div>
+
+<!-- ── Button HUD — 2D state readout for monolithic-mesh controllers ── -->
+<!-- Shows face buttons, dpad, shoulders, analog triggers, stick positions,
+     and system buttons lighting up as you press. Useful for any controller
+     whose GLB doesn't have separated per-button meshes (AI-generated
+     monolithic models like the Super Nova, Steam Controller 2026, etc.),
+     and as a debug readout for any controller. Toggled via settings. -->
+<div id="button-hud">
+  <div class="bh-section bh-triggers">
+    <div class="bh-trigger" data-trigger="l2"><div class="bh-trigger-fill"></div><span class="bh-trigger-label">L2</span></div>
+    <div class="bh-trigger" data-trigger="r2"><div class="bh-trigger-fill"></div><span class="bh-trigger-label">R2</span></div>
+  </div>
+  <div class="bh-section bh-shoulders">
+    <div class="bh-btn bh-sm" data-btn="4">L1</div>
+    <div class="bh-btn bh-sm" data-btn="5">R1</div>
+  </div>
+  <div class="bh-section bh-main">
+    <div class="bh-dpad">
+      <div class="bh-btn bh-dp" data-btn="12">&#x25B2;</div>
+      <div class="bh-btn bh-dp" data-btn="14">&#x25C0;</div>
+      <div class="bh-btn bh-dp" data-btn="15">&#x25B6;</div>
+      <div class="bh-btn bh-dp" data-btn="13">&#x25BC;</div>
+    </div>
+    <div class="bh-face">
+      <div class="bh-btn bh-face-y" data-btn="3">Y</div>
+      <div class="bh-btn bh-face-x" data-btn="2">X</div>
+      <div class="bh-btn bh-face-b" data-btn="1">B</div>
+      <div class="bh-btn bh-face-a" data-btn="0">A</div>
+    </div>
+  </div>
+  <div class="bh-section bh-sticks">
+    <div class="bh-stick" data-stick="l"><div class="bh-stick-line"></div><div class="bh-stick-dot"></div><span class="bh-stick-label">L</span></div>
+    <div class="bh-stick" data-stick="r"><div class="bh-stick-line"></div><div class="bh-stick-dot"></div><span class="bh-stick-label">R</span></div>
+  </div>
+  <div class="bh-section bh-system">
+    <div class="bh-btn bh-sm" data-btn="8">Sh</div>
+    <div class="bh-btn bh-sm" data-btn="9">Op</div>
+    <div class="bh-btn bh-sm" data-btn="16">PS</div>
+    <div class="bh-btn bh-sm" data-btn="17">TP</div>
+  </div>
+  <!-- Back paddles (L4/L5/R4/R5) — shown only for controllers that map them
+       (body.has-paddles, set per-profile in app.js). -->
+  <div class="bh-section bh-paddles">
+    <div class="bh-btn bh-sm" data-btn="18">L4</div>
+    <div class="bh-btn bh-sm" data-btn="19">L5</div>
+    <div class="bh-btn bh-sm" data-btn="20">R4</div>
+    <div class="bh-btn bh-sm" data-btn="21">R5</div>
+  </div>
+  <!-- Capacitive grips (Steam Controller) — shown via body.has-grips -->
+  <div class="bh-section bh-grips">
+    <div class="bh-btn bh-sm bh-grip" data-grip="l">LG</div>
+    <div class="bh-btn bh-sm bh-grip" data-grip="r">RG</div>
+  </div>
+</div>
+
+<!-- No-controller splash (shown until a gamepad connects) -->
+<div id="no-controller">
+  <div class="splash-icon">
+    <div class="splash-emoji">&#x1F3AE;</div>
+    <svg class="splash-prohibit" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="45"/>
+      <line x1="18" y1="18" x2="82" y2="82"/>
+    </svg>
+  </div>
+  <!-- Shown when a Steam Controller Puck is connected but no paired
+       controller body is sending STATE reports. Hidden by default; app.js
+       reveals it 2s after a Puck connect if no STATE report has arrived. -->
+  <div id="puck-hint" class="splash-hint" hidden>
+    Steam Controller Puck detected, but no paired controller is responding.
+    Power on a paired controller, or plug a Steam Controller in directly via USB-C.
+  </div>
+</div>
+
+<!-- Gyro HUD — 3D nested-ring gyro widget canvas -->
+<canvas id="gyro-hud-canvas"></canvas>
+
+<!-- Click-through mode indicator -->
+<div id="click-through-indicator"></div>
+
+<!-- WebGL canvas -->
+<canvas id="canvas"></canvas>
+
+<script>
+// Dynamic importmap: use local vendor files in Electron, CDN on the web.
+//
+// The workspace packages (@usersfirst/controller-core, /controller-visualizer)
+// are copied into ./lib/ by scripts/copy-workspace.js. The HTML stays in plain
+// ESM form — no bundler — so bare specifiers must resolve via this map.
+(function() {
+  const isElectron = navigator.userAgent.includes('Electron');
+  const threeMap = isElectron
+    ? { "three": "./lib/three.module.js", "three/addons/": "./lib/addons/" }
+    : { "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/" };
+  const map = {
+    ...threeMap,
+    "@usersfirst/controller-core": "./lib/controller-core/index.js",
+    "@usersfirst/controller-core/manager": "./lib/controller-core/manager.js",
+    "@usersfirst/controller-core/sensor-fusion": "./lib/controller-core/sensor-fusion.js",
+    "@usersfirst/controller-core/drivers/": "./lib/controller-core/drivers/",
+    "@usersfirst/controller-visualizer": "./lib/controller-visualizer/index.js",
+  };
+  const el = document.createElement('script');
+  el.type = 'importmap';
+  el.textContent = JSON.stringify({ imports: map });
+  document.currentScript.after(el);
+})();
+</script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
