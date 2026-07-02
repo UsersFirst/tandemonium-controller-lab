@@ -198,6 +198,10 @@ No integration ⇒ no yaw drift.
 
 **Phase 3 — Firmware quaternion fast-path (Approach E), only if Phase 0 finds the data.**
 - Driver returns absolute orientation; overlay bypasses fusion for the SC.
+- **❌ NO-GO (2026-07-02).** The go/no-go capture rules this out — see §7. There is
+  no absolute quaternion in the report even on the latest firmware, so the
+  integrate-and-drift loop cannot be bypassed. Phase 1 (recenter + at-rest yaw
+  decay) remains the fix. Do not build a `parsed.orientation` fast-path for the SC.
 
 ---
 
@@ -230,3 +234,41 @@ No integration ⇒ no yaw drift.
   gated on Phase 0 evidence; fusion path remains the fallback.
 - **Per-controller divergence.** Keep the yaw-drift behavior behind a setting so
   non-SC controllers are opt-in and can't regress.
+
+---
+
+## 7. Phase 0 findings — HID capture, Steam Controller 2026 after firmware
+
+Capture: `controller-test-report_28de-1304_Steam-Controller-Puck-after-firmware_2026-07-02`
+(VID 28de / PID 1304, USB). All four IMU steps (at-rest, pitch, roll, yaw) clean.
+
+**STATE report (id 69) IMU block, bytes 29–44, decodes fully — no bytes left over:**
+
+| Bytes | Field | At-rest | Behavior |
+|---|---|---|---|
+| 29–32 | counter/timestamp | slow-rising, σ≈21 | monotonic, not physical |
+| 33–38 | **accel X/Y/Z** | (105, −2889, 16079), \|a\|=**16337** | σ [11,9,14]; swings under gravity when rotated |
+| 39–44 | **gyro X/Y/Z** | ≈0, σ 1–4 | one-axis spike per step (X=pitch, Z=roll, Y=yaw) |
+| 45–52 | padding | all zero | — |
+
+Gyro dominance matches the capture's own quality block exactly (pitch→gyro X σ464,
+roll→gyro Z σ475, yaw→gyro Y σ979).
+
+**1. No firmware quaternion → Phase 3 is a NO-GO.** The bytes the plan flagged as a
+possible absolute quaternion (31–38) are provably the **accelerometer**: at-rest
+magnitude 16337 ≈ 1g and matches `accelStd` precisely, and the field swings like a
+gravity vector under rotation. Interpreted as a quaternion its sum-of-squares is ≈0.25,
+not unit. The driver's original decision to discard those bytes was correct. The
+definitive "bypass integration" fix does not exist even on 2026 firmware.
+
+**2. Phase 2 is light-touch — the firmware zero is clean.** Gyro at-rest bias ≈ [0,0,0]
+with σ ≈ 1–4 LSB (pristine). Aggressive in-motion yaw-bias gating looks unnecessary;
+keep the optional warm-up re-calibration as cheap insurance. (A single 5 s rest can't
+fully rule out warm-up drift over minutes.)
+
+**3. Accel scale confirmed 16384 counts/g (±2g).** The SC driver already declares
+`accelScale: 1/16384` (`steam-controller-driver.js:474`), so gravity/tilt correction is
+correctly scaled. The capture's only red mark — at-rest *warn* "|accel| 16337 isn't
+~8192" — was a **false positive in the capture checker**: `imu-analysis.js` hardcoded the
+1g window at ~8192 with no per-device scale. Fixed in this change — `analyzeImuStep` now
+takes the driver's `accelScale`, so SC captures pass at rest.
