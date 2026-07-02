@@ -1599,8 +1599,8 @@ function updateSyntheticFromParsed(parsed) {
 // 2D grip-sense indicator — readable at any 3D camera angle (the grip meshes
 // are on the back of the controller and usually occluded). Lazily revealed the
 // first time grip data arrives, then tracks left/right state.
-let gripVizEnabled = localStorage.getItem('overlay:gripViz') !== '0'; // on-top glow markers on/off
-let gripBarsVisible = localStorage.getItem('overlay:gripBars') === '1'; // grip-sense side bars (default OFF)
+let gripVizEnabled = localStorage.getItem('overlay:gripViz') === '1'; // on-top glow markers on/off (default OFF, #92)
+let gripBarsVisible = localStorage.getItem('overlay:gripBars') !== '0'; // grip-sense side bars (default ON, #92)
 let gripGlowWidth = parseInt(localStorage.getItem('overlay:gripGlowWidth') || '2', 10); // across-handle, 1-5
 let gripGlowLength = parseInt(localStorage.getItem('overlay:gripGlowLength') || '4', 10); // front-to-back, 1-5
 // Grip-sense HUD row — toggles the LG/RG cells in the Button HUD from
