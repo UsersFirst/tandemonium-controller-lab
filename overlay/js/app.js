@@ -2238,6 +2238,68 @@ function applyGreenScreen() {
 greenScreenToggle.addEventListener('change', applyGreenScreen);
 greenScreenColorInput.addEventListener('input', applyGreenScreen);
 
+// ── Type-a-color (#91) ────────────────────────────────────────────────────
+// Every color setting is a native <input type="color"> (swatch-only). Let the
+// user also type a value: accept hex (#RGB / #RRGGBB) or rgb(r,g,b) / rgba(...),
+// normalize to #rrggbb, and on a valid parse write it back to the swatch and
+// dispatch the swatch's 'input' event — so every existing per-picker apply +
+// persist handler runs unchanged. Picker→text sync keeps the field current when
+// the native swatch is used. Runs last so each swatch's value is already
+// initialized from localStorage before we mirror it into the text field.
+function normalizeColor(value) {
+  if (value == null) return null;
+  const v = String(value).trim().toLowerCase();
+  let m = v.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/);
+  if (m) {
+    let h = m[1];
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    return '#' + h;
+  }
+  m = v.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)$/);
+  if (m) {
+    const c = [m[1], m[2], m[3]].map(Number);
+    if (c.every((n) => n <= 255)) return '#' + c.map((n) => n.toString(16).padStart(2, '0')).join('');
+  }
+  return null;
+}
+
+function attachColorText(colorInput) {
+  const combo = document.createElement('span');
+  combo.className = 'color-combo';
+  const text = document.createElement('input');
+  text.type = 'text';
+  text.className = 'color-text';
+  text.spellcheck = false;
+  text.autocomplete = 'off';
+  text.setAttribute('aria-label', (colorInput.id || 'color') + ' hex or rgb value');
+  text.value = colorInput.value;
+  // Wrap the swatch: text field first, swatch second (CSS stacks them for the
+  // grouped rows). Moving the swatch in the DOM keeps its event listeners.
+  colorInput.parentNode.insertBefore(combo, colorInput);
+  combo.appendChild(text);
+  combo.appendChild(colorInput);
+
+  const commit = () => {
+    const hex = normalizeColor(text.value);
+    if (!hex) { text.classList.add('invalid'); return; }
+    text.classList.remove('invalid');
+    text.value = hex;
+    if (colorInput.value.toLowerCase() !== hex) {
+      colorInput.value = hex;
+      colorInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  };
+  text.addEventListener('change', commit);
+  text.addEventListener('keydown', (e) => { if (e.key === 'Enter') { commit(); text.blur(); } });
+  // Native swatch moved → reflect it in the text field.
+  colorInput.addEventListener('input', () => {
+    text.value = colorInput.value;
+    text.classList.remove('invalid');
+  });
+}
+
+document.querySelectorAll('#settings-panel input[type="color"]').forEach(attachColorText);
+
 // Camera presets — one selected at a time, used as calibration view.
 // Defaults to Top for every controller; the last-selected preset is persisted
 // (issue #70) so reopening the overlay restores the user's preferred view

@@ -148,6 +148,30 @@
   .setting-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
   .setting-row input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 
+  /* Text entry beside each color swatch (#91): type a hex (#RGB / #RRGGBB) or
+     rgb(r,g,b) value instead of using the native picker. The swatch and text
+     field stay in sync. */
+  .color-combo { display: flex; align-items: center; gap: 6px; }
+  .color-text {
+    width: 78px;
+    background: rgba(255,255,255,0.08);
+    color: #eee;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    padding: 3px 5px;
+    font: 11px ui-monospace, Consolas, 'Courier New', monospace;
+    text-transform: lowercase;
+  }
+  .color-text:focus { outline: none; border-color: #3388ff; }
+  .color-text.invalid { border-color: #ff5555; color: #ff9999; }
+  /* Grouped color rows (Roll / Axis): label on its own line, then a full-width
+     row of swatch-over-text cells so all three fit the narrow panel. */
+  .setting-row.color-row-stacked { flex-direction: column; align-items: stretch; gap: 6px; }
+  .color-group { display: flex; gap: 8px; }
+  .color-group .color-combo { flex: 1; min-width: 0; flex-direction: column; gap: 3px; align-items: stretch; }
+  .color-group .color-combo input[type="color"] { width: 100%; }
+  .color-group .color-text { width: 100%; text-align: center; }
+
   .setting-row input[type="checkbox"] {
     width: 14px; height: 14px;
     accent-color: #3388ff;
@@ -1020,9 +1044,9 @@
     <label>Show Roll HUD</label>
     <input type="checkbox" id="show-roll-hud" autocomplete="off">
   </div>
-  <div class="setting-row">
+  <div class="setting-row color-row-stacked">
     <label title="Roll HUD needle/label colors by lean band (near-center / mid / high lean).">Roll Colors (Normal / Mid / High)</label>
-    <span style="display:flex; gap:4px;">
+    <span class="color-group">
       <input type="color" id="lean-color-normal" value="#ffffff" title="Normal (near center)">
       <input type="color" id="lean-color-mid" value="#ffaa22" title="Mid lean">
       <input type="color" id="lean-color-high" value="#ff4444" title="High lean">
@@ -1036,9 +1060,9 @@
     <label>Show Axis HUD</label>
     <input type="checkbox" id="show-axis-readout">
   </div>
-  <div class="setting-row">
+  <div class="setting-row color-row-stacked">
     <label title="Per-axis colors for the Pitch / Roll / Yaw readout.">Axis Colors (Pitch / Roll / Yaw)</label>
-    <span style="display:flex; gap:4px;">
+    <span class="color-group">
       <input type="color" id="axis-color-pitch" value="#44dd66" title="Pitch">
       <input type="color" id="axis-color-roll" value="#ee4455" title="Roll">
       <input type="color" id="axis-color-yaw" value="#4488ff" title="Yaw">
@@ -1184,7 +1208,7 @@
   <!-- Build stamp. CI rewrites the inner content of #build-version with the
        commit short SHA + UTC build time (see the "Stamp build version" steps
        in build-desktop.yml and deploy-pages.yml). Stays "dev build" locally. -->
-  <div class="build-stamp"><span id="build-version"><a href="https://github.com/UsersFirst/tandemonium-controller-lab/commit/692a495b6a483b93a7fdebdb4777138d054f5181" target="_blank" rel="noopener">v.692a495</a> &middot; 2026-07-02 01:39 UTC</span></div>
+  <div class="build-stamp"><span id="build-version"><a href="https://github.com/UsersFirst/tandemonium-controller-lab/commit/c80776b4d5b1cc380ae3ca2726d07956da4a1023" target="_blank" rel="noopener">v.c80776b</a> &middot; 2026-07-02 01:40 UTC</span></div>
 </div>
 
 <!-- Floating numeric editor for the selected Edit-Layout part. Outside the
