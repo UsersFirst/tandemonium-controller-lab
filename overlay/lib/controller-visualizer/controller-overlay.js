@@ -1661,6 +1661,9 @@ export class ControllerOverlay {
         depth: bb.max.z - bb.min.z,
         bbMinX: bb.min.x,        // geometry-local origin, for the fill center
         bbMinZ: bb.min.z,
+        bbMaxY: bb.max.y,        // AABB top; ray starts above it to find the real surface
+        thickness: bb.max.y - bb.min.y,
+        centerSurface: null,     // cached pad-center surface point (dot-parent local), lazily raycast
         dotLiftY,
         dot,
         restPos,
@@ -1718,11 +1721,32 @@ export class ControllerOverlay {
     mat.needsUpdate = true;
   }
 
-  // TODO(trackpad contour): the dot rides a single flat plane (pad top + lift),
-  // so on a curved/dished pad it doesn't hug the surface precisely. The
-  // single-pad DualSense path solves this in `_touchToLocal` by raycasting
-  // straight down onto the pad mesh to find the exact surface point + normal;
-  // adopt that here per-pad when we revisit. Good enough for now.
+  // Raycast straight down (in the pad mesh's own frame) onto the actual pad
+  // surface for the fractional touch (fx,fy), and return the hit in the dot's
+  // parent-local space — or null if the column misses the mesh. The SC pads are
+  // canted, and that tilt is baked into the mesh geometry (the node transform is
+  // identity), so the AABB top is a flat horizontal plane that does NOT match
+  // the real surface. Casting onto the mesh recovers the true (tilted/curved)
+  // surface point. Uses the mesh's live world matrix, so it stays correct as
+  // gyro rotates the whole model; the returned local point is invariant to that
+  // rotation. (#93)
+  _trackpadSurfaceLocal(pad, fx, fy) {
+    const mesh = pad.padMesh;
+    if (!mesh || !pad.dot) return null;
+    mesh.updateWorldMatrix(true, false);
+    const px = pad.bbMinX + fx * pad.width;
+    const pz = pad.bbMinZ + fy * pad.depth;
+    // Start a full pad-thickness above the AABB top so the vertical ray clears
+    // the whole tilted top face, then aim down the pad's local -Y (in world).
+    const origin = mesh.localToWorld(new THREE.Vector3(px, pad.bbMaxY + pad.thickness, pz));
+    const dir = new THREE.Vector3(0, -1, 0)
+      .applyQuaternion(mesh.getWorldQuaternion(new THREE.Quaternion())).normalize();
+    this._touchRaycaster.set(origin, dir);
+    const hits = this._touchRaycaster.intersectObject(mesh, false);
+    if (!hits.length) return null;
+    return pad.dot.parent.worldToLocal(hits[0].point.clone());
+  }
+
   _updateTrackpads(touchPoints) {
     const profile = PROFILES[this.controllerType];
     const range = profile.trackpadRange || 32768;
@@ -1772,15 +1796,35 @@ export class ControllerOverlay {
       }
 
       if (!pad.dot || !pad.restPos) continue;
+      // Note on sensitivity (#93): the dot shows whenever the finger is
+      // detected (t.active === contact area > 0), which is the most sensitive
+      // signal the firmware exposes — there is no lighter-touch capacitive bit
+      // (verified against a real capture). A very light touch that never
+      // registers contact area is a firmware/hardware floor, not something the
+      // overlay can lower.
       if (t && t.active) {
         const { fx, fy } = normalizeTrackpad(t.x, t.y, range, opts);
-        // Offset the dot from the pad center (its rest position) by the
-        // fractional touch position across the pad's local XZ extent.
-        pad.dot.position.set(
-          pad.restPos.x + (fx - 0.5) * pad.width,
-          pad.restPos.y + pad.dotLiftY, // small lift above the modeled surface
-          pad.restPos.z + (fy - 0.5) * pad.depth,
-        );
+        // Place the dot ON the real pad surface at the finger position by
+        // raycasting onto the pad mesh, then moving the dot from its calibrated
+        // rest (pad-center) position by the finger's surface-space delta. This
+        // makes the dot hug the canted/curved pad instead of floating on the
+        // flat AABB-top plane at the wrong angle (#93). Falls back to the old
+        // flat placement if the ray misses (e.g. finger mapped off the mesh).
+        if (!pad.centerSurface) pad.centerSurface = this._trackpadSurfaceLocal(pad, 0.5, 0.5) || null;
+        const hit = this._trackpadSurfaceLocal(pad, fx, fy);
+        if (pad.centerSurface && hit) {
+          pad.dot.position.set(
+            pad.restPos.x + (hit.x - pad.centerSurface.x),
+            pad.restPos.y + (hit.y - pad.centerSurface.y),
+            pad.restPos.z + (hit.z - pad.centerSurface.z),
+          );
+        } else {
+          pad.dot.position.set(
+            pad.restPos.x + (fx - 0.5) * pad.width,
+            pad.restPos.y + pad.dotLiftY, // small lift above the modeled surface
+            pad.restPos.z + (fy - 0.5) * pad.depth,
+          );
+        }
         pad.dot.visible = true;
         const m = pad.dot.material;
         if (m && 'emissive' in m) {
