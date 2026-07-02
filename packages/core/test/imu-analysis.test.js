@@ -83,3 +83,26 @@ test('rotation: multi-axis wobble is rejected (not isolated)', () => {
 test('too few samples is a hard fail', () => {
   assert.equal(analyzeImuStep('pitch', [{ gyro: { x: 1, y: 1, z: 1 }, accel: { x: 0, y: 0, z: 8192 } }]).ok, false);
 });
+
+// ── accelScale-aware at-rest window: a Steam Controller sits at 1g = 16384
+//    (±2g), so the analyzer must key the "~1g" check off the device scale
+//    instead of the 8192 default — otherwise a perfectly good SC capture
+//    false-warns. Mirrors the real 2026-firmware SC capture (|accel|≈16337).
+const stillAt = (mag, n = 30) => Array.from({ length: n }, () => ({ gyro: { x: 0, y: 0, z: 0 }, accel: { x: 0, y: 0, z: mag } }));
+
+test('at-rest: Steam Controller 1g (16384) passes when accelScale is supplied', () => {
+  const scRest = stillAt(16337); // ≈ the real after-firmware SC capture
+  // Without the scale, the 8192 default window flags it (the old false-warn):
+  assert.equal(analyzeImuStep('at-rest', scRest).ok, false);
+  // With the SC scale, the expected 1g becomes 16384 and it passes:
+  const v = analyzeImuStep('at-rest', scRest, 1 / 16384);
+  assert.equal(v.ok, true, v.message);
+  assert.match(v.message, /still/i);
+});
+
+test('at-rest: scale-aware window still catches a genuinely wrong magnitude', () => {
+  // Half of 1g on the SC scale is outside the 0.8x..1.25x window → warn.
+  const v = analyzeImuStep('at-rest', stillAt(8192), 1 / 16384);
+  assert.equal(v.ok, false);
+  assert.match(v.message, /16384 \(1g\)/);
+});

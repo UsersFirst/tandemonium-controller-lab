@@ -2733,9 +2733,11 @@ if (window.electronAPI) {
     // capture time so a weak/multi-axis/not-still capture is caught and
     // re-done before saving. Non-IMU steps pass straight through.
     const isImuStep = step.requires?.includes('gyro');
-    const quality = (isImuStep && controllerDriver)
-      ? analyzeImuStep(step.id, parseImuSamples(reports, controllerDriver))
-      : null;
+    let quality = null;
+    if (isImuStep && controllerDriver) {
+      const { samples, accelScale } = parseImuSamples(reports, controllerDriver);
+      quality = analyzeImuStep(step.id, samples, accelScale);
+    }
     state.results[state.stepIndex] = { step, reports, quality };
 
     if (quality && !quality.ok) {
