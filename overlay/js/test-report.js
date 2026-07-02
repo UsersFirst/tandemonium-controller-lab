@@ -197,22 +197,28 @@ function hexToDataView(hex) {
 /**
  * Parse a step's recorded reports back through the connected driver into
  * IMU samples for quality analysis. Returns only reports that yielded
- * gyro+accel (driver.parseReport returns null for irrelevant report ids).
+ * gyro+accel (driver.parseReport returns null for irrelevant report ids),
+ * plus the driver's accelScale (g per raw unit) so the analyzer knows this
+ * device's expected 1g magnitude (e.g. SC = 1/16384, not the 8192 default).
  *
  * @param {Array<{reportId:number, bytes:string}>} reports
  * @param {import('@usersfirst/controller-core').ControllerDriver} driver
- * @returns {Array<{gyro:{x,y,z}, accel:{x,y,z}}>}
+ * @returns {{samples: Array<{gyro:{x,y,z}, accel:{x,y,z}}>, accelScale: number|null}}
  */
 export function parseImuSamples(reports, driver) {
-  if (!driver) return [];
-  const out = [];
+  if (!driver) return { samples: [], accelScale: null };
+  const samples = [];
+  let accelScale = null;
   for (const r of reports) {
     let parsed;
     try { parsed = driver.parseReport(r.reportId, hexToDataView(r.bytes)); }
     catch { parsed = null; }
-    if (parsed && parsed.gyro && parsed.accel) out.push({ gyro: parsed.gyro, accel: parsed.accel });
+    if (parsed && parsed.gyro && parsed.accel) {
+      samples.push({ gyro: parsed.gyro, accel: parsed.accel });
+      if (accelScale == null && parsed.accelScale) accelScale = parsed.accelScale;
+    }
   }
-  return out;
+  return { samples, accelScale };
 }
 
 /**
