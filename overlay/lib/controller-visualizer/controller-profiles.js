@@ -395,8 +395,13 @@ export const PROFILES = {
     // (saved to localStorage) still take precedence. Parts not listed here keep
     // their floatTuning offset.
     defaultLayout: {
-      left_trigger:   { offset: [0.002, 0.0295, -0.0287],  euler: [65, 0, 0] },
-      right_trigger:  { offset: [-0.0007, 0.0295, -0.0294], euler: [65, 0, 0] },
+      // Triggers nudged closer to the bumpers — the popped trigger↔bumper white
+      // space (min surface gap ≈ 0.0044) is halved by moving each trigger ~0.002
+      // toward its bumper along the gap (mostly +Z/forward, slight −Y). Leaves
+      // half the gap so they still don't overlap (cf. #75). Was:
+      //   left_trigger  [0.002, 0.0295, -0.0287], right_trigger [-0.0007, 0.0295, -0.0294]
+      left_trigger:   { offset: [0.002, 0.029, -0.0266],   euler: [65, 0, 0] },
+      right_trigger:  { offset: [-0.0008, 0.029, -0.0272], euler: [65, 0, 0] },
       left_shoulder:  { offset: [0.0007, 0.0098, -0.0024],  euler: [65, 0, 0] },
       right_shoulder: { offset: [-0.0006, 0.0098, -0.003],  euler: [65, 0, 0] },
     },
