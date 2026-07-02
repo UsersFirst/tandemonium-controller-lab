@@ -1795,8 +1795,10 @@ function startCalibration() {
   calibSamples = [];
   calibRetries = 0;
   resetGyroState();
-  // Reset camera to selected preset on calibration
-  overlay.setCameraPreset(selectedCameraPreset);
+  // NB: calibration must NOT touch the camera. It only re-zeros gyro bias +
+  // orientation; snapping the view to a preset here stomped the user's manual
+  // zoom/pan every time they recalibrated (#94). The camera keeps its own
+  // preset controls; leave the current view alone.
   showCalibHint('Calibrating...', null);
 }
 
