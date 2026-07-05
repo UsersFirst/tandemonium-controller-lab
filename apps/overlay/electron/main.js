@@ -25,6 +25,7 @@ let clickThrough = false;
 // default for the single-controller window is 720×540 — a clean capture size.
 const DEFAULT_WINDOW_SIZE = { width: 720, height: 540 };
 const MULTI_WINDOW_SIZE = { width: 1100, height: 520 };
+const LOBBY_WINDOW_SIZE = { width: 820, height: 660 };
 let windowStatePath = null; // resolved once app is ready (needs userData path)
 let saveWindowSizeTimer = null;
 
@@ -139,6 +140,8 @@ function openInventoryWindow() {
 // Which size profile this launch uses. Single source of truth so the window
 // creation and the "reset to default" handler agree on key + default size.
 function getSizeMode() {
+  const useLobby = process.env.OVERLAY_LOBBY === '1' || process.argv.includes('--lobby');
+  if (useLobby) return { stateKey: 'lobby', defaultSize: LOBBY_WINDOW_SIZE };
   const useMulti = process.env.OVERLAY_MULTI === '1' || process.argv.includes('--multi');
   return {
     stateKey: useMulti ? 'multi' : 'main',
@@ -173,7 +176,7 @@ function createWindow() {
     },
   });
 
-  const entry = stateKey === 'multi' ? 'multi.html' : 'index.html';
+  const entry = stateKey === 'lobby' ? 'lobby.html' : stateKey === 'multi' ? 'multi.html' : 'index.html';
   mainWindow.loadFile(path.join(__dirname, '..', 'src', entry));
 
   mainWindow.once('ready-to-show', () => {

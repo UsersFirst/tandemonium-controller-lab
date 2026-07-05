@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tandemonium · Seat-Select Navigator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: radial-gradient(120% 90% at 50% -10%, #16241a 0%, #0b0d12 55%, #07080c 100%);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #e7ecf5; user-select: none;
+  }
+  :root {
+    --p1: #7ae09a;   /* captain / team-blue-side green-cyan handled per-mode */
+    --team-a: #6ea8ff; --team-b: #ff6b7d;
+    --cap: #7ae09a; --sto: #ff9e6b;
+    --accent: #6ce08f;
+    --versus: #c79dff;
+    --mono: ui-monospace, 'Cascadia Mono', Menlo, monospace;
+  }
+  #drag-bar { position: fixed; top: 0; left: 0; right: 0; height: 34px; -webkit-app-region: drag; z-index: 100; }
+  #app-title { position: fixed; top: 9px; left: 16px; font-size: 11px; letter-spacing: 1.4px; color: #6a7184; text-transform: uppercase; z-index: 101; pointer-events: none; }
+  #app-title b { color: var(--accent); }
+
+  .stage { position: absolute; inset: 34px 0 0 0; display: grid; place-items: center; padding: 12px 24px 28px; }
+  .card { width: min(720px, 94vw); }
+  .step { display: flex; flex-direction: column; align-items: center; gap: 12px; animation: rise .32s cubic-bezier(.2,.8,.2,1) both; }
+  .step[hidden] { display: none; }
+  @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+  .prompt { font-size: 20px; font-weight: 700; text-align: center; margin: 2px 0 6px; }
+  .hint { font-size: 12px; color: #8a93a6; text-align: center; }
+  .hint b, .hint strong { color: #cdd6e6; }
+
+  /* mode buttons */
+  .mode-btn {
+    width: 100%; padding: 16px 18px; border-radius: 14px; cursor: pointer;
+    border: 2px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.05);
+    color: #e7ecf5; font: 700 17px/1.3 inherit; text-align: center; transition: .15s;
+  }
+  .mode-btn .sub { display: block; font-size: 12px; font-weight: 400; color: #8a93a6; margin-top: 5px; }
+  .mode-btn.sel { transform: translateY(-2px); }
+  .mode-btn[data-mode="together"].sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 12px 34px -14px var(--accent); }
+  .mode-btn[data-mode="together"] .big { color: var(--accent); }
+  .mode-btn[data-mode="versus"].sel { border-color: var(--versus); box-shadow: 0 0 0 1px var(--versus), 0 12px 34px -14px var(--versus); }
+  .mode-btn[data-mode="versus"] .big { color: var(--versus); }
+  .mode-btn[data-mode="solo"].sel { border-color: #9fb0c6; box-shadow: 0 10px 28px -16px #000; }
+  .big { font-weight: 800; }
+
+  /* room band */
+  .room-band { display: flex; align-items: center; gap: 15px; justify-content: center; background: rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 11px 15px; width: 100%; }
+  #room-qr { width: 74px; height: 74px; border-radius: 8px; image-rendering: pixelated; }
+  .room-code { font: 700 24px/1 var(--mono); letter-spacing: 4px; color: var(--accent); text-shadow: 0 0 14px rgba(108,224,143,.45); }
+  .room-sub { font-size: 11px; color: #7d879a; margin-top: 3px; }
+
+  /* seat grid */
+  .teams { display: flex; align-items: stretch; justify-content: center; gap: 14px; width: 100%; margin: 4px 0; }
+  .team { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px; border-radius: 12px; border: 2px solid transparent; }
+  .team.a { border-color: rgba(110,168,255,.4); background: rgba(110,168,255,.07); }
+  .team.b { border-color: rgba(255,107,125,.4); background: rgba(255,107,125,.07); }
+  .team-title { font: 700 12px/1 var(--mono); letter-spacing: 2px; }
+  .team.a .team-title { color: var(--team-a); } .team.b .team-title { color: var(--team-b); }
+  .vs { align-self: center; font: 800 18px/1 inherit; opacity: .5; letter-spacing: 1px; }
+  .team-slots { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+  .tandem { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .tandem-title { font: 700 12px/1 var(--mono); letter-spacing: 2px; color: #bfe7cd; }
+  .tandem-seats { display: flex; gap: 10px; width: 100%; }
+  .tandem-seats .seat { flex: 1 1 0; }
+
+  .seat {
+    position: relative; min-height: 62px; border-radius: 12px; padding: 10px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-align: center;
+    background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.16); transition: .18s;
+  }
+  .seat .role { font: 10px/1.3 var(--mono); letter-spacing: 1.4px; color: #8894a8; opacity: .7; text-transform: uppercase; }
+  .seat .who { font: 700 13px/1.25 inherit; letter-spacing: .4px; }
+  .seat .dev { font: 10px/1.2 var(--mono); color: #8894a8; }
+  .seat .badge { position: absolute; top: 6px; right: 8px; font: 800 9px/1 var(--mono); padding: 2px 5px; border-radius: 5px; background: rgba(0,0,0,.4); }
+  .seat.open { opacity: .5; border-style: dashed; background: transparent; cursor: pointer; }
+  .seat.locked { opacity: .3; border-style: dashed; background: repeating-linear-gradient(45deg, rgba(255,255,255,.03) 0 6px, transparent 6px 12px); }
+  .seat.joined { animation: pop .34s cubic-bezier(.2,1.5,.4,1); }
+  .seat.ready { animation: bob 1.9s ease-in-out infinite; }
+  .seat.cap { border-color: var(--cap); } .seat.sto { border-color: var(--sto); }
+  .seat.ta { border-color: var(--team-a); } .seat.tb { border-color: var(--team-b); }
+  .seat.cap .who { color: var(--cap); } .seat.sto .who { color: var(--sto); }
+  .seat.ta .who { color: var(--team-a); } .seat.tb .who { color: var(--team-b); }
+  .seat.ready.cap { box-shadow: 0 0 18px -4px var(--cap); } .seat.ready.sto { box-shadow: 0 0 18px -4px var(--sto); }
+  .seat.ready.ta { box-shadow: 0 0 18px -4px var(--team-a); } .seat.ready.tb { box-shadow: 0 0 18px -4px var(--team-b); }
+  .seat .check { font: 800 10px/1 var(--mono); letter-spacing: 1px; color: var(--accent); margin-bottom: 1px; }
+  @keyframes pop { 0% { transform: scale(.86); } 60% { transform: scale(1.04); } 100% { transform: scale(1); } }
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+  .idle-strip { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; min-height: 4px; }
+  .idle-chip { display: flex; flex-direction: column; align-items: center; gap: 1px; font: 600 11px/1.2 var(--mono); padding: 7px 12px; border-radius: 9px; color: #cdd6e6; background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.2); animation: idle 1.8s ease-in-out infinite; }
+  .idle-chip .ih { font-size: 9px; opacity: .6; }
+  @keyframes idle { 0%,100% { border-color: rgba(255,255,255,.2); } 50% { border-color: rgba(255,210,63,.6); } }
+
+  .cta {
+    width: 100%; padding: 16px; border-radius: 14px; cursor: not-allowed; font: 800 18px/1 inherit; letter-spacing: .5px;
+    border: 1.5px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.05); color: #6c7688; transition: .2s; margin-top: 4px;
+  }
+  .cta.ready { cursor: pointer; color: #06140c; background: var(--accent); border-color: var(--accent); box-shadow: 0 0 26px -6px var(--accent); animation: ctap 1.5s ease-in-out infinite; }
+  @keyframes ctap { 0%,100% { box-shadow: 0 0 0 0 rgba(108,224,143,.5); } 50% { box-shadow: 0 0 0 6px rgba(108,224,143,0); } }
+  .subtle-btn { background: none; border: none; color: #8a93a6; cursor: pointer; font: 12px/1 var(--mono); padding: 8px; letter-spacing: .5px; }
+  .subtle-btn:hover { color: #cdd6e6; }
+  .pairbtn { font: 12px/1 var(--mono); color: #9fb0c6; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.16); border-radius: 9px; padding: 9px 12px; cursor: pointer; }
+  .pairbtn:hover { color: #fff; border-color: rgba(255,255,255,0.3); }
+
+  .summary { text-align: center; font-size: 14px; line-height: 1.6; }
+  .summary .big { font-size: 22px; color: var(--accent); display: block; margin-bottom: 4px; }
+
+  #debug { position: fixed; left: 10px; bottom: 6px; right: 10px; font: 10px/1.4 var(--mono); color: #6a7184; white-space: pre; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) { .seat.joined,.seat.ready,.idle-chip,.cta.ready { animation: none; } }
+</style>
+</head>
+<body>
+<div id="drag-bar"></div>
+<div id="app-title">TANDEM<b>ONIUM</b> · SEAT-SELECT NAVIGATOR</div>
+
+<div class="stage">
+  <div class="card">
+    <!-- STEP 1: mode -->
+    <div id="step-mode" class="step">
+      <p class="prompt">How do you want to ride?</p>
+      <button class="mode-btn sel" data-mode="together"><span class="big">RIDE TOGETHER</span><span class="sub">Co-op · one shared tandem</span></button>
+      <button class="mode-btn" data-mode="versus"><span class="big">VERSUS</span><span class="sub">Compete · two tandems · 1v1–2v2</span></button>
+      <button class="mode-btn" data-mode="solo"><span class="big">SOLO RIDE</span><span class="sub">Just you</span></button>
+      <p class="hint">Press a button on a controller to navigate · <strong>A</strong> to choose · or click</p>
+    </div>
+
+    <!-- STEP 2: unified seat lobby -->
+    <div id="step-lobby" class="step" hidden>
+      <p class="prompt" id="lobby-title">Crew your tandem</p>
+      <div class="room-band">
+        <canvas id="room-qr" width="74" height="74"></canvas>
+        <div><div class="room-code" id="room-code">TNDM-7F3K</div><div class="room-sub">Scan to join from a phone · or press a button on a controller</div></div>
+      </div>
+      <div id="seat-area" style="width:100%"></div>
+      <p class="hint" id="join-hint">Press a button to join a seat · <strong>A</strong> ready · <strong>B</strong> leave</p>
+      <button class="pairbtn" id="btn-pair">Pair a controller for gyro + lightbar (WebHID)…</button>
+      <button class="cta" id="btn-choose-level">CHOOSE LEVEL</button>
+      <button class="subtle-btn" id="btn-back-mode">← Back</button>
+    </div>
+
+    <!-- STEP 3: hand-off stub -->
+    <div id="step-level" class="step" hidden>
+      <p class="prompt">Ready to roll 🚲</p>
+      <div class="summary" id="level-summary"></div>
+      <p class="hint">In the game this hands off to level select.</p>
+      <button class="subtle-btn" id="btn-restart">← Back to lobby</button>
+    </div>
+  </div>
+</div>
+
+<div id="debug">boot…</div>
+
+<template id="seat-template">
+  <div class="seat"></div>
+</template>
+
+<script>
+// Dynamic importmap — local vendor in Electron, CDN on web (mirrors multi.html).
+(function () {
+  const isElectron = navigator.userAgent.includes('Electron');
+  const threeMap = isElectron
+    ? { "three": "./lib/three.module.js", "three/addons/": "./lib/addons/" }
+    : { "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/" };
+  const map = {
+    ...threeMap,
+    "@usersfirst/controller-core": "./lib/controller-core/index.js",
+    "@usersfirst/controller-core/manager": "./lib/controller-core/manager.js",
+    "@usersfirst/controller-core/drivers/": "./lib/controller-core/drivers/",
+    "@usersfirst/controller-visualizer": "./lib/controller-visualizer/index.js",
+  };
+  const el = document.createElement('script');
+  el.type = 'importmap';
+  el.textContent = JSON.stringify({ imports: map });
+  document.currentScript.after(el);
+})();
+</script>
+<script type="module" src="js/lobby-app.js"></script>
+</body>
+</html>
