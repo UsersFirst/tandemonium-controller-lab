@@ -111,6 +111,10 @@
   .summary { text-align: center; font-size: 14px; line-height: 1.6; }
   .summary .big { font-size: 22px; color: var(--accent); display: block; margin-bottom: 4px; }
 
+  #pairbar { position: fixed; top: 7px; right: 12px; z-index: 101; display: flex; align-items: center; gap: 10px; -webkit-app-region: no-drag; }
+  #ctrl-count { font: 11px/1 var(--mono); color: #8a93a6; letter-spacing: .3px; }
+  .pairbtn-sm { font: 11px/1 var(--mono); color: #cdd6e6; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 7px 11px; cursor: pointer; }
+  .pairbtn-sm:hover { color: #fff; border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.12); }
   #debug { position: fixed; left: 10px; bottom: 6px; right: 10px; font: 10px/1.4 var(--mono); color: #6a7184; white-space: pre; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
   @media (prefers-reduced-motion: reduce) { .seat.joined,.seat.ready,.idle-chip,.cta.ready { animation: none; } }
 </style>
@@ -118,6 +122,10 @@
 <body>
 <div id="drag-bar"></div>
 <div id="app-title">TANDEM<b>ONIUM</b> · SEAT-SELECT NAVIGATOR</div>
+<div id="pairbar">
+  <span id="ctrl-count">no controllers</span>
+  <button id="btn-pair-global" class="pairbtn-sm" title="Approve a controller for this app (WebHID). Steam Controller needs this; DualSense too for lightbar/gyro.">🎮 Pair controller</button>
+</div>
 
 <div class="stage">
   <div class="card">
