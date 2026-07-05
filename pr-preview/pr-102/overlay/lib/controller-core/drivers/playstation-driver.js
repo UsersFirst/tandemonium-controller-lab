@@ -97,7 +97,7 @@ export class PlayStationDriver extends ControllerDriver {
    *
    * @returns {Promise<boolean>} whether the full report stream was confirmed
    */
-  async _activateFullReportMode(featureId, { attempts = 5, perAttemptMs = 450 } = {}) {
+  async _activateFullReportMode(featureId, { attempts = 3, perAttemptMs = 300 } = {}) {
     const fullId = this._fullReportId();
     const hex = (n) => '0x' + n.toString(16).padStart(2, '0');
     // A device without receiveFeatureReport is a test/unsupported handle —
@@ -106,23 +106,32 @@ export class PlayStationDriver extends ControllerDriver {
     const maxAttempts = canRead ? attempts : 1;
 
     for (let i = 1; i <= maxAttempts; i++) {
+      let readOk = true;
       if (canRead) {
         try {
           await this.device.receiveFeatureReport(featureId);
         } catch (err) {
+          readOk = false;
           console.warn(`PlayStation BT: feature ${hex(featureId)} query failed (attempt ${i}/${maxAttempts}):`, err.message);
         }
       }
-      const streaming = await this._waitForReport(fullId, perAttemptMs);
-      if (streaming) {
-        console.log(`PlayStation BT: full report mode active (${hex(fullId)}) after ${i} attempt(s)`);
-        return true;
+      // Only wait for the stream when the activating read was ACCEPTED. A
+      // thrown read means the BT link is still negotiating (the hot-plug case)
+      // — no full report will arrive, so skip the wait and let init hand off to
+      // the non-blocking background loop instead of blocking ~perAttemptMs per
+      // doomed attempt (this was ~2s of dead init that serialized pool loads).
+      if (readOk) {
+        const streaming = await this._waitForReport(fullId, perAttemptMs);
+        if (streaming) {
+          console.log(`PlayStation BT: full report mode active (${hex(fullId)}) after ${i} attempt(s)`);
+          return true;
+        }
       }
       if (i < maxAttempts) {
         console.log(`PlayStation BT: still in compatibility mode after feature ${hex(featureId)} (attempt ${i}/${maxAttempts}); retrying`);
       }
     }
-    console.warn(`PlayStation BT: full report mode (${hex(fullId)}) did not start after ${maxAttempts} attempt(s) — gyro unavailable until reconnect`);
+    console.warn(`PlayStation BT: full report mode (${hex(fullId)}) not up inline after ${maxAttempts} attempt(s) — handing off to background re-activation`);
     return false;
   }
 
@@ -164,7 +173,7 @@ export class PlayStationDriver extends ControllerDriver {
    *
    * @returns {Promise<boolean>} true if the stream started, false if it gave up
    */
-  _startBackgroundReactivation(featureId, { intervalMs = 1000, maxMs = 12000 } = {}) {
+  _startBackgroundReactivation(featureId, { intervalMs = 500, maxMs = 12000 } = {}) {
     if (this._reactivateTimer) return Promise.resolve(false);
     const fullId = this._fullReportId();
     const hex = (n) => '0x' + n.toString(16).padStart(2, '0');
@@ -179,15 +188,19 @@ export class PlayStationDriver extends ControllerDriver {
         resolve(ok);
       };
       const onReport = (event) => { if (event.reportId === fullId) finish(true); };
-      this._reactivateStop = () => finish(false, 'driver destroyed');
-      this.device.addEventListener('inputreport', onReport);
-      console.warn(`PlayStation BT: full report stream not up yet — re-activating in the background (every ${intervalMs}ms, up to ${maxMs}ms)`);
-      this._reactivateTimer = setInterval(() => {
-        elapsed += intervalMs;
-        if (elapsed > maxMs) { finish(false, `no full report after ${maxMs}ms`); return; }
+      const nudge = () => {
         if (typeof this.device.receiveFeatureReport === 'function') {
           this.device.receiveFeatureReport(featureId).catch(() => {});
         }
+      };
+      this._reactivateStop = () => finish(false, 'driver destroyed');
+      this.device.addEventListener('inputreport', onReport);
+      console.warn(`PlayStation BT: full report stream not up yet — re-activating in the background (every ${intervalMs}ms, up to ${maxMs}ms)`);
+      nudge(); // fire the first read immediately — don't idle a full interval before nudging
+      this._reactivateTimer = setInterval(() => {
+        elapsed += intervalMs;
+        if (elapsed > maxMs) { finish(false, `no full report after ${maxMs}ms`); return; }
+        nudge();
       }, intervalMs);
     });
   }
