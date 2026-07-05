@@ -206,6 +206,21 @@ function updateDebug() {
   });
   el.textContent = (parts.join('   ') || 'no controllers — press a button to join') + (allReady() ? '   ✓ ALL READY' : '');
 }
+function updateControllerCount() {
+  const el = $('ctrl-count'); if (!el) return;
+  const claimed = manager.slots.filter((s) => s.state === 'claimed').length;
+  const pooled = manager._hidPool.size;
+  el.textContent = (claimed === 0 && pooled === 0)
+    ? 'no controllers — press a button or Pair →'
+    : `${claimed} active${pooled ? ` · ${pooled} paired` : ''}`;
+}
+// Approve/pool the next controller (main.js auto-selects a not-yet-picked one).
+// requestDevice needs the click as its user gesture; the Steam Controller is
+// HID-only, so it can only be recognized after this.
+function pairController() {
+  const free = SLOT_IDS.find((id) => manager.getSlot(id).state !== 'claimed') || SLOT_IDS[0];
+  manager.connectHidForSlot(free).catch((err) => { const el = $('debug'); if (el) el.textContent = 'pair: ' + (err && err.message ? err.message : String(err)); });
+}
 
 // ── slot lifecycle sync (claim→seat, release→free) ──
 function syncSeats() {
@@ -258,6 +273,7 @@ function loop() {
     if (state.screen === 'mode') driveMode(pads);
     else if (state.screen === 'lobby') driveLobby(pads);
     updateDebug();
+    updateControllerCount();
   } catch (e) {
     console.error('[lobby] frame error (recovered):', e);
     const el = $('debug'); if (el) el.textContent = 'ERROR: ' + (e && e.message ? e.message : String(e));
@@ -274,9 +290,8 @@ async function boot() {
   $('btn-back-mode').addEventListener('click', () => { for (const id of state.bySlot.keys()) clearFb(id); showScreen('mode'); });
   $('btn-choose-level').addEventListener('click', goLevel);
   $('btn-restart').addEventListener('click', () => enterMode(state.mode));
-  $('btn-pair').addEventListener('click', () => {
-    manager.connectHidForSlot(SLOT_IDS[0]).catch((err) => { const el = $('debug'); if (el) el.textContent = 'pair: ' + err.message; });
-  });
+  $('btn-pair').addEventListener('click', pairController);
+  $('btn-pair-global').addEventListener('click', pairController);
 
   drawQR($('room-qr'), 'TNDM-7F3K');
   setModeIdx(0);
