@@ -893,28 +893,19 @@ export class ControllerManager {
   }
 
   /**
-   * Electron-only: requestDevice auto-approved by main.js handler, so we
-   * can call it at boot to pool controllers that haven't been approved yet.
+   * @deprecated No-op. Auto-pairing not-yet-approved devices at boot is
+   * impossible: WebHID `requestDevice()` requires transient user activation,
+   * which a fire-and-forget boot call doesn't have — it threw "Must be handling
+   * a user gesture to show a permission request" and pooled nothing. The paths
+   * that actually work:
+   *   • already-approved devices  → autoPoolApprovedHid()  (gesture-free)
+   *   • a not-yet-approved device → connectHidForSlot() from a user gesture
+   *                                 (the overlay's per-slot Connect button)
+   *   • hot-plug of approved ones → wireHidHotplug()
+   * Kept as a no-op so existing/synced callers (e.g. the game's boot chain)
+   * don't break; safe to delete once all call sites are gone.
    */
-  async electronAutoRequestDevice() {
-    if (!navigator.hid) return;
-    const filters = ControllerRegistry.getHIDFilters();
-    await new Promise((r) => setTimeout(r, 400));
-    // Call once per slot count so we cover the typical 2-controller case
-    // without looping forever on a single-controller setup.
-    for (let i = 0; i < this.slots.length; i++) {
-      try {
-        const picked = await navigator.hid.requestDevice({ filters });
-        const d = (picked || []).find((dev) => !this._isDeviceInPoolOrSlot(dev));
-        if (!d) break;
-        await this.poolDevice(d);
-        await new Promise((r) => setTimeout(r, 200));
-      } catch (err) {
-        console.log('electronAutoRequestDevice stopped:', err.message);
-        break;
-      }
-    }
-  }
+  async electronAutoRequestDevice() { /* intentionally a no-op — see deprecation note */ }
 
   /**
    * User-gesture HID pairing, initiated from a Connect button. If a slot
