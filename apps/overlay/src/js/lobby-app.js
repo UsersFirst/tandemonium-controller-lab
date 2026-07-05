@@ -282,8 +282,10 @@ async function boot() {
   setModeIdx(0);
 
   if (navigator.hid) {
+    // Pool already-approved controllers (gesture-free). New ones pair via the
+    // per-slot "Pair" button (connectHidForSlot needs a user gesture); hot-plug
+    // of approved devices is handled by wireHidHotplug.
     await manager.autoPoolApprovedHid();
-    if (navigator.userAgent.includes('Electron')) { try { await manager.electronAutoRequestDevice(); } catch (e) {} }
     manager.wireHidHotplug();
   }
   loop();
