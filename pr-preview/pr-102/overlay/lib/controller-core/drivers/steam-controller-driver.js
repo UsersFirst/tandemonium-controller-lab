@@ -75,6 +75,17 @@ export class SteamControllerDriver extends ControllerDriver {
   // init(). Static so the setting can be applied without a driver instance.
   static suppressLizardMode = true;
 
+  // One elected lizard-mode owner per physical Puck. All five of the Puck's
+  // HID interfaces share vid:pid and get pooled as separate driver instances;
+  // previously EVERY instance probed all five siblings AND ran its own 800ms
+  // heartbeat — 5× redundant SET_REPORT churn that the NotAllowedError storm
+  // made expensive enough to jank the renderer (~4s, issue #101). Only the
+  // first instance to init a given Puck probes + heartbeats; because it already
+  // broadcasts CLEAR to all five siblings, suppression coverage is unchanged.
+  // Keyed by vid:pid — two physical Pucks would share one owner, which is fine:
+  // the owner's heartbeat already targets every matching interface.
+  static _lizardOwners = new Map(); // 'vid:pid' -> owner driver instance
+
   // Steam Controller emits raw 3-axis gyro (bytes 39-44, ±2000 dps)
   // and 3-axis accel (bytes 33-38, ±2g) — same rate-based encoding as
   // DualSense, so it flows through the standard SensorFusion pipeline.
@@ -114,6 +125,14 @@ export class SteamControllerDriver extends ControllerDriver {
       console.log('Steam Controller (Puck): kbd/mouse suppression OFF (setting) — leaving lizard mode active.');
       return;
     }
+
+    // Elect a single lizard-mode owner per Puck. Sibling interfaces bail here —
+    // the owner's heartbeat already broadcasts CLEAR to all of them, so this
+    // avoids the 5×-per-interface probe + heartbeat churn (issue #101).
+    const puckKey = this._puckKey();
+    const owner = SteamControllerDriver._lizardOwners.get(puckKey);
+    if (owner && owner !== this && owner._lizardTimer) return;
+    SteamControllerDriver._lizardOwners.set(puckKey, this);
 
     // Puck path: disable lizard-mode (the firmware's default keyboard +
     // mouse + scroll emulation) by sending CLEAR_DIGITAL_MAPPINGS +
@@ -251,7 +270,15 @@ export class SteamControllerDriver extends ControllerDriver {
       this._lizardTimer = null;
     }
     this._lizardCandidates = [];
+    // Release ownership so the next connect for this Puck can re-elect an owner
+    // (e.g. this interface unplugged/re-pooled) rather than being skipped.
+    if (SteamControllerDriver._lizardOwners.get(this._puckKey()) === this) {
+      SteamControllerDriver._lizardOwners.delete(this._puckKey());
+    }
   }
+
+  /** Stable per-Puck key. All 5 interfaces of one Puck share vid:pid. */
+  _puckKey() { return `${this.device.vendorId}:${this.device.productId}`; }
 
   /**
    * Enumerate already-approved HID handles for this Puck (primary +
