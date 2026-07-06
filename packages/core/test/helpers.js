@@ -90,17 +90,39 @@ export function buildPSReport({
  * offset + 2 (gyro 14, accel 20).
  * @returns {{reportId:number, data:DataView}}
  */
-export function buildDs4BtReport({
+export function buildDs4BtReport(opts = {}) {
+  return buildDs4Report({ ...opts, bt: true });
+}
+
+/**
+ * Build a **DualShock 4** report at the true DS4 button layout (distinct from
+ * the DualSense layout of buildPSReport): dpad+face at +4, shoulders at +5,
+ * PS/touchpad at +6, L2/R2 analog at +7/+8. `bt:true` prepends the 2-byte BT
+ * header (report 0x11, baseOffset 2, IMU +2); otherwise USB (report 0x01,
+ * baseOffset 0, IMU at 12). Defaults to dpad-neutral (0x08).
+ * @returns {{reportId:number, data:DataView}}
+ */
+export function buildDs4Report({
+  bt = false,
+  lx = 128, ly = 128, rx = 128, ry = 128,
+  l2 = 0, r2 = 0,
+  faceByte = 0x08, shoulderByte = 0, sysByte = 0,
   gyro = { x: 0, y: 0, z: 0 },
   accel = { x: 0, y: 0, z: 0 },
-  len = 78,
+  len,
 } = {}) {
-  const u8 = new Uint8Array(len);
-  u8[0] = 0xc0; u8[1] = 0x00;            // BT header (report id already stripped)
-  u8[2] = 128; u8[3] = 128; u8[4] = 128; u8[5] = 128; // sticks at baseOffset 2
-  writeS16LE(u8, 14, gyro.x); writeS16LE(u8, 16, gyro.y); writeS16LE(u8, 18, gyro.z);
-  writeS16LE(u8, 20, accel.x); writeS16LE(u8, 22, accel.y); writeS16LE(u8, 24, accel.z);
-  return { reportId: 0x11, data: dataView(u8) };
+  const base = bt ? 2 : 0;
+  const gyroOff = bt ? 14 : 12;
+  const u8 = new Uint8Array(len || (bt ? 78 : 64));
+  if (bt) { u8[0] = 0xc0; u8[1] = 0x00; }        // BT header (report id already stripped)
+  u8[base + 0] = lx; u8[base + 1] = ly; u8[base + 2] = rx; u8[base + 3] = ry;
+  u8[base + 4] = faceByte & 0xff;
+  u8[base + 5] = shoulderByte & 0xff;
+  u8[base + 6] = sysByte & 0xff;
+  u8[base + 7] = l2 & 0xff; u8[base + 8] = r2 & 0xff;
+  writeS16LE(u8, gyroOff, gyro.x); writeS16LE(u8, gyroOff + 2, gyro.y); writeS16LE(u8, gyroOff + 4, gyro.z);
+  writeS16LE(u8, gyroOff + 6, accel.x); writeS16LE(u8, gyroOff + 8, accel.y); writeS16LE(u8, gyroOff + 10, accel.z);
+  return { reportId: bt ? 0x11 : 0x01, data: dataView(u8) };
 }
 
 // ── Fake HID device (drives the IMU probe) ─────────────────────

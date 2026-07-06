@@ -25,6 +25,7 @@ let clickThrough = false;
 // default for the single-controller window is 720×540 — a clean capture size.
 const DEFAULT_WINDOW_SIZE = { width: 720, height: 540 };
 const MULTI_WINDOW_SIZE = { width: 1100, height: 520 };
+const LOBBY_WINDOW_SIZE = { width: 820, height: 660 };
 let windowStatePath = null; // resolved once app is ready (needs userData path)
 let saveWindowSizeTimer = null;
 
@@ -114,8 +115,11 @@ function upsertHidController(d, connected) {
 function hidControllerList() { return [...hidControllers.values()]; }
 
 function broadcastHidControllers() {
-  if (inventoryWindow && !inventoryWindow.isDestroyed()) {
-    inventoryWindow.webContents.send('hid-controllers-snapshot', hidControllerList());
+  const list = hidControllerList();
+  // The inventory window and the lobby both render this (the lobby shows each
+  // seat's per-unit serial/MAC — see its Controllers panel).
+  for (const w of [inventoryWindow, mainWindow]) {
+    if (w && !w.isDestroyed()) w.webContents.send('hid-controllers-snapshot', list);
   }
 }
 
@@ -139,6 +143,8 @@ function openInventoryWindow() {
 // Which size profile this launch uses. Single source of truth so the window
 // creation and the "reset to default" handler agree on key + default size.
 function getSizeMode() {
+  const useLobby = process.env.OVERLAY_LOBBY === '1' || process.argv.includes('--lobby');
+  if (useLobby) return { stateKey: 'lobby', defaultSize: LOBBY_WINDOW_SIZE };
   const useMulti = process.env.OVERLAY_MULTI === '1' || process.argv.includes('--multi');
   return {
     stateKey: useMulti ? 'multi' : 'main',
@@ -173,7 +179,7 @@ function createWindow() {
     },
   });
 
-  const entry = stateKey === 'multi' ? 'multi.html' : 'index.html';
+  const entry = stateKey === 'lobby' ? 'lobby.html' : stateKey === 'multi' ? 'multi.html' : 'index.html';
   mainWindow.loadFile(path.join(__dirname, '..', 'src', entry));
 
   mainWindow.once('ready-to-show', () => {
@@ -354,6 +360,7 @@ app.whenReady().then(() => {
     gyro:   { file: 'gyro-window.html',        width: 260, height: 260 },
     axis:   { file: 'axis-window.html',        width: 280, height: 90 },
     roll:   { file: 'roll-window.html',        width: 240, height: 170 },
+    controllers: { file: 'controllers-window.html', width: 320, height: 460 },
   };
 
   ipcMain.handle('open-hud-window', async (_event, { kind, profile, greenScreen }) => {
@@ -418,6 +425,11 @@ app.whenReady().then(() => {
   ipcMain.on('hud-state', (_event, { kind, state }) => {
     const w = hudWindows[kind];
     if (w && !w.isDestroyed()) w.webContents.send('hud-state-update', state);
+  });
+
+  // Controllers window → main overlay: a row was clicked; switch the shown pad.
+  ipcMain.on('controller-select', (_event, payload) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-select', payload);
   });
 
   // A detached window's close button uses this to close itself (frameless

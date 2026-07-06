@@ -47,6 +47,7 @@ function fakeEntry(device) {
     hidActiveSince: 0,
     slot: null,
     hasFreshButtonPress() { return false; },
+    hasFreshInput() { return false; },
     destroy() {},
   };
 }

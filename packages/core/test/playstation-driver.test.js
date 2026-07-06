@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 
 import { PlayStationDriver } from '../src/drivers/playstation-driver.js';
 import { ControllerDriver } from '../src/drivers/base-driver.js';
-import { buildPSReport, buildDs4BtReport, dataView } from './helpers.js';
+import { buildPSReport, buildDs4BtReport, buildDs4Report, dataView } from './helpers.js';
 
 const approx = (a, b, eps = 1e-9) =>
   assert.ok(Math.abs(a - b) <= eps, `expected ${a} ≈ ${b}`);
@@ -93,31 +93,47 @@ test('report-id / connection gating', () => {
   assert.equal(drv('bluetooth', { mode: 'ds4' }).parseReport(0x01, data), null);
 });
 
-test('DS4 emits IMU-only (no buttons/sticks/triggers/touchpad) so the Gamepad API wins', () => {
+test('DS4 USB: buttons/sticks/triggers parse at the DS4 offsets (+4/+5/+6, +7/+8)', () => {
   const d = drv('usb', { mode: 'ds4' });
-  const { data } = buildPSReport({
-    mode: 'ds4',
-    faceByte: DPAD_NEUTRAL | CROSS, l2: 200,
+  const { data } = buildDs4Report({
+    lx: 0, ly: 255, rx: 128, ry: 128,       // lx full-left, ly full-down
+    l2: 200,
+    faceByte: DPAD_NEUTRAL | CROSS,          // cross, dpad neutral
+    shoulderByte: 0x01 | 0x20,               // L1 + options
+    sysByte: 0x01,                           // PS
     gyro: { x: 1, y: 2, z: 3 }, accel: { x: 0, y: 0, z: 8192 },
   });
   const p = d.parseReport(0x01, data);
+  assert.ok(p);
+  approx(p.sticks.lx, -1);
+  approx(p.sticks.ly, (255 - 128) / 128);
+  approx(p.triggers.l2, 200 / 255);
+  assert.equal(p.buttons.cross, true);
+  assert.equal(p.buttons.square, false);
+  assert.equal(p.buttons.l1, true);
+  assert.equal(p.buttons.options, true);
+  assert.equal(p.buttons.ps, true);
+  assert.equal(p.buttons.dpadUp, false);      // dpad neutral (hat 8)
   assert.deepEqual(p.gyro, { x: 1, y: 2, z: 3 });
   assert.deepEqual(p.accel, { x: 0, y: 0, z: 8192 });
-  // Deliberately omitted for DS4 — these come from the Gamepad API.
-  assert.equal(p.buttons, undefined);
-  assert.equal(p.sticks, undefined);
-  assert.equal(p.triggers, undefined);
-  assert.equal(p.touchpad, undefined);
 });
 
-test('DS4 Bluetooth report 0x11 parses IMU at the +2 (baseOffset 2) offset', () => {
+test('DS4 Bluetooth report 0x11: IMU at +2 AND buttons at the DS4 offsets', () => {
   const d = drv('bluetooth', { mode: 'ds4' });
-  const { data } = buildDs4BtReport({ gyro: { x: 5, y: -6, z: 7 }, accel: { x: 0, y: 0, z: 8192 } });
+  const { data } = buildDs4Report({
+    bt: true,
+    faceByte: DPAD_NEUTRAL | TRIANGLE,       // triangle, dpad neutral
+    shoulderByte: 0x02,                      // R1
+    gyro: { x: 5, y: -6, z: 7 }, accel: { x: 0, y: 0, z: 8192 },
+  });
   const p = d.parseReport(0x11, data);
-  assert.ok(p, 'DS4 BT 0x11 should now parse');
+  assert.ok(p, 'DS4 BT 0x11 should parse');
   assert.deepEqual(p.gyro, { x: 5, y: -6, z: 7 });
   assert.deepEqual(p.accel, { x: 0, y: 0, z: 8192 });
-  assert.equal(p.buttons, undefined); // IMU-only for DS4
+  assert.equal(p.buttons.triangle, true);
+  assert.equal(p.buttons.cross, false);
+  assert.equal(p.buttons.r1, true);
+  assert.equal(p.buttons.dpadUp, false);
 });
 
 test('detectConnectionType: DS4 BT (input 0x11) vs USB (0x11 only as feature)', () => {

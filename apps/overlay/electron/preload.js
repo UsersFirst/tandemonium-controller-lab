@@ -64,4 +64,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Periodic snapshot of currently-present HID controllers (with serials).
   onHidControllersSnapshot: (callback) =>
     ipcRenderer.on('hid-controllers-snapshot', (_, list) => callback(list)),
+
+  // ── Controllers window → overlay selection ──
+  // The detached Controllers list sends the clicked controller's key; the main
+  // overlay receives it and switches which controller drives the visualization.
+  selectController: (payload) => ipcRenderer.send('controller-select', payload),
+  onControllerSelect: (callback) =>
+    ipcRenderer.on('controller-select', (_, payload) => callback(payload)),
 });

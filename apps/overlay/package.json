@@ -6,10 +6,12 @@
   "scripts": {
     "prestart": "node scripts/copy-three.js && node scripts/copy-workspace.js",
     "prestart:multi": "node scripts/copy-three.js && node scripts/copy-workspace.js",
+    "prestart:lobby": "node scripts/copy-three.js && node scripts/copy-workspace.js",
     "prepackage": "node scripts/copy-three.js && node scripts/copy-workspace.js",
     "premake": "node scripts/copy-three.js && node scripts/copy-workspace.js",
     "start": "electron .",
     "start:multi": "electron . --multi",
+    "start:lobby": "electron . --lobby",
     "make": "electron-forge make",
     "make:dmg": "npm run package && bash scripts/make-dmg.sh",
     "package": "electron-forge package"

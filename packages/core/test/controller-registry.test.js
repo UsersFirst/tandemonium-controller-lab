@@ -51,9 +51,22 @@ test('identifyFromGamepadId resolves PlayStation ids to the dualsense protocol w
   assert.equal(info.protocol, 'dualsense');
   assert.equal(info.hasGyro, true);
   assert.equal(info.hasTouchpad, true);
-  // NOTE: name resolves to the first PS entry ('Sony DualSense') because the
-  // gamepad.id alone cannot distinguish DS4 from DS5 or a clone — the IMU
-  // probe / spoof picker does that. This asserts the documented behavior.
+  // The vid:pid disambiguates within the shared PLAYSTATION_ID pattern, so a
+  // 09cc id resolves to DS4 v2 (not the first PS entry, DualSense).
+  assert.equal(info.driverName, 'Sony DualShock 4 v2');
+});
+
+test('identifyFromGamepadId disambiguates Sony pads by vid:pid (DS4 05c4 ≠ DualSense 0ce6)', () => {
+  // All Sony pads share ONE PLAYSTATION_ID pattern; without vid:pid the first
+  // match (DualSense) mislabels every DS4. A GameSir spoofing DS4 v1 (054c:05c4)
+  // must read as DualShock 4 v1, not DualSense.
+  const ds4v1 = ControllerRegistry.identifyFromGamepadId(
+    'Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 05c4)');
+  assert.equal(ds4v1.driverName, 'Sony DualShock 4 v1');
+
+  const ds5 = ControllerRegistry.identifyFromGamepadId(
+    'DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)');
+  assert.equal(ds5.driverName, 'Sony DualSense');
 });
 
 test('identifyFromGamepadId is variant-first: GameSir Cyclone beats Switch Pro', () => {
