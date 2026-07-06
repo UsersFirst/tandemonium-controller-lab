@@ -677,10 +677,11 @@ async function init() {
     });
   }
 
-  // Delay so the overlay's own auto-connect claims its device FIRST (hidDevice
-  // set) — then the list pools only the OTHERS, avoiding a double-open race on
-  // the active device.
-  setTimeout(initControllerList, 2000);
+  // Pool EVERY granted HID device FIRST (single owner), so auto-adopt below just
+  // DESIGNATES a live pool entry rather than opening its own — otherwise the
+  // device gets opened twice (once at auto-connect, once by the pool) and the
+  // list row points at a dead duplicate. (Was the USB DS4 "SELECTED but dead".)
+  await initControllerList();
   initSerialInventory();
 
   requestAnimationFrame(loop);
@@ -1058,25 +1059,32 @@ async function connectControllerGyro() {
 // unchanged.
 async function finishGyroConnect(device) {
   const forVp = (e) => e.device.vendorId === device.vendorId && e.device.productId === device.productId;
-  let entry = [...listManager._hidPool.values()].find((e) => e.device === device);
+  const pool = () => [...listManager._hidPool.values()];
+  // Prefer the EXACT pooled handle. A getDevices() handle can be a DIFFERENT JS
+  // object than the pooled one for the SAME physical device — do NOT re-pool it,
+  // that double-opens the device and yields a dead duplicate entry (the "USB DS4
+  // SELECTED but dead" bug). Fall back to a same-vid:pid entry that's actually
+  // RECEIVING parsed reports (hidActiveSince > 0 — a wire-level fact, NOT the
+  // user-facing ACTIVE state, which means the user has interacted with it).
+  let entry = pool().find((e) => e.device === device)
+           || pool().filter(forVp).find((e) => e.hidActiveSince > 0)
+           || pool().find(forVp);
   if (!entry) {
-    // Not pooled yet (e.g. a freshly-granted device) — pool it, then find it.
+    // Genuinely not pooled (e.g. a freshly-granted device) — pool once, then take it.
     try { await listManager.poolDevice(device); } catch (e) { /* ok */ }
-    entry = [...listManager._hidPool.values()].find((e) => e.device === device)
-         || [...listManager._hidPool.values()].find(forVp);
+    entry = pool().find((e) => e.device === device) || pool().find(forVp);
   }
   if (!entry) { console.warn('finishGyroConnect: no pool entry for', device.productName); return; }
 
-  // Multi-interface fan-out (Steam Controller Puck): the picked handle may be a
-  // sibling that never emits STATE reports. Designate the same-vid:pid entry
-  // that's actually streaming parsed data (hidActiveSince > 0) instead.
+  // Steam Controller Puck: the picked handle may be a sibling that never emits
+  // STATE reports — designate the same-vid:pid interface that IS receiving them.
   if (entry.driver?.constructor?.needsSiblingFanout) {
-    const streaming = [...listManager._hidPool.values()].filter((e) => forVp(e) && e.hidActiveSince > 0);
-    if (streaming.length) entry = streaming[0];
+    const rx = pool().filter((e) => forVp(e) && e.hidActiveSince > 0);
+    if (rx.length) entry = rx[0];
   }
 
   designateEntry(entry);
-  console.log('Gyro designated (WebHID pool):', entry.device.productName);
+  console.log('Gyro designated:', entry.device.productName, '(receiving:', entry.hidActiveSince > 0, ')');
 }
 
 // Point the overlay's viz at a pool entry: alias hidDevice/controllerDriver/
@@ -1095,11 +1103,13 @@ function designateEntry(entry) {
   connectGyroBtn.textContent = 'Connected';
   updateGyroToggle();
   showGyroHud();
-  // Re-run the one-shot bias calibration NOW (on selection) rather than trusting
-  // the pool-time calibration, which ran at boot while the controller may have
-  // been moving — that aborts and leaves the bias to the slower continuous
-  // stillness pass, which is the "drift then settles" seen on the Steam. On
-  // selection the pad is usually at rest, so this captures a tight window.
+  // The entry's fusion has been integrating since it was POOLED (boot), so its
+  // orientation carries accumulated drift and its bias was calibrated whenever
+  // the pad happened to be still (or not) during pooling. Reset the orientation
+  // for a clean start and re-run the one-shot bias calibration NOW (on selection,
+  // when the pad is usually at rest) for a tight window — matching the old
+  // connect-time behavior. Continuous stillness + manual L3+R4 refine from there.
+  gyroFusion.reset();
   startCalibration();
   if (isPuckDevice(hidDevice)) onPuckConnected();
   else onPuckDisconnected();
