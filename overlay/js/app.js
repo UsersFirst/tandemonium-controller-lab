@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { ControllerOverlay, detectControllerType, PROFILES, GyroGimbal } from '@usersfirst/controller-visualizer';
-import { ControllerRegistry, SensorFusion, analyzeImuStep, SteamControllerDriver } from '@usersfirst/controller-core';
+import { ControllerRegistry, SensorFusion, analyzeImuStep, SteamControllerDriver, ControllerManager } from '@usersfirst/controller-core';
 import { recordStep, buildReport, exportReport, stepsForEntry, parseImuSamples,
   areasForSteps, filterStepsByAreas, AREA_LABELS, STEP_AREAS } from './test-report.js';
 
@@ -139,7 +139,75 @@ let syntheticGamepad = null;
 // Shared sensor fusion (was inline state + ~250 lines of duplicate math).
 // Keeps orientation, gravity tracking, stillness & sensor-fusion bias
 // calibration, and all related scratch vectors internal. See #224.
-const gyroFusion = new SensorFusion();
+// Phase 3b: the overlay drives its viz from the SELECTED pool entry's fusion —
+// the SAME per-controller SensorFusion the game uses (self-calibrating via
+// startCalibration). `gyroFusion` is an ALIAS repointed to that entry's fusion
+// on selection; `_idleFusion` is a neutral placeholder when nothing is selected
+// so the loop's `gyroFusion.displayOrientation` reads never hit null.
+const _idleFusion = new SensorFusion();
+let gyroFusion = _idleFusion;
+let selectedEntry = null;   // the pool HidEntry currently shown in the overlay
+
+// ── Controllers pool (Phase 3b: single owner) ──
+// A ControllerManager that opens EVERY granted HID handle over WebHID and keeps
+// each one live (driver + fusion + synthetic). The overlay's SELECTED controller
+// is simply a designated entry from this pool — no separate connection, no
+// eviction. The pool is the single owner of every HID device; the Gamepad API is
+// only a fallback for XInput-only pads (Xbox).
+const listManager = new ControllerManager({ slotIds: ['_ovl'] });
+async function initControllerList() {
+  if (!navigator.hid) return;
+  try {
+    const approved = await navigator.hid.getDevices();
+    for (const d of approved) {
+      if (ControllerRegistry.isKnownDevice(d)) await listManager.poolDevice(d);
+    }
+    listManager.wireHidHotplug();
+  } catch (e) { console.warn('[overlay] controller-pool init failed', e); }
+}
+// Set once by an explicit list-selection; consumed by connectControllerGyro so
+// it binds THIS exact handle (identical vid:pid pads share a vid:pid, not this).
+let _preferredGyroDevice = null;
+// Stable per-device id so the detached list can address an EXACT handle.
+const _deviceIds = new WeakMap();
+let _deviceIdSeq = 0;
+function deviceIdFor(device) {
+  if (!_deviceIds.has(device)) _deviceIds.set(device, ++_deviceIdSeq);
+  return _deviceIds.get(device);
+}
+// The controllers a user has interacted with at least once (dot lit) — keyed by
+// device id / gamepad index — so the list can show ACTIVE vs idle AVAILABLE.
+const _everActive = new Set();
+
+// Per-unit serial/MAC inventory from the Electron main process (the renderer's
+// WebHID handle carries no serial). Populated as devices are paired/hotplugged;
+// a boot scan (select-hid-device with the full deviceList) fills it for
+// already-present devices. Matched to rows by vid:pid.
+let _hidInventory = [];
+function initSerialInventory() {
+  if (!window.electronAPI) return;
+  try {
+    if (window.electronAPI.listHidControllers) window.electronAPI.listHidControllers().then((l) => { if (Array.isArray(l)) _hidInventory = l; }).catch(() => {});
+    if (window.electronAPI.onHidControllersSnapshot) window.electronAPI.onHidControllersSnapshot((l) => { if (Array.isArray(l)) _hidInventory = l; });
+    // Serial scan happens on the "Show list…" gesture — requestDevice needs user
+    // activation, so a boot timer can't populate the inventory.
+  } catch (e) { /* best-effort */ }
+}
+// Match a handle to its main-process serial. Electron's main HIDDevice exposes
+// no `collections` (so a descriptor fingerprint is impossible there) — but the
+// renderer DOES know each handle's connection type. Unique vid:pid → 1:1. Two
+// identical-vid:pid units (a BT clone + a USB DS4) → disambiguate by transport:
+// a Bluetooth unit carries a MAC serial, a USB DS4 carries none.
+function serialForDevice(vp, connType) {
+  const units = vp ? _hidInventory.filter((u) => u.vendorId === vp.vendorId && u.productId === vp.productId) : [];
+  if (!units.length) return '';
+  if (units.length === 1) return units[0].serialNumber || '(no serial)';
+  const withSerial = units.filter((u) => u.serialNumber);
+  if (connType === 'bluetooth' && withSerial.length === 1) return withSerial[0].serialNumber;
+  if (connType === 'usb' && units.some((u) => !u.serialNumber)) return '(USB — no serial)';
+  return units.map((u) => u.serialNumber || 'no serial').join(' / ');
+}
+
 // App-layer calibration still owns variance-check + retry UX — on success
 // it pushes the captured bias into gyroFusion.bias.
 let calibrating = false;
@@ -609,20 +677,20 @@ async function init() {
     });
   }
 
+  // Pool EVERY granted HID device FIRST (single owner), so auto-adopt below just
+  // DESIGNATES a live pool entry rather than opening its own — otherwise the
+  // device gets opened twice (once at auto-connect, once by the pool) and the
+  // list row points at a dead duplicate. (Was the USB DS4 "SELECTED but dead".)
+  await initControllerList();
+  initSerialInventory();
+
   requestAnimationFrame(loop);
 
-  // Check for already-connected gamepad (may have connected before
-  // our event listeners were attached). Same approach as the game's
-  // pollGamepad() fallback in input-manager.js.
-  const foundViaGamepadAPI = checkForExistingGamepad();
-
-  // If the Gamepad API has nothing, fall back to probing WebHID directly.
-  // This recovers the cold-start case where a DualSense is still in 0x31
-  // full-report mode from a previous session — Gamepad API is blind to it,
-  // but navigator.hid.getDevices() still lists the granted device.
-  if (!foundViaGamepadAPI) {
-    bootstrapFromHID();
-  }
+  // Adopt an already-connected XInput pad at startup (Xbox has no HID interface,
+  // so it can't be pool-adopted). HID controllers are NOT auto-selected at
+  // startup — nothing is SELECTED until the user ENGAGES one (autoAdoptFromPool)
+  // or clicks its row, so the "No Controller" splash stays until then.
+  checkForExistingGamepad();
 }
 
 /**
@@ -683,11 +751,16 @@ function detectInitialController() {
 function checkForExistingGamepad() {
   const gamepads = navigator.getGamepads();
   for (let i = 0; i < gamepads.length; i++) {
-    if (gamepads[i]) {
-      console.log('Found existing gamepad at startup:', gamepads[i].id);
-      switchController(gamepads[i]);
-      return true;
-    }
+    const gp = gamepads[i];
+    if (!gp) continue;
+    // Skip HID controllers — they're adopted from the pool only when engaged, so
+    // an untouched pad never auto-selects. Only XInput pads (not in the pool)
+    // are adopted at startup here.
+    const vp = ControllerRegistry.parseGamepadVendorProduct(gp.id);
+    if (vp && listManager._findPoolEntryByVidPid(vp.vendorId, vp.productId)) continue;
+    console.log('Found existing XInput gamepad at startup:', gp.id);
+    switchController(gp);
+    return true;
   }
   return false;
 }
@@ -734,9 +807,10 @@ async function bootstrapFromHID() {
 // CONTROLLER LIFECYCLE
 // =====================================================================
 
-async function switchController(gamepad) {
+async function switchController(gamepad, preferredDevice = null) {
   if (switchingController) return;
   switchingController = true;
+  _preferredGyroDevice = preferredDevice;   // bind THIS exact handle if given (list-selection)
 
   try {
     const newType = controllerTypeSelect.value === 'auto'
@@ -767,13 +841,24 @@ async function switchController(gamepad) {
     noControllerSplash.classList.add('hidden');
 
     // Update UI
-    gamepadIndex = gamepad.index;
+    // HID-selection stub uses -1 → buttons from the synthetic. AND: if two pads
+    // share this vid:pid (a GameSir + a real DS4, both 054c:05c4) we can't trust
+    // the pad index to be OUR device, so drop to null and drive from the
+    // connected HID handle's synthetic — otherwise pressing one lights both rows.
+    const _vpG = ControllerRegistry.parseGamepadVendorProduct(gamepad.id);
+    const _dupPads = _vpG ? (navigator.getGamepads() || []).filter((g) => {
+      if (!g) return false; const v = ControllerRegistry.parseGamepadVendorProduct(g.id);
+      return v && v.vendorId === _vpG.vendorId && v.productId === _vpG.productId;
+    }).length : 1;
+    gamepadIndex = (gamepad.index >= 0 && _dupPads <= 1) ? gamepad.index : null;
     gamepadStatusEl.textContent = gamepad.id.slice(0, 30);
     gamepadStatusEl.classList.add('connected');
 
     // Show gyro toggle and auto-connect if controller supports gyro
     const info = ControllerRegistry.identifyFromGamepadId(gamepad.id);
-    if (navigator.hid && info?.hasGyro) {
+    // An explicit list-selection ALWAYS connects the chosen handle (so it
+    // becomes SELECTED); otherwise auto-connect only for gyro-capable pads.
+    if (navigator.hid && (preferredDevice || info?.hasGyro)) {
       showGyroToggle();
       // Always auto-connect gyro — in Electron requestDevice() auto-approves,
       // in browsers it will fail silently and the user can click the button.
@@ -809,9 +894,40 @@ function onGamepadDisconnected(index) {
   overlay.setVisible(false);
 }
 
+// Input-driven auto-adopt from the WebHID pool: when NOTHING is SELECTED,
+// designate the controller the user has actually ENGAGED (a pool entry that has
+// been pressed), else the first receiving gyro-capable entry. This is the ONLY
+// auto-SELECT path for HID controllers — so a controller's Gamepad-API pad merely
+// CONNECTING (e.g. a Switch Pro BT pad appearing a second after boot) never
+// auto-selects an untouched controller. Pressing a controller makes it ACTIVE,
+// not SELECTED; SELECTED only changes at startup, on disconnect re-adopt, or by
+// explicit list-click. Runs each frame from the loop while nothing is selected.
+function autoAdoptFromPool() {
+  if (hidDevice || _preferredGyroDevice || switchingController) return;
+  const pool = [...listManager._hidPool.values()];
+  const gyroable = (e) => { const en = ControllerRegistry.getEntry(e.device.vendorId, e.device.productId); return !!(en && en.capabilities.gyro); };
+  // ONLY adopt a controller the user has actually ENGAGED (pressed a button on).
+  // An untouched controller — however it connects — must never auto-SELECT; the
+  // user picks it by pressing it or clicking its row. This is what stopped the
+  // idle Switch Pro from grabbing SELECTED after a DS4 press.
+  const entry = pool.find((e) => e._everPressed && gyroable(e) && e.hidActiveSince > 0);
+  if (!entry) return;
+  const d = entry.device, hx = (n) => n.toString(16).padStart(4, '0');
+  const stub = { id: `${d.productName || 'Controller'} (STANDARD GAMEPAD Vendor: ${hx(d.vendorId)} Product: ${hx(d.productId)})`,
+    index: -1, axes: [0, 0, 0, 0], buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })) };
+  switchController(stub, d);
+}
+
 // ── Gamepad events ──
 
 window.addEventListener('gamepadconnected', (e) => {
+  if (hidDevice || gyroActive || switchingController || _preferredGyroDevice) return;
+  // A HID controller is adopted via the POOL (autoAdoptFromPool), NOT its
+  // Gamepad-API pad connecting — otherwise a Switch Pro BT pad appearing a second
+  // after boot would auto-select an untouched controller. Only XInput pads (Xbox,
+  // no HID interface, so not in the pool) are adopted through the Gamepad API.
+  const vp = ControllerRegistry.parseGamepadVendorProduct(e.gamepad.id);
+  if (vp && listManager._findPoolEntryByVidPid(vp.vendorId, vp.productId)) return;
   switchController(e.gamepad);
 });
 
@@ -858,11 +974,17 @@ gyroToggleBtn.addEventListener('click', () => toggleGyro());
  */
 function scheduleGyroConnect() {
   cancelGyroConnect();
-  // 2-second delay: Switch Pro needs time for USB enumeration + HID readiness.
-  // The driver's init() has its own internal retries and delays for sub-commands.
+  // 2s for auto-connect (Switch Pro needs USB-enumeration + HID readiness time).
+  // An explicit list-selection targets an ALREADY-open pooled handle, so connect
+  // it promptly — the 2s wait made selection feel broken.
+  const delay = _preferredGyroDevice ? 150 : 2000;
   gyroConnectTimer = setTimeout(async () => {
     gyroConnectTimer = null;
-    if (gamepadIndex === null) return;
+    // Bail only when there's nothing to connect. An explicit list-selection of a
+    // HID-only pad (Steam, DualSense-BT) or an identical-vid:pid pad has
+    // gamepadIndex===null but DOES set _preferredGyroDevice — that must still
+    // connect (else it goes ACTIVE-not-SELECTED and needs a manual Connect click).
+    if (gamepadIndex === null && !_preferredGyroDevice) return;
     if (gyroActive) return;
     console.log('Auto-connecting gyro for', currentControllerType, '...');
     try {
@@ -875,7 +997,7 @@ function scheduleGyroConnect() {
     } catch (err) {
       console.warn('Gyro auto-connect failed:', err.message);
     }
-  }, 2000);
+  }, delay);
 }
 
 function cancelGyroConnect() {
@@ -898,21 +1020,33 @@ async function connectControllerGyro() {
   if (!navigator.hid) return;
 
   const filters = ControllerRegistry.getHIDFilters();
-  let device;
+  // An explicit list-selection targets THIS exact HID handle (so two identical
+  // vid:pid pads don't collide). Consumed once.
+  let device = _preferredGyroDevice;
+  _preferredGyroDevice = null;
+  if (device) { await finishGyroConnect(device); return; }
+
+  // Match the gyro HID device to the ACTIVE gamepad's vid:pid. Without this,
+  // with two controllers connected we'd grab the first gyro-capable granted
+  // device (e.g. a Steam Controller) and show ITS gyro under THIS controller's
+  // buttons — the exact cross-wire seen with a GameSir + Steam Controller.
+  let wantVp = null;
+  if (gamepadIndex !== null) {
+    const gp = navigator.getGamepads()[gamepadIndex];
+    if (gp) wantVp = ControllerRegistry.parseGamepadVendorProduct(gp.id);
+  }
 
   // Step 1: check previously-granted devices
-  console.log('connectControllerGyro: trying getDevices()...');
+  console.log('connectControllerGyro: trying getDevices()...', wantVp ? `(prefer ${wantVp.vendorId.toString(16)}:${wantVp.productId.toString(16)})` : '');
   try {
     const granted = await navigator.hid.getDevices();
     console.log('connectControllerGyro: getDevices returned', granted.length, 'device(s)');
-    for (const d of granted) {
-      const entry = ControllerRegistry.getEntry(d.vendorId, d.productId);
-      if (entry && entry.capabilities.gyro) {
-        device = d;
-        console.log('connectControllerGyro: found granted device:', d.productName);
-        break;
-      }
-    }
+    const gyroable = (d) => { const e = ControllerRegistry.getEntry(d.vendorId, d.productId); return !!(e && e.capabilities.gyro); };
+    // Prefer the handle matching the active gamepad; fall back to the first
+    // gyro-capable device (single-controller case, unchanged).
+    if (wantVp) device = granted.find((d) => d.vendorId === wantVp.vendorId && d.productId === wantVp.productId && gyroable(d));
+    if (!device) device = granted.find(gyroable);
+    if (device) console.log('connectControllerGyro: found granted device:', device.productName);
   } catch (err) {
     console.log('connectControllerGyro: getDevices failed:', err.message);
   }
@@ -933,79 +1067,90 @@ async function connectControllerGyro() {
     console.log('connectControllerGyro: no device found');
     return;
   }
+  await finishGyroConnect(device);
+}
 
-  console.log('connectControllerGyro: connecting to', device.productName,
-    'vid:' + device.vendorId.toString(16), 'pid:' + device.productId.toString(16));
+// Connect a SPECIFIC HID device as the overlay's active gyro/button source.
+// Shared by the auto-connect path and explicit list-selection (which sets
+// _preferredGyroDevice so two identical vid:pid pads don't collide).
+// Phase 3b: the device is ALREADY pooled and driven by the manager (driver,
+// fusion, synthetic all live). "Connecting" now just DESIGNATES that pool entry
+// as the one the overlay shows — no second connection, no eviction, no separate
+// inputreport listener, no app-layer calibration (the entry's fusion self-
+// calibrates). Kept the name/signature so callers (auto-connect, selection) are
+// unchanged.
+async function finishGyroConnect(device) {
+  const forVp = (e) => e.device.vendorId === device.vendorId && e.device.productId === device.productId;
+  const pool = () => [...listManager._hidPool.values()];
+  // Prefer the EXACT pooled handle. A getDevices() handle can be a DIFFERENT JS
+  // object than the pooled one for the SAME physical device — do NOT re-pool it,
+  // that double-opens the device and yields a dead duplicate entry (the "USB DS4
+  // SELECTED but dead" bug). Fall back to a same-vid:pid entry that's actually
+  // RECEIVING parsed reports (hidActiveSince > 0 — a wire-level fact, NOT the
+  // user-facing ACTIVE state, which means the user has interacted with it).
+  let entry = pool().find((e) => e.device === device)
+           || pool().filter(forVp).find((e) => e.hidActiveSince > 0)
+           || pool().find(forVp);
+  if (!entry) {
+    // Genuinely not pooled (e.g. a freshly-granted device) — pool once, then take it.
+    try { await listManager.poolDevice(device); } catch (e) { /* ok */ }
+    entry = pool().find((e) => e.device === device) || pool().find(forVp);
+  }
+  if (!entry) { console.warn('finishGyroConnect: no pool entry for', device.productName); return; }
 
-  // Clean up old device if any
-  if (hidDevice) {
-    hidDevice.removeEventListener('inputreport', handleInputReport);
-    try { await hidDevice.close(); } catch (e) { /* ok */ }
-    hidDevice = null;
-    for (const sib of hidExtraDevices) {
-      sib.removeEventListener('inputreport', handleInputReport);
-      try { await sib.close(); } catch (e) { /* ok */ }
-    }
-    hidExtraDevices = [];
-    if (controllerDriver?.destroy) controllerDriver.destroy();
-    controllerDriver = null;
+  // Steam Controller Puck: the picked handle may be a sibling that never emits
+  // STATE reports — designate the same-vid:pid interface that IS receiving them.
+  if (entry.driver?.constructor?.needsSiblingFanout) {
+    const rx = pool().filter((e) => forVp(e) && e.hidActiveSince > 0);
+    if (rx.length) entry = rx[0];
   }
 
-  controllerDriver = await ControllerRegistry.connect(device);
-  hidDevice = controllerDriver.device;
-  hidDevice.addEventListener('inputreport', handleInputReport);
+  designateEntry(entry);
+  console.log('[designate]', entry.device.productName || (entry.device.vendorId.toString(16) + ':' + entry.device.productId.toString(16)),
+    (entry.driver && entry.driver.connectionType), 'receiving=' + (entry.hidActiveSince > 0));
+}
 
-  // Multi-interface fan-out: requestDevice returns ONE HIDDevice, but
-  // some controllers (Steam Controller Puck) expose multiple interfaces
-  // sharing a vid:pid where only one emits the STATE reports we care
-  // about. Attach handleInputReport to every already-approved sibling
-  // with the same vid:pid so the active one drives the synthetic gamepad
-  // regardless of which the picker handed us. Generic logic — for
-  // DualSense / Switch Pro the usagePage filter in getHIDFilters keeps
-  // siblings out of the approval list, so this is a no-op there.
-  hidExtraDevices = [];
-  try {
-    const approved = await navigator.hid.getDevices();
-    const siblings = approved.filter((d) =>
-      d !== hidDevice && d.vendorId === hidDevice.vendorId && d.productId === hidDevice.productId
-    );
-    for (const sib of siblings) {
-      try {
-        if (!sib.opened) await sib.open();
-        sib.addEventListener('inputreport', handleInputReport);
-        hidExtraDevices.push(sib);
-      } catch (err) {
-        console.log('inputreport fan-out: skipping', sib.productName, '—', err.message);
-      }
-    }
-    if (hidExtraDevices.length > 0) {
-      console.log(`inputreport fan-out: listening on ${hidExtraDevices.length} extra HID handle(s) for ${hidDevice.productName}`);
-    }
-  } catch (err) {
-    console.log('inputreport fan-out: getDevices failed —', err.message);
-  }
-
+// Point the overlay's viz at a pool entry: alias hidDevice/controllerDriver/
+// syntheticGamepad/gyroFusion to it, apply the overlay's gravity/yaw prefs to
+// its fusion, and run the post-connect hooks. The manager keeps feeding it.
+function designateEntry(entry) {
+  selectedEntry = entry;
+  hidDevice = entry.device;
+  controllerDriver = entry.driver;
+  syntheticGamepad = entry.synthetic;
+  gyroFusion = entry.fusion;
+  gyroFusion.gravityMode = GRAVITY_MODES[gravityMode] || 0;
+  gyroFusion.yawReturnHalfLife = YAW_RETURN_MODES[yawReturnMode] ?? 0;
   gyroActive = true;
   gyroPermitted = true;
   connectGyroBtn.textContent = 'Connected';
   updateGyroToggle();
   showGyroHud();
-  console.log('Gyro connected:', device.productName);
-
-  if (isPuckDevice(device)) onPuckConnected();
-  else onPuckDisconnected();
-
+  // The entry's fusion has been integrating since it was POOLED (boot), so its
+  // orientation carries accumulated drift and its bias was calibrated whenever
+  // the pad happened to be still (or not) during pooling. Reset the orientation
+  // for a clean start and re-run the one-shot bias calibration NOW (on selection,
+  // when the pad is usually at rest) for a tight window — matching the old
+  // connect-time behavior. Continuous stillness + manual L3+R4 refine from there.
+  gyroFusion.reset();
   startCalibration();
-
-  // The driver's init() has run an IMU-layout probe (PlayStation family
-  // only, for now) and set _detectedImuFamily if a wire-level signature
-  // matched a known family. When this disagrees with the profile we
-  // loaded a moment ago against gamepad.id alone — e.g. we loaded
-  // 'dualsense' because that's the first 054c:09cc match, but the
-  // pad is actually a GameSir clone — swap the visualizer to the
-  // family-matched entry's profile. Honors the dropdown override so
-  // an explicit user choice isn't undone.
+  if (isPuckDevice(hidDevice)) onPuckConnected();
+  else onPuckDisconnected();
   maybeSwapProfileAfterImuProbe();
+}
+
+// Stop showing the current controller (device stays pooled + live). Used on
+// disconnect / before switching. Falls back to the neutral idle fusion.
+function undesignateEntry() {
+  selectedEntry = null;
+  hidDevice = null;
+  controllerDriver = null;
+  syntheticGamepad = null;
+  gyroFusion = _idleFusion;
+  hidExtraDevices = [];
+  gyroActive = false;
+  gyroPermitted = false;
+  onPuckDisconnected();
 }
 
 /**
@@ -1051,28 +1196,13 @@ function maybeSwapProfileAfterImuProbe() {
  * Disconnect gyro and reset state.
  */
 async function disconnectGyro() {
-  if (hidDevice) {
-    hidDevice.removeEventListener('inputreport', handleInputReport);
-    try { await hidDevice.close(); } catch (e) { /* ok */ }
-    hidDevice = null;
-    for (const sib of hidExtraDevices) {
-      sib.removeEventListener('inputreport', handleInputReport);
-      try { await sib.close(); } catch (e) { /* ok */ }
-    }
-    hidExtraDevices = [];
-    onPuckDisconnected();
-  }
-  if (controllerDriver) {
-    if (controllerDriver.destroy) controllerDriver.destroy();
-    controllerDriver = null;
-  }
-  gyroActive = false;
-  gyroPermitted = false;
-  syntheticGamepad = null;
+  // Phase 3b: the device stays pooled + live (manager owns it) — we just stop
+  // showing it. NEVER reset the entry's fusion here (the manager keeps using it);
+  // undesignateEntry points gyroFusion back at the neutral _idleFusion first.
+  undesignateEntry();
   _firstReportLogged = false;
-  // Shared SensorFusion owns orientation + all intermediate state.
-  gyroFusion.reset();
-  gyroFusion.resetBias();
+  _idleFusion.reset();
+  _idleFusion.resetBias();
   calibrating = false;
   calibSamples = [];
   calibRetries = 0;
@@ -1084,8 +1214,153 @@ async function disconnectGyro() {
 
 // ── Main loop ──
 
+// ── Controllers list render (Phase 1: read-only list + live dots) ──
+function _padActive(gp) {
+  if (!gp) return false;
+  for (const b of (gp.buttons || [])) if (b && (b.pressed || (b.value || 0) > 0.5)) return true;
+  for (const a of (gp.axes || [])) if (Math.abs(a) > 0.5) return true;
+  return false;
+}
+function _vpStr(vp) { return vp ? ((vp.vendorId || 0).toString(16).padStart(4, '0') + ':' + (vp.productId || 0).toString(16).padStart(4, '0')) : '—'; }
+function _ctrlName(vp, fallback) {
+  if (vp) { const e = ControllerRegistry.getEntry(vp.vendorId, vp.productId); if (e && e.name) return e.name; }
+  return fallback || 'Controller';
+}
+// Three states: SELECTED (the one and only controller driving the overlay) >
+// ACTIVE (interacted at least once) > AVAILABLE (connected, idle).
+function overlayControllerRows() {
+  const rows = [];
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const stateFor = (key, isActive) => { if (isActive) _everActive.add(key); return _everActive.has(key) ? 'ACTIVE' : 'AVAILABLE'; };
+  if (hidDevice) {                                   // SELECTED — shown in the overlay
+    const vp = { vendorId: hidDevice.vendorId, productId: hidDevice.productId };
+    const conn = (controllerDriver && controllerDriver.connectionType) || 'hid';
+    rows.push({ key: 'active', sortId: deviceIdFor(hidDevice), name: _ctrlName(vp, hidDevice.productName), state: 'SELECTED',
+      conn, vp, serial: serialForDevice(vp, conn), active: _padActive(readGamepad()), selected: true });
+  }
+  // Pool entries → rows. A fan-out device (Steam Controller Puck: 5 same-vid:pid
+  // HID interfaces on ONE physical unit) rolls up to a SINGLE row; other handles
+  // are one row each. Siblings of the SELECTED controller are hidden.
+  // TODO: multiple Steam Controllers on one Puck will need per-unit rollup (issue).
+  const groups = new Map();
+  for (const entry of listManager._hidPool.values()) {
+    const d = entry.device;
+    if (d === hidDevice) continue;   // the SELECTED device is now pooled too — shown as its own row above
+    const isFanout = !!(entry.driver && entry.driver.constructor && entry.driver.constructor.needsSiblingFanout);
+    if (isFanout && hidDevice && d.vendorId === hidDevice.vendorId && d.productId === hidDevice.productId) continue;
+    const gk = isFanout ? ('fan:' + d.vendorId + ':' + d.productId) : ('dev:' + deviceIdFor(d));
+    const a = _padActive(entry.synthetic);
+    const g = groups.get(gk);
+    if (g) { g.active = g.active || a; } else groups.set(gk, { device: d, entry, active: a });
+  }
+  for (const g of groups.values()) {
+    const d = g.device, vp = { vendorId: d.vendorId, productId: d.productId };
+    const key = 'h:' + deviceIdFor(d), a = g.active;
+    const conn = (g.entry.driver && g.entry.driver.connectionType) || 'hid';
+    rows.push({ key, sortId: deviceIdFor(d), name: _ctrlName(vp, d.productName), state: stateFor(key, a),
+      conn, vp, serial: serialForDevice(vp, conn), active: a });
+  }
+  for (const gp of pads) {                            // gamepad-only pads not already shown
+    if (!gp) continue;
+    const vp = ControllerRegistry.parseGamepadVendorProduct(gp.id);
+    if (hidDevice && vp && hidDevice.vendorId === vp.vendorId && hidDevice.productId === vp.productId) continue;
+    if (vp && listManager._findPoolEntryByVidPid(vp.vendorId, vp.productId)) continue;
+    const key = 'g:' + gp.index, a = _padActive(gp);
+    rows.push({ key, sortId: 100000 + gp.index, name: _ctrlName(vp, 'Controller'), state: stateFor(key, a), conn: 'gamepad', vp, serial: serialForDevice(vp, 'gamepad'), active: a });
+  }
+  // Stable order by first-sighting (deviceId) so SELECTING a controller does NOT
+  // reorder the list — the row you clicked stays put instead of jumping to top.
+  rows.sort((x, y) => x.sortId - y.sortId);
+  return rows;
+}
+
+// Select a controller from the detached list to drive the overlay (Phase 2).
+async function selectController(key) {
+  if (!key || key === 'active') return;              // already the SELECTED one
+  if (key.startsWith('g:')) {
+    const gp = (navigator.getGamepads() || [])[parseInt(key.slice(2), 10)];
+    if (gp) await switchController(gp);              // model + gyro auto-matched to this pad
+    return;
+  }
+  if (key.startsWith('h:')) {
+    const id = key.slice(2);
+    let device = null;
+    for (const entry of listManager._hidPool.values()) { if (String(deviceIdFor(entry.device)) === id) { device = entry.device; break; } }
+    if (!device) return;
+    // Stub carries a proper gamepad-id (vid:pid) so the MODEL + labels resolve;
+    // preferredDevice binds THIS exact HID handle for gyro/buttons.
+    const hx = (n) => n.toString(16).padStart(4, '0');
+    const stub = {
+      id: `${device.productName || 'Controller'} (STANDARD GAMEPAD Vendor: ${hx(device.vendorId)} Product: ${hx(device.productId)})`,
+      index: -1, axes: [0, 0, 0, 0], buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })),
+    };
+    await switchController(stub, device);
+    if (!syntheticGamepad) syntheticGamepad = createSyntheticGamepad(device.productName);
+    // Adopt a matching Gamepad pad ONLY when it's unambiguous (exactly one pad
+    // for this vid:pid). With two identical pads (a GameSir + a real DS4, both
+    // 054c:05c4) we can't tell which is ours, so drive buttons from THIS exact
+    // HID handle's synthetic instead — otherwise pressing one lights both rows.
+    const matchPads = (navigator.getGamepads() || []).filter((gp) => {
+      if (!gp) return false;
+      const vp = ControllerRegistry.parseGamepadVendorProduct(gp.id);
+      return vp && vp.vendorId === device.vendorId && vp.productId === device.productId;
+    });
+    gamepadIndex = matchPads.length === 1 ? matchPads[0].index : null;
+  }
+}
+// Forward the controller rows to the detached "Controllers" window (no-op if it
+// isn't open — main.js drops the frame). Serializable rows only (no DOM/refs).
+function forwardControllerList() {
+  if (!(window.electronAPI && window.electronAPI.sendHudState)) return;
+  try { window.electronAPI.sendHudState('controllers', overlayControllerRows()); } catch (e) { /* window closed */ }
+}
+// Drop phantom handles: a granted device that has NEVER delivered a raw report
+// (lastRawReportAt===0) after a grace window is a stale/half-open grant, not a
+// live controller (the "USB DS4 SELECTED but rawReportAt=0" case). The manager
+// does this in ingestFrame, which the overlay doesn't call — so do it here. A
+// physically-present controller streams within ms, so 3s is safe.
+const _PHANTOM_MS = 3000;
+function evictPhantoms(now) {
+  for (const entry of [...listManager._hidPool.values()]) {
+    if (entry.lastRawReportAt === 0 && typeof entry.pooledAt === 'number' && (now - entry.pooledAt) > _PHANTOM_MS) {
+      const dev = entry.device;
+      console.log('[overlay] evicting phantom (no reports in ' + Math.round((now - entry.pooledAt)) + 'ms):',
+        dev.productName || (dev.vendorId.toString(16) + ':' + dev.productId.toString(16)));
+      if (dev === hidDevice) undesignateEntry();   // was SELECTED — drop it, let auto-adopt find a live one
+      try { listManager._evictFromPool(dev); } catch (e) { /* ok */ }
+    }
+  }
+}
+// Stalled-stream recovery: a SELECTED handle can stop delivering reports mid-
+// session (seen on a USB DS4 — lastRawReportAt FREEZES at a non-zero value while
+// other controllers keep advancing) yet stay "connected" for a long time. The
+// overlay would show frozen gyro/buttons until Chromium finally fires disconnect.
+// Detect the freeze (no new raw report for a window) and re-init the driver to
+// kick the stream; back off between attempts so we don't churn a live-but-idle-
+// looking device. (A device that never streamed at all is handled by evictPhantoms.)
+let _streamWatchRaw = -1, _streamWatchAt = 0, _streamReinitAt = 0;
+function checkStalledStream(now) {
+  if (!selectedEntry || !gyroActive) { _streamWatchRaw = -1; return; }
+  const raw = selectedEntry.lastRawReportAt | 0;
+  if (raw !== _streamWatchRaw) { _streamWatchRaw = raw; _streamWatchAt = now; return; }  // still advancing
+  if (raw > 0 && (now - _streamWatchAt) > 1500 && (now - _streamReinitAt) > 4000) {
+    _streamReinitAt = now;
+    console.warn('[overlay] SELECTED stream stalled', Math.round(now - _streamWatchAt) + 'ms — re-initing driver:',
+      selectedEntry.device.productName || (selectedEntry.device.vendorId.toString(16) + ':' + selectedEntry.device.productId.toString(16)));
+    if (selectedEntry._reinitDriver) { try { selectedEntry._reinitDriver(); } catch (e) { /* ok */ } }
+  }
+}
+let _ovlListThrottle = 0, _phantomThrottle = 0, _streamThrottle = 0, _adoptThrottle = 0;
+
 function loop() {
   requestAnimationFrame(loop);
+  const _now = performance.now();
+  if (_now - _ovlListThrottle > 120) { _ovlListThrottle = _now; forwardControllerList(); }
+  if (_now - _phantomThrottle > 1000) { _phantomThrottle = _now; evictPhantoms(_now); }
+  if (_now - _streamThrottle > 500) { _streamThrottle = _now; checkStalledStream(_now); }
+  // Auto-adopt a HID controller from the pool when nothing is SELECTED (startup /
+  // after a disconnect). Cheap: bails immediately once something is selected.
+  if (!hidDevice && _now - _adoptThrottle > 200) { _adoptThrottle = _now; autoAdoptFromPool(); }
   if (!modelReady) return;
 
   const gamepad = readGamepad();
@@ -1113,6 +1388,19 @@ function loop() {
         }
       });
       checkCombo(gamepad, 'recenter', recenterHeading);
+    }
+  }
+
+  // Report-level extras (touchpad/grips) from the SELECTED pool entry — the
+  // manager stores the last parsed values on the entry (Phase 3b; handleInputReport
+  // no longer runs). Forward them the same way it used to.
+  if (selectedEntry) {
+    if (selectedEntry._lastTouchpad) overlay.updateTouchpad(selectedEntry._lastTouchpad, selectedEntry._lastTouchpadButton);
+    const grips = selectedEntry._lastGrips;
+    if (grips) {
+      _lastGrips = grips;
+      if (overlay.setGripState) overlay.setGripState(grips);
+      updateGripHud(grips);
     }
   }
 
@@ -1257,8 +1545,9 @@ function toggleSettings(source) {
 
 async function toggleGyro() {
   if (gyroActive) {
+    // Just stop DISPLAYING the gyro — never reset the entry's fusion (the manager
+    // owns it and keeps feeding it; resetting would fight the shared state).
     gyroActive = false;
-    gyroFusion.reset();
     updateGyroToggle();
     hideGyroHud();
   } else if (gyroPermitted && hidDevice) {
@@ -1471,23 +1760,20 @@ document.querySelectorAll('[data-remap]').forEach(btn => {
 });
 
 function readGamepad() {
-  // Force-prefer the HID-synthesized gamepad whenever we have a live
-  // Bluetooth driver. On Electron 33 (Chromium 130) the Gamepad API
-  // keeps returning a stale Gamepad object for the slot even after
-  // DualSense has switched to 0x31 full-report mode — frozen axes and
-  // buttons that never update. On Chrome/Mac the slot comes back null
-  // and the legacy "real-first, synthetic-fallback" path below handles
-  // it, but inside Electron we have to override the preference or the
-  // stale slot wins and sticks/buttons silently stop working. Same
-  // issue and same fix as the main game's InputManager.getGamepadState
-  // (petegordon/tandemonium#199).
-  if (controllerDriver &&
-      controllerDriver.connectionType === 'bluetooth' &&
-      syntheticGamepad) {
+  // ── WebHID-authoritative (Phase 3) ──
+  // Whenever we have a live HID driver + synthetic, that synthetic IS the source
+  // of truth — for every HID controller, not just Bluetooth. It carries the
+  // COMPLETE button map (Switch Capture / DualSense mic / back paddles), reads
+  // the exact physical handle (so two identical vid:pid pads never cross-wire),
+  // and is immune to the Gamepad API's stale-slot freezes and unmapped buttons
+  // (e.g. Chromium never surfacing the Switch Pro Capture button). The Gamepad
+  // API below is now only a FALLBACK for XInput-only pads (Xbox wired/dongle)
+  // that expose no HID input interface — those have no controllerDriver.
+  if (controllerDriver && syntheticGamepad) {
     return syntheticGamepad;
   }
 
-  // Preferred source: the real Gamepad API, if it still owns this slot.
+  // XInput-only fallback: no HID driver → read the Gamepad API slot.
   if (gamepadIndex !== null) {
     const gp = navigator.getGamepads()[gamepadIndex];
     if (gp) return gp;
@@ -1501,19 +1787,14 @@ function readGamepad() {
     return syntheticGamepad;
   }
 
-  // No slot yet and no HID → probe the Gamepad API for a fresh connection.
-  if (gamepadIndex === null) {
-    const gamepads = navigator.getGamepads();
-    for (let i = 0; i < gamepads.length; i++) {
-      if (gamepads[i]) {
-        switchController(gamepads[i]);
-        return null;
-      }
-    }
-    return null;
-  }
+  // Nothing SELECTED → no input this frame. Adoption is NOT done here anymore:
+  // HID controllers are auto-adopted from the pool ONLY when engaged
+  // (autoAdoptFromPool), and XInput pads via gamepadconnected. So a mere pad
+  // being present never auto-selects — the "No Controller" splash stays until the
+  // user presses a controller or clicks its row.
+  if (gamepadIndex === null) return null;
 
-  // Had a slot, the Gamepad API dropped it, and we have no HID fallback.
+  // Had an XInput slot, the Gamepad API dropped it.
   onGamepadDisconnected(gamepadIndex);
   return null;
 }
@@ -1577,7 +1858,7 @@ function updateSyntheticFromParsed(parsed) {
     set(14, b.dpadLeft);
     set(15, b.dpadRight);
     set(16, b.ps);
-    set(17, b.mic || b.quickAccess); // DualSense mic / Steam Controller "…" share slot 17
+    set(17, b.mic || b.quickAccess || b.capture); // DualSense mic / Steam "…" / Switch Pro Capture share slot 17
   }
 
   // Back paddles (L4/L5/R4/R5) — no Standard-Gamepad index, so park them in
@@ -1791,15 +2072,17 @@ function recenterHeading() {
 }
 
 function startCalibration() {
-  calibrating = true;
-  calibSamples = [];
-  calibRetries = 0;
-  resetGyroState();
-  // NB: calibration must NOT touch the camera. It only re-zeros gyro bias +
-  // orientation; snapping the view to a preset here stomped the user's manual
-  // zoom/pan every time they recalibrated (#94). The camera keeps its own
-  // preset controls; leave the current view alone.
-  showCalibHint('Calibrating...', null);
+  // Phase 3b: the SELECTED pool entry's fusion self-calibrates — SensorFusion
+  // .startCalibration has the same variance/retry logic this used to duplicate
+  // (and it's what the game uses). Trigger it; the manager drives the samples.
+  // Reset orientation (zero the displayed pose) + bias so a recalibrate returns
+  // to the zero positions (the old resetGyroState behavior — #94: no camera).
+  if (gyroFusion) {
+    if (gyroFusion.reset) gyroFusion.reset();
+    if (gyroFusion.resetBias) gyroFusion.resetBias();
+    if (gyroFusion.startCalibration) gyroFusion.startCalibration(controllerDriver?.connectionType);
+  }
+  showCalibHint('Calibrating...', 2500);
 }
 
 function finishCalibration() {
@@ -2134,6 +2417,25 @@ if (yawReturnSelect) {
 
 const recenterBtn = document.getElementById('recenter-btn');
 if (recenterBtn) recenterBtn.addEventListener('click', recenterHeading);
+
+// Pop out the movable Controllers list window (opaque panel — no green screen).
+const ovlCtrlPopoutBtn = document.getElementById('ovl-ctrl-popout');
+if (ovlCtrlPopoutBtn && window.electronAPI?.openHudWindow) {
+  ovlCtrlPopoutBtn.addEventListener('click', () => {
+    window.electronAPI.openHudWindow('controllers', currentControllerType, { on: false });
+    // Gesture-backed serial scan: requestDevice needs user activation, so a boot
+    // timer can't do it. This click IS a gesture — its select-hid-device handler
+    // upserts EVERY present device's serial into the inventory the window shows.
+    if (navigator.hid && navigator.userAgent.includes('Electron')) {
+      navigator.hid.requestDevice({ filters: ControllerRegistry.getHIDFilters() }).catch(() => {});
+    }
+  });
+}
+// A row was clicked in the detached Controllers window → switch which controller
+// drives this overlay (auto-model; the Model dropdown still overrides).
+if (window.electronAPI?.onControllerSelect) {
+  window.electronAPI.onControllerSelect((p) => { if (p && p.key) selectController(p.key); });
+}
 
 const opacitySlider = document.getElementById('opacity-slider');
 const opacityValue = document.getElementById('opacity-value');
