@@ -1084,7 +1084,17 @@ async function finishGyroConnect(device) {
   }
 
   designateEntry(entry);
-  console.log('Gyro designated:', entry.device.productName, '(receiving:', entry.hidActiveSince > 0, ')');
+  console.log('[designate]', entry.device.productName,
+    'conn=' + (entry.driver && entry.driver.connectionType),
+    'rawReportAt=' + (entry.lastRawReportAt | 0),      // >0 → device IS streaming to this handle
+    'parsedAt=' + (entry.hidActiveSince | 0),          // >0 → driver.parseReport is producing data
+    'poolSize=' + listManager._hidPool.size);
+  // Diagnostic: dump every pooled entry so a dead/duplicate handle is obvious.
+  for (const e of listManager._hidPool.values()) {
+    console.log('   pool·', e.device.productName, (e.device.vendorId).toString(16) + ':' + (e.device.productId).toString(16),
+      'conn=' + (e.driver && e.driver.connectionType), 'rawAt=' + (e.lastRawReportAt | 0), 'parsedAt=' + (e.hidActiveSince | 0),
+      e.device === entry.device ? '  <- SELECTED' : '');
+  }
 }
 
 // Point the overlay's viz at a pool entry: alias hidDevice/controllerDriver/
@@ -2022,11 +2032,13 @@ function startCalibration() {
   // Phase 3b: the SELECTED pool entry's fusion self-calibrates — SensorFusion
   // .startCalibration has the same variance/retry logic this used to duplicate
   // (and it's what the game uses). Trigger it; the manager drives the samples.
-  if (gyroFusion && gyroFusion.startCalibration) {
-    gyroFusion.startCalibration(controllerDriver?.connectionType);
+  // Reset orientation (zero the displayed pose) + bias so a recalibrate returns
+  // to the zero positions (the old resetGyroState behavior — #94: no camera).
+  if (gyroFusion) {
+    if (gyroFusion.reset) gyroFusion.reset();
+    if (gyroFusion.resetBias) gyroFusion.resetBias();
+    if (gyroFusion.startCalibration) gyroFusion.startCalibration(controllerDriver?.connectionType);
   }
-  // NB: calibration must NOT touch the camera (#94). Brief hint; the fusion
-  // finishes on its own (no app-layer sample loop anymore).
   showCalibHint('Calibrating...', 2500);
 }
 
