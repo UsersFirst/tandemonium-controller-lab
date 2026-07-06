@@ -684,6 +684,9 @@ async function init() {
   await initControllerList();
   initSerialInventory();
 
+  // Start the last-used grace window (#104) now that the pool is populating.
+  _lastUsedDeadline = performance.now() + LAST_USED_GRACE_MS;
+
   requestAnimationFrame(loop);
 
   // Adopt an already-connected XInput pad at startup (Xbox has no HID interface,
@@ -894,6 +897,29 @@ function onGamepadDisconnected(index) {
   overlay.setVisible(false);
 }
 
+// ── Last-used controller default (issue #104) ─────────────────────────────
+// Persist the last SELECTED pad's identity so the next launch can auto-select
+// it. Baseline identity is vid:pid (the browser can't see a per-unit serial —
+// an Electron serial refinement is a follow-up). On launch the remembered pad
+// gets a grace window to enumerate (BT/wireless are slow) before we fall back
+// to opening the AVAILABLE list.
+const LAST_USED_GRACE_MS = 6000;
+function readLastUsed() {
+  try { return JSON.parse(localStorage.getItem('overlay:lastController') || 'null'); }
+  catch { return null; }
+}
+let _lastUsed = readLastUsed();
+let _lastUsedDeadline = 0;           // set in init: performance.now() + grace
+let _lastUsedFallbackDone = false;
+function rememberLastUsed(device) {
+  if (!device) return;
+  _lastUsed = { v: device.vendorId, p: device.productId, name: device.productName || '' };
+  try { localStorage.setItem('overlay:lastController', JSON.stringify(_lastUsed)); } catch { /* ignore */ }
+}
+function matchesLastUsed(device) {
+  return !!(_lastUsed && device && device.vendorId === _lastUsed.v && device.productId === _lastUsed.p);
+}
+
 // Input-driven auto-adopt from the WebHID pool: when NOTHING is SELECTED,
 // designate the controller the user has actually ENGAGED (a pool entry that has
 // been pressed), else the first receiving gyro-capable entry. This is the ONLY
@@ -916,6 +942,31 @@ function autoAdoptFromPool() {
   const stub = { id: `${d.productName || 'Controller'} (STANDARD GAMEPAD Vendor: ${hx(d.vendorId)} Product: ${hx(d.productId)})`,
     index: -1, axes: [0, 0, 0, 0], buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })) };
   switchController(stub, d);
+}
+
+// Launch default (issue #104): within a grace window after boot, auto-SELECT the
+// last-used controller as soon as it's RECEIVING — no button press required
+// (this relaxes the input-driven policy ONLY for the remembered pad). A real
+// press on any pad still wins, because press-based autoAdoptFromPool runs first
+// in the loop and sets hidDevice before this. After the window, if the pad never
+// showed, open the AVAILABLE list so the user can pick.
+function tryAdoptLastUsed(now) {
+  if (hidDevice || _preferredGyroDevice || switchingController) return;
+  if (!_lastUsed) { _lastUsedFallbackDone = true; return; } // first-ever run: nothing to restore
+  if (now <= _lastUsedDeadline) {
+    const entry = [...listManager._hidPool.values()].find(
+      (e) => e.hidActiveSince > 0 && matchesLastUsed(e.device));
+    if (!entry) return;                       // keep waiting within the window
+    const d = entry.device, hx = (n) => n.toString(16).padStart(4, '0');
+    const stub = { id: `${d.productName || 'Controller'} (STANDARD GAMEPAD Vendor: ${hx(d.vendorId)} Product: ${hx(d.productId)})`,
+      index: -1, axes: [0, 0, 0, 0], buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })) };
+    console.log('[last-used] auto-selecting remembered controller', d.productName || `${hx(d.vendorId)}:${hx(d.productId)}`);
+    switchController(stub, d);
+  } else if (!_lastUsedFallbackDone) {
+    _lastUsedFallbackDone = true;
+    console.log('[last-used] remembered controller not available after grace — opening the list');
+    try { window.electronAPI?.openHudWindow?.('controllers', currentControllerType, { on: false }); } catch { /* no-op */ }
+  }
 }
 
 // ── Gamepad events ──
@@ -1137,6 +1188,7 @@ function designateEntry(entry) {
   if (isPuckDevice(hidDevice)) onPuckConnected();
   else onPuckDisconnected();
   maybeSwapProfileAfterImuProbe();
+  rememberLastUsed(entry.device); // #104: this pad becomes the launch default
 }
 
 // Stop showing the current controller (device stays pooled + live). Used on
@@ -1360,7 +1412,11 @@ function loop() {
   if (_now - _streamThrottle > 500) { _streamThrottle = _now; checkStalledStream(_now); }
   // Auto-adopt a HID controller from the pool when nothing is SELECTED (startup /
   // after a disconnect). Cheap: bails immediately once something is selected.
-  if (!hidDevice && _now - _adoptThrottle > 200) { _adoptThrottle = _now; autoAdoptFromPool(); }
+  if (!hidDevice && _now - _adoptThrottle > 200) {
+    _adoptThrottle = _now;
+    autoAdoptFromPool();                    // press-based (a real press wins)
+    if (!hidDevice) tryAdoptLastUsed(_now);  // else restore the last-used pad within grace (#104)
+  }
   if (!modelReady) return;
 
   const gamepad = readGamepad();
