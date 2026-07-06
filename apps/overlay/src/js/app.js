@@ -686,18 +686,11 @@ async function init() {
 
   requestAnimationFrame(loop);
 
-  // Check for already-connected gamepad (may have connected before
-  // our event listeners were attached). Same approach as the game's
-  // pollGamepad() fallback in input-manager.js.
-  const foundViaGamepadAPI = checkForExistingGamepad();
-
-  // If the Gamepad API has nothing, fall back to probing WebHID directly.
-  // This recovers the cold-start case where a DualSense is still in 0x31
-  // full-report mode from a previous session — Gamepad API is blind to it,
-  // but navigator.hid.getDevices() still lists the granted device.
-  if (!foundViaGamepadAPI) {
-    bootstrapFromHID();
-  }
+  // Adopt an already-connected XInput pad at startup (Xbox has no HID interface,
+  // so it can't be pool-adopted). HID controllers are NOT auto-selected at
+  // startup — nothing is SELECTED until the user ENGAGES one (autoAdoptFromPool)
+  // or clicks its row, so the "No Controller" splash stays until then.
+  checkForExistingGamepad();
 }
 
 /**
@@ -758,11 +751,16 @@ function detectInitialController() {
 function checkForExistingGamepad() {
   const gamepads = navigator.getGamepads();
   for (let i = 0; i < gamepads.length; i++) {
-    if (gamepads[i]) {
-      console.log('Found existing gamepad at startup:', gamepads[i].id);
-      switchController(gamepads[i]);
-      return true;
-    }
+    const gp = gamepads[i];
+    if (!gp) continue;
+    // Skip HID controllers — they're adopted from the pool only when engaged, so
+    // an untouched pad never auto-selects. Only XInput pads (not in the pool)
+    // are adopted at startup here.
+    const vp = ControllerRegistry.parseGamepadVendorProduct(gp.id);
+    if (vp && listManager._findPoolEntryByVidPid(vp.vendorId, vp.productId)) continue;
+    console.log('Found existing XInput gamepad at startup:', gp.id);
+    switchController(gp);
+    return true;
   }
   return false;
 }
@@ -896,16 +894,40 @@ function onGamepadDisconnected(index) {
   overlay.setVisible(false);
 }
 
+// Input-driven auto-adopt from the WebHID pool: when NOTHING is SELECTED,
+// designate the controller the user has actually ENGAGED (a pool entry that has
+// been pressed), else the first receiving gyro-capable entry. This is the ONLY
+// auto-SELECT path for HID controllers — so a controller's Gamepad-API pad merely
+// CONNECTING (e.g. a Switch Pro BT pad appearing a second after boot) never
+// auto-selects an untouched controller. Pressing a controller makes it ACTIVE,
+// not SELECTED; SELECTED only changes at startup, on disconnect re-adopt, or by
+// explicit list-click. Runs each frame from the loop while nothing is selected.
+function autoAdoptFromPool() {
+  if (hidDevice || _preferredGyroDevice || switchingController) return;
+  const pool = [...listManager._hidPool.values()];
+  const gyroable = (e) => { const en = ControllerRegistry.getEntry(e.device.vendorId, e.device.productId); return !!(en && en.capabilities.gyro); };
+  // ONLY adopt a controller the user has actually ENGAGED (pressed a button on).
+  // An untouched controller — however it connects — must never auto-SELECT; the
+  // user picks it by pressing it or clicking its row. This is what stopped the
+  // idle Switch Pro from grabbing SELECTED after a DS4 press.
+  const entry = pool.find((e) => e._everPressed && gyroable(e) && e.hidActiveSince > 0);
+  if (!entry) return;
+  const d = entry.device, hx = (n) => n.toString(16).padStart(4, '0');
+  const stub = { id: `${d.productName || 'Controller'} (STANDARD GAMEPAD Vendor: ${hx(d.vendorId)} Product: ${hx(d.productId)})`,
+    index: -1, axes: [0, 0, 0, 0], buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })) };
+  switchController(stub, d);
+}
+
 // ── Gamepad events ──
 
 window.addEventListener('gamepadconnected', (e) => {
-  // Only auto-adopt a newly-visible pad when NOTHING is selected yet. Chromium
-  // reveals a Bluetooth controller on its first button press (firing this
-  // event), so once a controller is SELECTED, pressing a different one must NOT
-  // steal the selection — it just shows up as ACTIVE in the list. Re-adoption
-  // resumes automatically after the current controller disconnects (hidDevice
-  // cleared). Explicit list-selection (selectController) bypasses this guard.
   if (hidDevice || gyroActive || switchingController || _preferredGyroDevice) return;
+  // A HID controller is adopted via the POOL (autoAdoptFromPool), NOT its
+  // Gamepad-API pad connecting — otherwise a Switch Pro BT pad appearing a second
+  // after boot would auto-select an untouched controller. Only XInput pads (Xbox,
+  // no HID interface, so not in the pool) are adopted through the Gamepad API.
+  const vp = ControllerRegistry.parseGamepadVendorProduct(e.gamepad.id);
+  if (vp && listManager._findPoolEntryByVidPid(vp.vendorId, vp.productId)) return;
   switchController(e.gamepad);
 });
 
@@ -1337,7 +1359,7 @@ function checkStalledStream(now) {
     if (selectedEntry._reinitDriver) { try { selectedEntry._reinitDriver(); } catch (e) { /* ok */ } }
   }
 }
-let _ovlListThrottle = 0, _phantomThrottle = 0, _streamThrottle = 0;
+let _ovlListThrottle = 0, _phantomThrottle = 0, _streamThrottle = 0, _adoptThrottle = 0;
 
 function loop() {
   requestAnimationFrame(loop);
@@ -1345,6 +1367,9 @@ function loop() {
   if (_now - _ovlListThrottle > 120) { _ovlListThrottle = _now; forwardControllerList(); }
   if (_now - _phantomThrottle > 1000) { _phantomThrottle = _now; evictPhantoms(_now); }
   if (_now - _streamThrottle > 500) { _streamThrottle = _now; checkStalledStream(_now); }
+  // Auto-adopt a HID controller from the pool when nothing is SELECTED (startup /
+  // after a disconnect). Cheap: bails immediately once something is selected.
+  if (!hidDevice && _now - _adoptThrottle > 200) { _adoptThrottle = _now; autoAdoptFromPool(); }
   if (!modelReady) return;
 
   const gamepad = readGamepad();
@@ -1771,25 +1796,14 @@ function readGamepad() {
     return syntheticGamepad;
   }
 
-  // No slot yet and no HID → probe the Gamepad API for a fresh connection.
-  // BUT only when nothing is connected/pending: if a controller is already
-  // SELECTED (hidDevice) or a selection is in flight (_preferredGyroDevice /
-  // switchingController), probing here would auto-switch to whatever pad is
-  // present and STEAL the selection — the "clicked it but it went Active not
-  // Selected" bug. In that case just yield no input this frame.
-  if (gamepadIndex === null) {
-    if (hidDevice || _preferredGyroDevice || switchingController) return null;
-    const gamepads = navigator.getGamepads();
-    for (let i = 0; i < gamepads.length; i++) {
-      if (gamepads[i]) {
-        switchController(gamepads[i]);
-        return null;
-      }
-    }
-    return null;
-  }
+  // Nothing SELECTED → no input this frame. Adoption is NOT done here anymore:
+  // HID controllers are auto-adopted from the pool ONLY when engaged
+  // (autoAdoptFromPool), and XInput pads via gamepadconnected. So a mere pad
+  // being present never auto-selects — the "No Controller" splash stays until the
+  // user presses a controller or clicks its row.
+  if (gamepadIndex === null) return null;
 
-  // Had a slot, the Gamepad API dropped it, and we have no HID fallback.
+  // Had an XInput slot, the Gamepad API dropped it.
   onGamepadDisconnected(gamepadIndex);
   return null;
 }
