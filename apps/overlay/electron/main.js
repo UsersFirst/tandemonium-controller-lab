@@ -115,8 +115,11 @@ function upsertHidController(d, connected) {
 function hidControllerList() { return [...hidControllers.values()]; }
 
 function broadcastHidControllers() {
-  if (inventoryWindow && !inventoryWindow.isDestroyed()) {
-    inventoryWindow.webContents.send('hid-controllers-snapshot', hidControllerList());
+  const list = hidControllerList();
+  // The inventory window and the lobby both render this (the lobby shows each
+  // seat's per-unit serial/MAC — see its Controllers panel).
+  for (const w of [inventoryWindow, mainWindow]) {
+    if (w && !w.isDestroyed()) w.webContents.send('hid-controllers-snapshot', list);
   }
 }
 
@@ -357,6 +360,7 @@ app.whenReady().then(() => {
     gyro:   { file: 'gyro-window.html',        width: 260, height: 260 },
     axis:   { file: 'axis-window.html',        width: 280, height: 90 },
     roll:   { file: 'roll-window.html',        width: 240, height: 170 },
+    controllers: { file: 'controllers-window.html', width: 320, height: 460 },
   };
 
   ipcMain.handle('open-hud-window', async (_event, { kind, profile, greenScreen }) => {
@@ -421,6 +425,11 @@ app.whenReady().then(() => {
   ipcMain.on('hud-state', (_event, { kind, state }) => {
     const w = hudWindows[kind];
     if (w && !w.isDestroyed()) w.webContents.send('hud-state-update', state);
+  });
+
+  // Controllers window → main overlay: a row was clicked; switch the shown pad.
+  ipcMain.on('controller-select', (_event, payload) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-select', payload);
   });
 
   // A detached window's close button uses this to close itself (frameless
