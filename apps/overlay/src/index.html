@@ -641,6 +641,25 @@
     fill: none;
     opacity: 0.85;
   }
+  /* Text under the No-Controller emoji — makes the not-SELECTED state explicit
+     (the emoji alone under-communicated it). See #104. */
+  #no-controller .splash-title {
+    margin-top: 1.5rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #e8e8ee;
+    letter-spacing: 0.02em;
+  }
+  #no-controller .splash-sub {
+    margin-top: 0.5rem;
+    max-width: 30rem;
+    padding: 0 2rem;
+    text-align: center;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    color: #b0b0bc;
+  }
+  #no-controller .splash-list-glyph { opacity: 0.9; }
 
   /* ── Button HUD — compact 2D readout of gamepad state ── */
   /* Renders face buttons, dpad, shoulders, analog triggers, stick positions,
@@ -1388,6 +1407,8 @@
       <line x1="18" y1="18" x2="82" y2="82"/>
     </svg>
   </div>
+  <div class="splash-title">No controller selected</div>
+  <div class="splash-sub">Press a controller, or open the list <span class="splash-list-glyph">&#x29C9;</span> to pick one.</div>
   <!-- Shown when a Steam Controller Puck is connected but no paired
        controller body is sending STATE reports. Hidden by default; app.js
        reveals it 2s after a Puck connect if no STATE report has arrived. -->
