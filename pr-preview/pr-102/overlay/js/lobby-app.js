@@ -44,8 +44,9 @@ const state = {
   screen: 'mode',        // mode | lobby | level
   mode: null,
   seats: [], fill: [],
-  occ: new Map(),        // seatId -> slotId
-  bySlot: new Map(),     // slotId -> { seatId, phase:'joined'|'ready', player }
+  occ: new Map(),        // seatId -> slotId (seated only)
+  bySlot: new Map(),     // slotId -> { seatId: string|null, phase:'active'|'joined'|'ready', player }
+                         //   active = recognized, no seat · joined/ready = in a seat (seatId set)
   nextP: 1,
 };
 
@@ -79,22 +80,48 @@ function rumble(slotId, kind) {
   try { d.setRumble(0.6, 0.6, 110); if (kind === 'double') setTimeout(() => { try { d.setRumble(0.6, 0.6, 110); } catch (e) {} }, 150); } catch (e) {}
 }
 
-// ── seat transitions ──
-function assignSeat(slot) {
-  const s = nextOpen(); if (!s) return;
-  state.occ.set(s.id, slot.id);
-  state.bySlot.set(slot.id, { seatId: s.id, phase: 'joined', player: state.nextP++ });
-  feedback(slot.id, false); rumble(slot.id, 'single'); render();
+// Dim neutral lightbar = recognized (ACTIVE) but not in a seat yet.
+function activeFb(slotId) {
+  const d = driverOf(slotId); const L = state.bySlot.get(slotId); if (!d || !L) return;
+  const lb = { r: 34, g: 36, b: 44 };
+  const pat = (d.constructor && d.constructor.PLAYER_LED_PATTERNS && d.constructor.PLAYER_LED_PATTERNS[L.player]) || 0;
+  try {
+    if (typeof d.setPlayerFeedback === 'function') d.setPlayerFeedback({ playerLEDs: pat, lightbar: lb });
+    else if (typeof d.setLightbar === 'function') d.setLightbar(lb.r, lb.g, lb.b);
+  } catch (e) {}
 }
-function freeSeat(slotId) {
+
+// ── recognition / seat state machine ──
+// PAIRED (pool) → ACTIVE (recognized, no seat) → ASSIGNED (in a Captain/Stoker
+// seat: phase joined→ready). B steps out one level; A steps in.
+function recognize(slot) {                                   // PAIRED → ACTIVE
+  if (state.bySlot.has(slot.id)) return;
+  state.bySlot.set(slot.id, { seatId: null, phase: 'active', player: state.nextP++ });
+  activeFb(slot.id); rumble(slot.id, 'single'); render();
+}
+function takeSeat(slotId) {                                   // ACTIVE → ASSIGNED
+  const L = state.bySlot.get(slotId); if (!L || L.phase !== 'active') return;
+  const s = nextOpen(); if (!s) return;                      // seats full → stay ACTIVE
+  state.occ.set(s.id, slotId); L.seatId = s.id; L.phase = 'joined';
+  feedback(slotId, false); rumble(slotId, 'single'); render();
+}
+function leaveSeat(slotId) {                                  // ASSIGNED → ACTIVE
+  const L = state.bySlot.get(slotId); if (!L || L.seatId == null) return;
+  state.occ.delete(L.seatId); L.seatId = null; L.phase = 'active';
+  activeFb(slotId); render();
+}
+// (No voluntary ACTIVE→AVAILABLE via B — "once active, always active". The only
+// way back to AVAILABLE is the manager's PS/Home hold-release or a disconnect,
+// both of which empty the manager slot → freeSeat below.)
+function freeSeat(slotId) {                                   // manager slot vanished (PS/Home hold or disconnect)
   const L = state.bySlot.get(slotId); if (!L) return;
-  state.occ.delete(L.seatId); state.bySlot.delete(slotId); clearFb(slotId); render();
+  if (L.seatId != null) state.occ.delete(L.seatId);
+  state.bySlot.delete(slotId); clearFb(slotId); render();
 }
 function readyUp(slotId) { const L = state.bySlot.get(slotId); if (!L || L.phase !== 'joined') return; L.phase = 'ready'; feedback(slotId, true); rumble(slotId, 'double'); render(); }
 function unready(slotId) { const L = state.bySlot.get(slotId); if (!L || L.phase !== 'ready') return; L.phase = 'joined'; feedback(slotId, false); render(); }
-function leaveSlot(slotId) { clearFb(slotId); manager.releaseSlotToPool(slotId); }   // sync() frees the seat next frame
 function switchTeam(slotId, dir) {
-  const L = state.bySlot.get(slotId); if (!L) return; const s = seat(L.seatId); if (!s || !s.team) return;
+  const L = state.bySlot.get(slotId); if (!L || L.seatId == null) return; const s = seat(L.seatId); if (!s || !s.team) return;
   const other = s.team === 'a' ? 'b' : 'a';
   const target = state.seats.find((x) => x.team === other && x.role === s.role && !state.occ.has(x.id))
               || state.seats.find((x) => x.team === other && !state.occ.has(x.id));
@@ -102,13 +129,36 @@ function switchTeam(slotId, dir) {
   state.occ.delete(s.id); state.occ.set(target.id, slotId); L.seatId = target.id;
   feedback(slotId, L.phase === 'ready'); render();
 }
+// ▲▼ in versus: swap Captain ⇄ Stoker within your own team. If the other seat
+// is taken, the two players trade seats; if it's open, you just slide over.
+function switchRole(slotId) {
+  const L = state.bySlot.get(slotId); if (!L || L.seatId == null) return; const s = seat(L.seatId); if (!s || !s.team) return;
+  const otherRole = s.role === 'Captain' ? 'Stoker' : 'Captain';
+  const target = state.seats.find((x) => x.team === s.team && x.role === otherRole);
+  if (!target) return;
+  if (state.occ.has(target.id)) {
+    const otherSlot = state.occ.get(target.id); const OL = state.bySlot.get(otherSlot);
+    state.occ.set(target.id, slotId); state.occ.set(s.id, otherSlot);
+    L.seatId = target.id; if (OL) OL.seatId = s.id;
+    feedback(slotId, L.phase === 'ready'); if (OL) feedback(otherSlot, OL.phase === 'ready');
+  } else {
+    state.occ.delete(s.id); state.occ.set(target.id, slotId); L.seatId = target.id;
+    feedback(slotId, L.phase === 'ready');
+  }
+  render();
+}
 
 function minMet() {
   if (state.mode === 'solo') return state.occ.has('cap');
   if (state.mode === 'together') return state.occ.has('cap') && state.occ.has('sto');
   return teamCount('a') >= 1 && teamCount('b') >= 1;
 }
-function allReady() { const j = [...state.bySlot.keys()]; return j.length > 0 && minMet() && j.every((id) => state.bySlot.get(id).phase === 'ready'); }
+// Only SEATED controllers gate the launch — an ACTIVE (recognized, seatless)
+// controller is a bystander and neither counts nor blocks.
+function allReady() {
+  const seated = [...state.bySlot.keys()].filter((id) => state.bySlot.get(id).seatId != null);
+  return seated.length > 0 && minMet() && seated.every((id) => state.bySlot.get(id).phase === 'ready');
+}
 
 // ── per-slot edge detection ──
 const edge = new Map();
@@ -126,11 +176,17 @@ function edges(slotId, gp) {
 }
 
 // ── device naming ──
+// Prefer the bound HID driver's real identity: a GameSir Super Nova claims via
+// the Gamepad API as DualSense (054c:0ce6) but its bound HID handle knows it's
+// a DualShock 4 — so once bound we name it by the driver, not the pad label.
 function devName(slotId) {
   const s = manager.getSlot(slotId);
-  const raw = (s && s.hidDevice && s.hidDevice.productName) || (s && s.controllerLabel) || '';
-  const info = ControllerRegistry.identifyFromGamepadId(raw);
-  return info && info.driverName ? info.driverName : 'Controller';
+  if (s && s.driver && s.driver.entry && s.driver.entry.name) return s.driver.entry.name;
+  const byLabel = ControllerRegistry.identifyFromGamepadId((s && s.controllerLabel) || '');
+  if (byLabel && byLabel.driverName) return byLabel.driverName;
+  const raw = (s && s.hidDevice && s.hidDevice.productName) || '';
+  const byName = ControllerRegistry.identifyFromGamepadId(raw);
+  return (byName && byName.driverName) ? byName.driverName : (raw || 'Controller');
 }
 
 // ── screens ──
@@ -152,8 +208,8 @@ function enterMode(mode) {
   state.occ.clear(); state.bySlot.clear(); state.nextP = 1;
   $('lobby-title').textContent = mode === 'versus' ? 'Build your teams' : mode === 'solo' ? 'Solo ride' : 'Crew your tandem';
   $('join-hint').innerHTML = mode === 'versus'
-    ? 'Press a button to join · <strong>◀ ▶</strong> switch team · <strong>A</strong> ready · <strong>B</strong> leave'
-    : 'Press a button to claim a seat · <strong>A</strong> ready · <strong>B</strong> leave';
+    ? 'Press a button = active · <strong>A</strong> take seat → ready · <strong>◀ ▶</strong> team · <strong>▲ ▼</strong> swap · <strong>B</strong> back (ready→seat→active) · hold <strong>PS</strong> to release · all ready? <strong>A</strong> → level'
+    : 'Press a button = active · <strong>A</strong> take a seat → ready · <strong>B</strong> back (ready→seat→active) · hold <strong>PS/Home</strong> to release · all ready? <strong>A</strong> → level';
   showScreen('lobby'); syncSeats(); render();
 }
 function goLevel() {
@@ -182,14 +238,26 @@ function cardHTML(s) {
   }
   return `<div class="seat open" data-seat="${s.id}"><span class="role">${s.role}</span><span class="who">OPEN</span><span class="dev">press a button</span></div>`;
 }
+// Recognized-but-seatless controllers waiting to pick a seat.
+function loungeHTML() {
+  const active = [...state.bySlot.keys()].filter((id) => state.bySlot.get(id).seatId == null);
+  if (!active.length) return '';
+  const chips = active.map((id) => {
+    const L = state.bySlot.get(id);
+    return `<div class="lounge-chip"><span class="lc-badge">P${L.player}</span><span class="lc-name">${devName(id)}</span><span class="lc-hint">press A to take a seat</span></div>`;
+  }).join('');
+  return `<div class="lounge"><div class="lounge-title">RECOGNIZED · pick a seat</div><div class="lounge-chips">${chips}</div></div>`;
+}
 function render() {
   const area = $('seat-area');
+  let html;
   if (state.mode === 'versus') {
     const col = (t, title) => `<div class="team ${t}"><div class="team-title">${title}</div><div class="team-slots">${state.seats.filter((s) => s.team === t).map(cardHTML).join('')}</div></div>`;
-    area.innerHTML = `<div class="teams">${col('a', 'TEAM BLUE')}<div class="vs">VS</div>${col('b', 'TEAM RED')}</div>`;
+    html = `<div class="teams">${col('a', 'TEAM BLUE')}<div class="vs">VS</div>${col('b', 'TEAM RED')}</div>`;
   } else {
-    area.innerHTML = `<div class="tandem"><div class="tandem-title">🚲 YOUR TANDEM</div><div class="tandem-seats">${state.seats.map(cardHTML).join('')}</div></div>`;
+    html = `<div class="tandem"><div class="tandem-title">🚲 YOUR TANDEM</div><div class="tandem-seats">${state.seats.map(cardHTML).join('')}</div></div>`;
   }
+  area.innerHTML = html + loungeHTML();
   updateCTA(); updateDebug();
 }
 function updateCTA() {
@@ -204,27 +272,183 @@ function updateDebug() {
     const L = state.bySlot.get(s.id); const d = s.driver;
     return `${s.id}:${devName(s.id).split(' ')[0]}${L ? '·' + L.phase : ''}[${d ? (d.connectionType || 'hid') : 'no-hid'}]`;
   });
-  el.textContent = (parts.join('   ') || 'no controllers — press a button to join') + (allReady() ? '   ✓ ALL READY' : '');
+  const perf = `[${_frameMs.toFixed(1)}ms/f · ${_workMs.toFixed(1)}ms work · pool ${manager._hidPool.size}] `;
+  el.textContent = perf + (parts.join('   ') || 'no controllers — press a button to join') + (allReady() ? '   ✓ ALL READY' : '');
 }
+let pairMsg = '', pairMsgUntil = 0;
+function flashPairMsg(m) { pairMsg = m; pairMsgUntil = performance.now() + 2600; }
 function updateControllerCount() {
   const el = $('ctrl-count'); if (!el) return;
+  if (pairMsg && performance.now() < pairMsgUntil) { el.textContent = pairMsg; return; }
   const claimed = manager.slots.filter((s) => s.state === 'claimed').length;
   const pooled = manager._hidPool.size;
   el.textContent = (claimed === 0 && pooled === 0)
     ? 'no controllers — press a button or Pair →'
-    : `${claimed} active${pooled ? ` · ${pooled} paired` : ''}`;
+    : `${claimed} in use${pooled ? ` · ${pooled} available` : ''}`;
 }
 // Approve/pool the next controller (main.js auto-selects a not-yet-picked one).
 // requestDevice needs the click as its user gesture; the Steam Controller is
-// HID-only, so it can only be recognized after this.
-function pairController() {
+// HID-only, so it can only be recognized after this. Gives visible feedback:
+// after boot auto-pools everything, there's often nothing new to pair, and the
+// old silent no-op read as "the button is broken".
+async function pairController() {
   const free = SLOT_IDS.find((id) => manager.getSlot(id).state !== 'claimed') || SLOT_IDS[0];
-  manager.connectHidForSlot(free).catch((err) => { const el = $('debug'); if (el) el.textContent = 'pair: ' + (err && err.message ? err.message : String(err)); });
+  const before = manager._hidPool.size;
+  flashPairMsg('pairing…'); openCtrlPanel(true);
+  try {
+    const dev = await manager.connectHidForSlot(free);
+    const after = manager._hidPool.size;
+    if (dev) flashPairMsg('paired ✓ ' + (dev.productName || 'controller'));
+    else if (after > before) flashPairMsg('paired ✓');
+    else flashPairMsg(after ? `nothing new — ${after} already paired` : 'no controller found to pair');
+  } catch (err) {
+    flashPairMsg('pair failed: ' + (err && err.message ? err.message : String(err)));
+  }
+}
+
+// ── controllers panel (paired vs active vs open, + live "in use" dot) ──
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function padActive(gp) {
+  if (!gp) return false;
+  for (const b of (gp.buttons || [])) if (b && (b.pressed || (b.value || 0) > 0.5)) return true;
+  for (const a of (gp.axes || [])) if (Math.abs(a) > 0.5) return true;
+  return false;
+}
+function stickMag(gp) { const ax = (gp && gp.axes) || []; return Math.max(Math.abs(ax[0] || 0), Math.abs(ax[1] || 0), Math.abs(ax[2] || 0), Math.abs(ax[3] || 0)); }
+// vid:pid string — the definitive identity, so a row that reads "DualSense" over
+// the Gamepad API vs its true WebHID handle is unambiguous.
+function vpStr(vp) { return vp ? ((vp.vendorId || 0).toString(16).padStart(4, '0') + ':' + (vp.productId || 0).toString(16).padStart(4, '0')) : '—'; }
+
+// ── per-unit identity (Electron main process; empty on the web build) ──
+// The renderer's WebHID handle carries no serial (Chromium blocklists it), but
+// the Electron main process sees it on the HID device events — over Bluetooth
+// that serial is the controller's MAC (a stable per-unit id whose OUI even outs
+// a spoofed clone). main.js pushes that inventory here via `hid-controllers-
+// snapshot`. We match it to panel rows by vid:pid.
+let hidInventory = [];
+function setInventory(list) { hidInventory = Array.isArray(list) ? list : []; }
+function unitsForVp(vp) {
+  if (!vp) return [];
+  return hidInventory.filter((u) => u.vendorId === vp.vendorId && u.productId === vp.productId);
+}
+function vpOfSlot(s) {
+  if (s.hidDevice) return { vendorId: s.hidDevice.vendorId, productId: s.hidDevice.productId };
+  return ControllerRegistry.parseGamepadVendorProduct(s.controllerLabel) || null;
+}
+// One line of per-unit identity for a panel row. Unique vid:pid → the serial.
+// Electron's main HIDDevice has no `collections`, so a descriptor fingerprint is
+// impossible; instead we disambiguate two identical-vid:pid units by connection
+// type (a Bluetooth unit carries a MAC serial, a USB DS4 carries none).
+function identityLine(vp, connType) {
+  const units = unitsForVp(vp);
+  if (!units.length) return '';
+  if (units.length === 1) return units[0].serialNumber ? '# ' + units[0].serialNumber : '# no serial (USB)';
+  const withSerial = units.filter((u) => u.serialNumber);
+  if (connType === 'bluetooth' && withSerial.length === 1) return '# ' + withSerial[0].serialNumber;
+  if (connType === 'usb' && units.some((u) => !u.serialNumber)) return '# no serial (USB)';
+  return '⚠ ' + units.length + ' units — ' + units.map((u) => u.serialNumber || 'no-serial').join(' · ');
+}
+// Enumerate every controller the manager can see, in three buckets:
+//   ACTIVE — a claimed slot (someone took a seat); may be HID-bound or Gamepad-API-only
+//   PAIRED — a HID entry idling in the pool (WebHID approved, gyro/lightbar ready, no seat yet)
+//   OPEN   — a live Gamepad-API pad that's neither claimed nor pooled (press to join)
+function ctrlEntries(pads) {
+  const items = [];
+  const claimedIdx = new Set();
+  for (const s of manager.slots) {
+    if (s.state !== 'claimed') continue;
+    if (s.gamepadIndex != null) claimedIdx.add(s.gamepadIndex);
+    const L = state.bySlot.get(s.id);
+    const seated = !!(L && L.seatId != null);
+    const role = seated && seat(L.seatId) ? seat(L.seatId).role : '';
+    const hid = !!s._hidEntry;
+    items.push({
+      key: 's:' + s.id, name: esc(devName(s.id)),
+      // controller layer: a claimed slot is ACTIVE. game layer: ASSIGNED/READY only when seated.
+      cstate: 'ACTIVE', gstate: seated ? (L.phase === 'ready' ? 'READY' : 'ASSIGNED') : null,
+      sub: seated ? `P${L.player} · ${role}` : (L ? `P${L.player} · recognized` : 'recognized'),
+      hw: esc((s.hidDevice && s.hidDevice.productName) || ''),   // real HID string — the ONLY way to tell apart two same-vid:pid pads
+      vp: vpOfSlot(s), device: s.hidDevice || null,
+      conn: hid ? (s.driver && s.driver.connectionType ? s.driver.connectionType : 'hid') : 'gamepad',
+      active: padActive(s.effectiveGamepad(pads)),
+    });
+  }
+  let hi = 0;
+  for (const entry of manager._hidPool.values()) {
+    const nm = (entry.driver && entry.driver.entry && entry.driver.entry.name) || (entry.device && entry.device.productName) || 'Controller';
+    items.push({
+      // index in the key: two identical-vid:pid devices (real DS4 + GameSir spoof)
+      // would otherwise collide to one row and share one activity dot.
+      key: 'h:' + (hi++) + ':' + ((entry.device && entry.device.vendorId) || 0) + ':' + ((entry.device && entry.device.productId) || 0),
+      name: esc(nm), cstate: 'AVAILABLE', gstate: null, sub: 'WebHID · idle',
+      hw: esc((entry.device && entry.device.productName) || ''),
+      vp: entry.device ? { vendorId: entry.device.vendorId, productId: entry.device.productId } : null,
+      device: entry.device || null,
+      conn: (entry.driver && entry.driver.connectionType) || 'hid',
+      active: padActive(entry.synthetic),
+    });
+  }
+  for (const gp of pads) {
+    if (!gp) continue;
+    if (claimedIdx.has(gp.index)) continue;
+    if (stickMag(gp) > 0.5) continue;   // stuck-stick pad = likely a Chrome BT-reconnect ghost; skip
+    const vp = ControllerRegistry.parseGamepadVendorProduct(gp.id);
+    if (vp && manager._findPoolEntryByVidPid(vp.vendorId, vp.productId)) continue;   // already shown as PAIRED
+    const info = ControllerRegistry.identifyFromGamepadId(gp.id);
+    items.push({
+      key: 'g:' + gp.index, name: esc((info && info.driverName) || 'Controller'), cstate: 'AVAILABLE', gstate: null,
+      sub: 'Gamepad · press a button', hw: '', vp: vp || null, conn: 'gamepad', active: padActive(gp),
+    });
+  }
+  for (const it of items) it.id = esc(identityLine(it.vp, it.conn));
+  return items;
+}
+function buildCtrlRows(items) {
+  const list = $('cp-list'); if (!list) return;
+  if (!items.length) { list.innerHTML = '<div class="cp-empty">No controllers detected.<br>Press a button, or “🎮 Pair controller”.</div>'; return; }
+  list.innerHTML = items.map((it) =>
+    `<div class="cp-row"><span class="cp-dot" data-dot="${it.key}"></span>` +
+    `<div class="cp-main"><div class="cp-name">${it.name}</div><div class="cp-sub">${it.sub} · ${it.conn} · ${vpStr(it.vp)}</div>` +
+    `${it.hw ? `<div class="cp-hw">▪ ${it.hw}</div>` : ''}` +
+    `${it.id ? `<div class="cp-id${it.id[0] === '⚠' ? ' warn' : ''}">${it.id}</div>` : ''}</div>` +
+    `<div class="cp-tags"><span class="cp-tag ${it.cstate.toLowerCase()}">${it.cstate}</span>` +
+    `${it.gstate ? `<span class="cp-tag ${it.gstate.toLowerCase()}">${it.gstate}</span>` : ''}</div></div>`
+  ).join('');
+}
+let ctrlSig = '';
+function renderCtrlPanel(pads) {
+  const panel = $('ctrl-panel'); if (!panel || panel.hidden) return;
+  const items = ctrlEntries(pads);
+  const sig = items.map((i) => i.key + '|' + i.cstate + '|' + (i.gstate || '') + '|' + i.sub + '|' + i.conn + '|' + i.name + '|' + i.hw + '|' + i.id + '|' + vpStr(i.vp)).join('~');
+  if (sig !== ctrlSig) { ctrlSig = sig; buildCtrlRows(items); }
+  const list = $('cp-list');
+  for (const it of items) { const d = list.querySelector(`[data-dot="${it.key}"]`); if (d) d.classList.toggle('on', it.active); }
+  const act = items.filter((i) => i.cstate === 'ACTIVE').length, av = items.filter((i) => i.cstate === 'AVAILABLE').length;
+  const asg = items.filter((i) => i.gstate === 'ASSIGNED').length, rdy = items.filter((i) => i.gstate === 'READY').length;
+  const note = $('cp-note'); if (note) note.textContent = `${act} active · ${av} available · ${asg} assigned · ${rdy} ready`;
+}
+function openCtrlPanel(open) {
+  const panel = $('ctrl-panel'); if (!panel) return;
+  panel.hidden = !open;
+  const btn = $('btn-ctrl-list');
+  if (btn) { btn.setAttribute('aria-expanded', String(open)); btn.textContent = 'Controllers ' + (open ? '▴' : '▾'); }
+  if (open) { ctrlSig = ''; renderCtrlPanel((navigator.getGamepads && navigator.getGamepads()) || []); }
+}
+function toggleCtrlPanel() {
+  const panel = $('ctrl-panel'); if (!panel) return;
+  const opening = panel.hidden;
+  // Gesture-backed serial scan (requestDevice needs user activation): opening the
+  // panel refreshes every present device's serial into the inventory.
+  if (opening && navigator.hid && navigator.userAgent.includes('Electron')) {
+    navigator.hid.requestDevice({ filters: ControllerRegistry.getHIDFilters() }).catch(() => {});
+  }
+  openCtrlPanel(opening);
 }
 
 // ── slot lifecycle sync (claim→seat, release→free) ──
 function syncSeats() {
-  for (const s of manager.slots) if (s.state === 'claimed' && !state.bySlot.has(s.id)) assignSeat(s);
+  // A newly-claimed manager slot is RECOGNIZED (ACTIVE), not auto-seated.
+  for (const s of manager.slots) if (s.state === 'claimed' && !state.bySlot.has(s.id)) recognize(s);
   for (const id of [...state.bySlot.keys()]) { const s = manager.getSlot(id); if (!s || s.state !== 'claimed') freeSeat(id); }
 }
 
@@ -252,32 +476,44 @@ function driveLobby(pads) {
     const L = state.bySlot.get(s.id); if (!L) continue;
     const e = primeOrEdges(s, s.effectiveGamepad(pads)); if (!e) continue;
     if (e.start) start = true;
-    if (L.phase === 'joined') {
+    if (L.phase === 'active') {                 // recognized & sticky ("once active, always active")
+      if (e.a) takeSeat(s.id);                  // A takes a seat; only a PS/Home hold releases (→ AVAILABLE)
+    } else if (L.phase === 'joined') {          // in a seat
       if (e.a) readyUp(s.id);
-      else if (e.b) leaveSlot(s.id);
+      else if (e.b) leaveSeat(s.id);            // step out to ACTIVE (recognized)
       else if (e.left) switchTeam(s.id, -1);
       else if (e.right) switchTeam(s.id, 1);
+      else if (e.up || e.down) switchRole(s.id);
     } else if (L.phase === 'ready') {
-      if (e.b) unready(s.id);
+      if (e.a && allReady()) { goLevel(); return; }   // last confirm — A again launches
+      else if (e.b) unready(s.id);
     }
   }
   if (start && allReady()) goLevel();
 }
 
 // ── boot + loop ──
+// Perf meters surfaced in the debug bar: _frameMs = wall time between frames
+// (≈16.7 at a healthy 60fps); _workMs = synchronous work per frame. If input
+// feels laggy but _workMs stays small, the cost is in HID/driver/main, not here.
+let _lastTs = 0, _frameMs = 0, _workMs = 0, _lastPanel = 0;
 function loop() {
   const now = performance.now();
   const pads = (navigator.getGamepads && navigator.getGamepads()) || [];
+  if (_lastTs) { const dt = now - _lastTs; if (dt > 0 && dt < 500) _frameMs = _frameMs ? _frameMs * 0.9 + dt * 0.1 : dt; }
+  _lastTs = now;
   try {
     manager.ingestFrame(pads, now);
     if (state.screen === 'mode') driveMode(pads);
     else if (state.screen === 'lobby') driveLobby(pads);
     updateDebug();
     updateControllerCount();
+    if (now - _lastPanel > 80) { _lastPanel = now; renderCtrlPanel(pads); }   // ~12Hz, not every frame
   } catch (e) {
     console.error('[lobby] frame error (recovered):', e);
     const el = $('debug'); if (el) el.textContent = 'ERROR: ' + (e && e.message ? e.message : String(e));
   }
+  const wm = performance.now() - now; _workMs = _workMs ? _workMs * 0.9 + wm * 0.1 : wm;
   requestAnimationFrame(loop);
 }
 
@@ -292,8 +528,18 @@ async function boot() {
   $('btn-restart').addEventListener('click', () => enterMode(state.mode));
   $('btn-pair').addEventListener('click', pairController);
   $('btn-pair-global').addEventListener('click', pairController);
+  $('btn-ctrl-list').addEventListener('click', toggleCtrlPanel);
 
-  drawQR($('room-qr'), 'TNDM-7F3K');
+  // Per-unit serial/MAC inventory from the Electron main process (no-op on web).
+  if (window.electronAPI) {
+    try {
+      if (electronAPI.listHidControllers) electronAPI.listHidControllers().then(setInventory).catch(() => {});
+      if (electronAPI.onHidControllersSnapshot) electronAPI.onHidControllersSnapshot(setInventory);
+      // Serial scan happens on a gesture (opening the Controllers panel / Pair) —
+      // requestDevice needs user activation, so a boot timer can't populate it.
+    } catch (e) { /* web build / API absent */ }
+  }
+
   setModeIdx(0);
 
   if (navigator.hid) {
@@ -304,18 +550,6 @@ async function boot() {
     manager.wireHidHotplug();
   }
   loop();
-}
-
-// ── deterministic fake QR (online-join affordance) ──
-function drawQR(cv, seed) {
-  if (!cv) return; const ctx = cv.getContext('2d'); const n = 21, cell = cv.width / n;
-  ctx.fillStyle = '#081109'; ctx.fillRect(0, 0, cv.width, cv.height);
-  let h = 0x811c9dc5; for (const c of seed) { h ^= c.charCodeAt(0); h = (h * 0x01000193) >>> 0; }
-  const rnd = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; h >>>= 0; return h / 4294967296; };
-  ctx.fillStyle = '#d7ffe6';
-  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (rnd() > 0.5) ctx.fillRect(x*cell, y*cell, cell, cell);
-  const f = (ox, oy) => { ctx.fillStyle = '#081109'; ctx.fillRect(ox*cell, oy*cell, 7*cell, 7*cell); ctx.fillStyle = '#d7ffe6'; ctx.fillRect((ox+1)*cell, (oy+1)*cell, 5*cell, 5*cell); ctx.fillStyle = '#081109'; ctx.fillRect((ox+2)*cell, (oy+2)*cell, 3*cell, 3*cell); };
-  f(0, 0); f(n-7, 0); f(0, n-7);
 }
 
 boot();

@@ -70,6 +70,11 @@ const FEATURE_REPORT_ID_FALLBACK = 0x02;
 
 export class SteamControllerDriver extends ControllerDriver {
 
+  // The Puck exposes 5 same-vid:pid HID interfaces on ONE physical unit and only
+  // some emit the state reports we parse — so the overlay must fan inputreport
+  // out across siblings. (Safe here because they're genuinely one device.)
+  static needsSiblingFanout = true;
+
   // Whether to suppress the Puck's lizard-mode keyboard/mouse emulation
   // (default on). Toggled from overlay settings before/at connect; read in
   // init(). Static so the setting can be applied without a driver instance.

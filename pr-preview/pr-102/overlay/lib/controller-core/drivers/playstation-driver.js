@@ -409,17 +409,43 @@ export class PlayStationDriver extends ControllerDriver {
     const touchpadButton = !!(psByte & 0x02);
 
     if (isDs4) {
-      // DS4-family (real Sony DS4 + GameSir clones): WebHID supplies the IMU
-      // only. Buttons/sticks/triggers come from the Gamepad API (a DS4
-      // enumerates as a standard gamepad on every OS). We deliberately omit
-      // them here — parsing at the DualSense offsets is wrong for a real DS4,
-      // and a non-empty button set would make ControllerManager prefer this
-      // mis-parsed synthetic over the correct Gamepad-API pad. Touchpad is
-      // omitted too until a real-DS4 button/touchpad layout is captured and
-      // validated.
+      // DS4-family (real Sony DS4 + GameSir DS4-mode clones). The DS4 report
+      // puts buttons at DIFFERENT offsets than the DualSense fields read above:
+      //   +4 dpad(low nibble)+face(high)   +5 shoulders/options/stick-clicks
+      //   +6 PS(bit0)/touchpad(bit1)+counter   +7/+8 L2/R2 analog
+      // Layout validated from a GameSir Super Nova BT capture (054c:05c4).
+      // We now RETURN buttons/sticks/triggers (previously omitted) so a DS4
+      // whose input only reaches us over WebHID — a Bluetooth clone, or one of
+      // two same-vid:pid pads the Gamepad API can't disambiguate — drives and
+      // folds from its OWN HID stream instead of being stuck button-less.
+      const face = data.getUint8(baseOffset + 4);
+      const shoulder = data.getUint8(baseOffset + 5);
+      const sys = data.getUint8(baseOffset + 6);
+      const hat = face & 0x0F;
+      const ds4Buttons = {
+        square: !!(face & 0x10), cross: !!(face & 0x20),
+        circle: !!(face & 0x40), triangle: !!(face & 0x80),
+        l1: !!(shoulder & 0x01), r1: !!(shoulder & 0x02),
+        l2: !!(shoulder & 0x04), r2: !!(shoulder & 0x08),
+        create: !!(shoulder & 0x10), options: !!(shoulder & 0x20),
+        l3: !!(shoulder & 0x40), r3: !!(shoulder & 0x80),
+        ps: !!(sys & 0x01),
+        dpadUp:    hat === 7 || hat === 0 || hat === 1,
+        dpadRight: hat === 1 || hat === 2 || hat === 3,
+        dpadDown:  hat === 3 || hat === 4 || hat === 5,
+        dpadLeft:  hat === 5 || hat === 6 || hat === 7,
+      };
+      const ds4Triggers = {
+        l2: data.getUint8(baseOffset + 7) / 255,
+        r2: data.getUint8(baseOffset + 8) / 255,
+      };
       return {
+        sticks,
+        triggers: ds4Triggers,
+        buttons: ds4Buttons,
         gyro,
         accel,
+        touchpadButton: !!(sys & 0x02),
         gyroScale: 2000.0 / 32768.0,   // ±2000 dps, 16-bit
         accelScale: 1.0 / 8192.0        // ±4g, 16-bit (gravity ~8192)
       };
@@ -715,15 +741,27 @@ export class PlayStationDriver extends ControllerDriver {
     // a *feature* report, so we must check INPUT reports for 0x11 (not feature
     // reports) or a USB DS4 would misdetect as Bluetooth. The legacy
     // output-report 0x31 check is kept for DualSense.
+    //
+    // DIAGNOSTIC: dump the descriptor so a mis-detect (e.g. a GameSir that
+    // declares input 0x11 while streaming 0x01 over USB → detected 'bluetooth'
+    // → parseReport matches no branch → NO GYRO) is visible in the console.
+    const inIds = [], outIds = [];
+    let type = 'usb', len01 = 0;
     for (const col of device.collections) {
-      for (const report of (col.outputReports || [])) {
-        if (report.reportId === 0x31) return 'bluetooth';
+      for (const r of (col.inputReports || [])) {
+        let bits = 0; for (const it of (r.items || [])) bits += (it.reportSize || 0) * (it.reportCount || 0);
+        const bytes = Math.ceil(bits / 8);
+        inIds.push('0x' + (r.reportId || 0).toString(16) + ':' + bytes + 'B');
+        if (r.reportId === 0x01) len01 = Math.max(len01, bytes);
+        if (r.reportId === 0x31 || r.reportId === 0x11) type = 'bluetooth';
       }
-      for (const report of (col.inputReports || [])) {
-        if (report.reportId === 0x31 || report.reportId === 0x11) return 'bluetooth';
+      for (const r of (col.outputReports || [])) {
+        outIds.push('0x' + (r.reportId || 0).toString(16));
+        if (r.reportId === 0x31) type = 'bluetooth';
       }
     }
-    return 'usb';
+    console.log(`[PS detect] ${device.productName || '?'} ${(device.vendorId || 0).toString(16)}:${(device.productId || 0).toString(16)} → ${type} · in=[${inIds.join(' ')}] out=[${outIds.join(' ')}] 0x01=${len01}B`);
+    return type;
   }
 
   // USB-equivalent gyro offset → IMU family. baseOffset removes the BT

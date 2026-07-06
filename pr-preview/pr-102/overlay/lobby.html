@@ -49,12 +49,6 @@
   .mode-btn[data-mode="solo"].sel { border-color: #9fb0c6; box-shadow: 0 10px 28px -16px #000; }
   .big { font-weight: 800; }
 
-  /* room band */
-  .room-band { display: flex; align-items: center; gap: 15px; justify-content: center; background: rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 11px 15px; width: 100%; }
-  #room-qr { width: 74px; height: 74px; border-radius: 8px; image-rendering: pixelated; }
-  .room-code { font: 700 24px/1 var(--mono); letter-spacing: 4px; color: var(--accent); text-shadow: 0 0 14px rgba(108,224,143,.45); }
-  .room-sub { font-size: 11px; color: #7d879a; margin-top: 3px; }
-
   /* seat grid */
   .teams { display: flex; align-items: stretch; justify-content: center; gap: 14px; width: 100%; margin: 4px 0; }
   .team { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px; border-radius: 12px; border: 2px solid transparent; }
@@ -92,6 +86,15 @@
   @keyframes pop { 0% { transform: scale(.86); } 60% { transform: scale(1.04); } 100% { transform: scale(1); } }
   @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 
+  /* recognized-but-seatless lounge */
+  .lounge { margin-top: 12px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .lounge-title { font: 700 10px/1 var(--mono); letter-spacing: 2px; color: #e0b453; }
+  .lounge-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .lounge-chip { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 14px; border-radius: 10px; background: rgba(224,180,83,0.08); border: 1.5px solid rgba(224,180,83,0.5); animation: idle 1.8s ease-in-out infinite; }
+  .lounge-chip .lc-badge { font: 800 9px/1 var(--mono); color: #e0b453; letter-spacing: .5px; }
+  .lounge-chip .lc-name { font: 700 12px/1.25 inherit; letter-spacing: .3px; }
+  .lounge-chip .lc-hint { font: 9px/1.2 var(--mono); color: #8a93a6; }
+
   .idle-strip { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; min-height: 4px; }
   .idle-chip { display: flex; flex-direction: column; align-items: center; gap: 1px; font: 600 11px/1.2 var(--mono); padding: 7px 12px; border-radius: 9px; color: #cdd6e6; background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.2); animation: idle 1.8s ease-in-out infinite; }
   .idle-chip .ih { font-size: 9px; opacity: .6; }
@@ -115,6 +118,32 @@
   #ctrl-count { font: 11px/1 var(--mono); color: #8a93a6; letter-spacing: .3px; }
   .pairbtn-sm { font: 11px/1 var(--mono); color: #cdd6e6; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 7px 11px; cursor: pointer; }
   .pairbtn-sm:hover { color: #fff; border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.12); }
+
+  /* controllers panel */
+  #ctrl-panel { position: fixed; top: 44px; right: 12px; z-index: 101; width: 300px; max-width: 82vw; background: rgba(9,13,11,0.97); border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; padding: 11px 12px; box-shadow: 0 20px 44px -18px #000; -webkit-app-region: no-drag; }
+  #ctrl-panel[hidden] { display: none; }
+  .cp-head { font: 700 10px/1 var(--mono); letter-spacing: 1.5px; color: #9fb0c6; margin-bottom: 9px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  #cp-note { font-weight: 400; color: #7d879a; letter-spacing: .3px; }
+  #cp-list { display: flex; flex-direction: column; gap: 6px; }
+  .cp-row { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 9px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); }
+  .cp-dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: #39404e; transition: background .08s, box-shadow .08s; }
+  .cp-dot.on { background: var(--accent); box-shadow: 0 0 8px 1px var(--accent); }
+  .cp-main { flex: 1 1 auto; min-width: 0; }
+  .cp-name { font: 700 12px/1.2 inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cp-sub { font: 10px/1.3 var(--mono); color: #8894a8; }
+  .cp-hw { font: 9px/1.3 var(--mono); color: #6a7184; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cp-id { font: 9px/1.3 var(--mono); color: #7d8aa0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cp-id.warn { color: #e0b453; }
+  .cp-tags { flex: 0 0 auto; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+  .cp-tag { flex: 0 0 auto; font: 800 8px/1 var(--mono); letter-spacing: .8px; padding: 3px 6px; border-radius: 5px; }
+  .cp-tag.ready { color: #06140c; background: var(--accent); box-shadow: 0 0 10px -2px var(--accent); }
+  .cp-tag.assigned { color: #06140c; background: #7fd0a0; }
+  .cp-tag.active { color: #1a1205; background: #e0b453; }
+  .cp-tag.available { color: #c9d6ff; background: rgba(110,168,255,0.18); border: 1px solid rgba(110,168,255,0.4); }
+  .cp-legend { margin-top: 9px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); font: 9px/1.6 var(--mono); color: #6a7184; }
+  .cp-legend b { color: #9fb0c6; }
+  .cp-legend .cp-dot { display: inline-block; vertical-align: middle; }
+  .cp-empty { font: 11px/1.5 var(--mono); color: #6a7184; text-align: center; padding: 10px 6px; }
   #debug { position: fixed; left: 10px; bottom: 6px; right: 10px; font: 10px/1.4 var(--mono); color: #6a7184; white-space: pre; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
   @media (prefers-reduced-motion: reduce) { .seat.joined,.seat.ready,.idle-chip,.cta.ready { animation: none; } }
 </style>
@@ -124,7 +153,13 @@
 <div id="app-title">TANDEM<b>ONIUM</b> · SEAT-SELECT NAVIGATOR</div>
 <div id="pairbar">
   <span id="ctrl-count">no controllers</span>
+  <button id="btn-ctrl-list" class="pairbtn-sm" title="Show every controller — active, paired, and open" aria-expanded="false">Controllers ▾</button>
   <button id="btn-pair-global" class="pairbtn-sm" title="Approve a controller for this app (WebHID). Steam Controller needs this; DualSense too for lightbar/gyro.">🎮 Pair controller</button>
+</div>
+<div id="ctrl-panel" hidden>
+  <div class="cp-head">CONTROLLERS <span id="cp-note"></span></div>
+  <div id="cp-list"></div>
+  <div class="cp-legend"><b>controller</b> <span class="cp-tag available">AVAILABLE</span> connected · <span class="cp-tag active">ACTIVE</span> in use, gyro on<br><b>game</b> <span class="cp-tag assigned">ASSIGNED</span> in a seat · <span class="cp-tag ready">READY</span> locked in · <span class="cp-dot on"></span> being used now</div>
 </div>
 
 <div class="stage">
@@ -141,10 +176,6 @@
     <!-- STEP 2: unified seat lobby -->
     <div id="step-lobby" class="step" hidden>
       <p class="prompt" id="lobby-title">Crew your tandem</p>
-      <div class="room-band">
-        <canvas id="room-qr" width="74" height="74"></canvas>
-        <div><div class="room-code" id="room-code">TNDM-7F3K</div><div class="room-sub">Scan to join from a phone · or press a button on a controller</div></div>
-      </div>
       <div id="seat-area" style="width:100%"></div>
       <p class="hint" id="join-hint">Press a button to join a seat · <strong>A</strong> ready · <strong>B</strong> leave</p>
       <button class="pairbtn" id="btn-pair">Pair a controller for gyro + lightbar (WebHID)…</button>
