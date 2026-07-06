@@ -55,9 +55,10 @@ const DEFAULTS = {
 
 export function makeSyntheticGamepad(hidDevice) {
   const buttons = [];
-  // 18 slots: 0-16 standard + 17 for the Switch Pro's Capture button (screenshot),
-  // which has no standard Gamepad-API index. The Switch profile maps 17 there.
-  for (let i = 0; i < 18; i++) buttons.push({ pressed: false, touched: false, value: 0 });
+  // 22 slots: 0-16 standard + 17 shared extra (Switch Capture / DualSense mic /
+  // Steam "…") + 18-21 back paddles (L4/L5/R4/R5). None of 17-21 have a standard
+  // Gamepad-API index; each controller profile maps them to its own meshes.
+  for (let i = 0; i < 22; i++) buttons.push({ pressed: false, touched: false, value: 0 });
   return {
     id: `HID::${hidDevice.productName || 'hid'}`,
     index: -1,
@@ -97,6 +98,12 @@ export function applyParsedToSynthetic(gp, parsed) {
     // Steam Controller "…" quick-access / Switch Pro Capture. Each controller
     // profile maps slot 17 to its own mesh; undefined fields stay false.
     setBtn(17, b.capture || b.mic || b.quickAccess);
+  }
+  if (parsed.paddles) {
+    // 18-21 = back paddles (Steam Controller L4/L5/R4/R5). No standard index;
+    // the Steam profile maps these slots to the paddle meshes.
+    const p = parsed.paddles;
+    setBtn(18, p.l4); setBtn(19, p.l5); setBtn(20, p.r4); setBtn(21, p.r5);
   }
   if (parsed.triggers) {
     setBtn(6, parsed.triggers.l2 > 0.1, parsed.triggers.l2);

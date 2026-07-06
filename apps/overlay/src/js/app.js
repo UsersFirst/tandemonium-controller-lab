@@ -1095,6 +1095,12 @@ function designateEntry(entry) {
   connectGyroBtn.textContent = 'Connected';
   updateGyroToggle();
   showGyroHud();
+  // Re-run the one-shot bias calibration NOW (on selection) rather than trusting
+  // the pool-time calibration, which ran at boot while the controller may have
+  // been moving — that aborts and leaves the bias to the slower continuous
+  // stillness pass, which is the "drift then settles" seen on the Steam. On
+  // selection the pad is usually at rest, so this captures a tight window.
+  startCalibration();
   if (isPuckDevice(hidDevice)) onPuckConnected();
   else onPuckDisconnected();
   maybeSwapProfileAfterImuProbe();
