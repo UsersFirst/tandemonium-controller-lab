@@ -1318,13 +1318,33 @@ function evictPhantoms(now) {
     }
   }
 }
-let _ovlListThrottle = 0, _phantomThrottle = 0;
+// Stalled-stream recovery: a SELECTED handle can stop delivering reports mid-
+// session (seen on a USB DS4 — lastRawReportAt FREEZES at a non-zero value while
+// other controllers keep advancing) yet stay "connected" for a long time. The
+// overlay would show frozen gyro/buttons until Chromium finally fires disconnect.
+// Detect the freeze (no new raw report for a window) and re-init the driver to
+// kick the stream; back off between attempts so we don't churn a live-but-idle-
+// looking device. (A device that never streamed at all is handled by evictPhantoms.)
+let _streamWatchRaw = -1, _streamWatchAt = 0, _streamReinitAt = 0;
+function checkStalledStream(now) {
+  if (!selectedEntry || !gyroActive) { _streamWatchRaw = -1; return; }
+  const raw = selectedEntry.lastRawReportAt | 0;
+  if (raw !== _streamWatchRaw) { _streamWatchRaw = raw; _streamWatchAt = now; return; }  // still advancing
+  if (raw > 0 && (now - _streamWatchAt) > 1500 && (now - _streamReinitAt) > 4000) {
+    _streamReinitAt = now;
+    console.warn('[overlay] SELECTED stream stalled', Math.round(now - _streamWatchAt) + 'ms — re-initing driver:',
+      selectedEntry.device.productName || (selectedEntry.device.vendorId.toString(16) + ':' + selectedEntry.device.productId.toString(16)));
+    if (selectedEntry._reinitDriver) { try { selectedEntry._reinitDriver(); } catch (e) { /* ok */ } }
+  }
+}
+let _ovlListThrottle = 0, _phantomThrottle = 0, _streamThrottle = 0;
 
 function loop() {
   requestAnimationFrame(loop);
   const _now = performance.now();
   if (_now - _ovlListThrottle > 120) { _ovlListThrottle = _now; forwardControllerList(); }
   if (_now - _phantomThrottle > 1000) { _phantomThrottle = _now; evictPhantoms(_now); }
+  if (_now - _streamThrottle > 500) { _streamThrottle = _now; checkStalledStream(_now); }
   if (!modelReady) return;
 
   const gamepad = readGamepad();
