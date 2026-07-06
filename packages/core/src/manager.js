@@ -273,6 +273,12 @@ class HidEntry {
     if (!parsed) return;
     if (parsed.buttons) this.hasButtons = true;
     applyParsedToSynthetic(this.synthetic, parsed);
+    // Expose report-level extras so a POOLED (unclaimed) entry driving a viz can
+    // read touchpad/grips without a slot 'hid-report' emit. Used by the overlay
+    // once it reads the selected pool entry directly (WebHID-first, Phase 3b).
+    this._lastTouchpad = parsed.touchpad || null;
+    this._lastTouchpadButton = !!parsed.touchpadButton;
+    this._lastGrips = parsed.grips || null;
     if (!this._everPressed) {
       for (const b of this.synthetic.buttons) { if (b && (b.pressed || (b.value || 0) > 0.5)) { this._everPressed = true; break; } }
     }
