@@ -1106,17 +1106,8 @@ async function finishGyroConnect(device) {
   }
 
   designateEntry(entry);
-  console.log('[designate]', entry.device.productName,
-    'conn=' + (entry.driver && entry.driver.connectionType),
-    'rawReportAt=' + (entry.lastRawReportAt | 0),      // >0 → device IS streaming to this handle
-    'parsedAt=' + (entry.hidActiveSince | 0),          // >0 → driver.parseReport is producing data
-    'poolSize=' + listManager._hidPool.size);
-  // Diagnostic: dump every pooled entry so a dead/duplicate handle is obvious.
-  for (const e of listManager._hidPool.values()) {
-    console.log('   pool·', e.device.productName, (e.device.vendorId).toString(16) + ':' + (e.device.productId).toString(16),
-      'conn=' + (e.driver && e.driver.connectionType), 'rawAt=' + (e.lastRawReportAt | 0), 'parsedAt=' + (e.hidActiveSince | 0),
-      e.device === entry.device ? '  <- SELECTED' : '');
-  }
+  console.log('[designate]', entry.device.productName || (entry.device.vendorId.toString(16) + ':' + entry.device.productId.toString(16)),
+    (entry.driver && entry.driver.connectionType), 'receiving=' + (entry.hidActiveSince > 0));
 }
 
 // Point the overlay's viz at a pool entry: alias hidDevice/controllerDriver/
