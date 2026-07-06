@@ -1301,12 +1301,30 @@ function forwardControllerList() {
   if (!(window.electronAPI && window.electronAPI.sendHudState)) return;
   try { window.electronAPI.sendHudState('controllers', overlayControllerRows()); } catch (e) { /* window closed */ }
 }
-let _ovlListThrottle = 0;
+// Drop phantom handles: a granted device that has NEVER delivered a raw report
+// (lastRawReportAt===0) after a grace window is a stale/half-open grant, not a
+// live controller (the "USB DS4 SELECTED but rawReportAt=0" case). The manager
+// does this in ingestFrame, which the overlay doesn't call — so do it here. A
+// physically-present controller streams within ms, so 3s is safe.
+const _PHANTOM_MS = 3000;
+function evictPhantoms(now) {
+  for (const entry of [...listManager._hidPool.values()]) {
+    if (entry.lastRawReportAt === 0 && typeof entry.pooledAt === 'number' && (now - entry.pooledAt) > _PHANTOM_MS) {
+      const dev = entry.device;
+      console.log('[overlay] evicting phantom (no reports in ' + Math.round((now - entry.pooledAt)) + 'ms):',
+        dev.productName || (dev.vendorId.toString(16) + ':' + dev.productId.toString(16)));
+      if (dev === hidDevice) undesignateEntry();   // was SELECTED — drop it, let auto-adopt find a live one
+      try { listManager._evictFromPool(dev); } catch (e) { /* ok */ }
+    }
+  }
+}
+let _ovlListThrottle = 0, _phantomThrottle = 0;
 
 function loop() {
   requestAnimationFrame(loop);
   const _now = performance.now();
   if (_now - _ovlListThrottle > 120) { _ovlListThrottle = _now; forwardControllerList(); }
+  if (_now - _phantomThrottle > 1000) { _phantomThrottle = _now; evictPhantoms(_now); }
   if (!modelReady) return;
 
   const gamepad = readGamepad();
