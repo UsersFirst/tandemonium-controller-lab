@@ -165,9 +165,6 @@ async function initControllerList() {
     listManager.wireHidHotplug();
   } catch (e) { console.warn('[overlay] controller-pool init failed', e); }
 }
-let _preferredGyroDevice = null;
-// Stable per-device id so the detached list can address an EXACT handle.
-const _deviceIds = new WeakMap();
 // Set once by an explicit list-selection; consumed by connectControllerGyro so
 // it binds THIS exact handle (identical vid:pid pads share a vid:pid, not this).
 let _preferredGyroDevice = null;
