@@ -641,6 +641,64 @@
     fill: none;
     opacity: 0.85;
   }
+  /* Text under the No-Controller emoji — makes the not-SELECTED state explicit
+     (the emoji alone under-communicated it). See #104. */
+  #no-controller .splash-title {
+    margin-top: 1.5rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #e8e8ee;
+    letter-spacing: 0.02em;
+  }
+  #no-controller .splash-sub {
+    margin-top: 0.5rem;
+    max-width: 30rem;
+    padding: 0 2rem;
+    text-align: center;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    color: #b0b0bc;
+  }
+  #no-controller .splash-list-glyph { opacity: 0.9; }
+
+  /* LIVE badge (#104) — opt-in "this controller is driving the overlay". */
+  #live-badge {
+    position: fixed;
+    top: 12px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 55;
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #e8e8ee;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    -webkit-app-region: no-drag;
+  }
+  #live-badge.hidden { display: none; }
+  #live-badge .live-dot { color: #33dd77; font-size: 0.7em; }
+
+  /* PREVIEW label (#104) — shown while browsing a model with nothing selected. */
+  #preview-label {
+    position: fixed;
+    bottom: 14px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 55;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.5);
+    color: #c9c9d2;
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+    pointer-events: none;
+    -webkit-app-region: no-drag;
+  }
+  #preview-label.hidden { display: none; }
 
   /* ── Button HUD — compact 2D readout of gamepad state ── */
   /* Renders face buttons, dpad, shoulders, analog triggers, stick positions,
@@ -945,6 +1003,11 @@
       <option value="dualsense">DualSense</option>
       <option value="switch-pro">Switch Pro</option>
     </select>
+  </div>
+
+  <div class="setting-row">
+    <label title="Show a small badge with the SELECTED controller's name while it is live driving the overlay. Off by default.">Show Controller Badge</label>
+    <input type="checkbox" id="badge-toggle" autocomplete="off">
   </div>
 
   <div class="setting-row">
@@ -1297,6 +1360,14 @@
   <span class="status-badge" id="gamepad-status">No gamepad</span>
 </div>
 
+<!-- LIVE badge (#104): opt-in indicator that a controller is SELECTED and
+     driving the overlay. Hidden by default (setting: Show Controller Badge). -->
+<div id="live-badge" class="hidden"><span class="live-dot">&#x25CF;</span> <span id="live-badge-name"></span></div>
+
+<!-- PREVIEW label (#104): shown when browsing a model from the dropdown with no
+     controller SELECTED — the viewport is a preview, not a live controller. -->
+<div id="preview-label" class="hidden">Preview &middot; not selected</div>
+
 <!-- Live axis readout (pitch/yaw/roll in degrees) -->
 <div id="axis-readout">
   <span class="ax-pitch">P <span id="ax-pitch-val">0°</span></span>
@@ -1388,6 +1459,8 @@
       <line x1="18" y1="18" x2="82" y2="82"/>
     </svg>
   </div>
+  <div class="splash-title">No controller selected</div>
+  <div class="splash-sub">Press a controller, or open the list <span class="splash-list-glyph">&#x29C9;</span> to pick one.</div>
   <!-- Shown when a Steam Controller Puck is connected but no paired
        controller body is sending STATE reports. Hidden by default; app.js
        reveals it 2s after a Puck connect if no STATE report has arrived. -->
