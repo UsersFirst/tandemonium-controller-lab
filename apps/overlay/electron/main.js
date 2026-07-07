@@ -138,6 +138,41 @@ function upsertHidController(d, connected, fromNodeHid = false) {
   }
 }
 
+// #106 win-2: some pads (the USB DualShock 4, 054c:05c4) leave iSerialNumber
+// empty but expose their Bluetooth MAC via a HID feature report — one Chromium
+// blocklists in WebHID (why the renderer can't read it), but node-hid in main
+// can. Probe once per device path and cache; the report id + layout are
+// per-controller (hardware-verified: DS4 report 0x12, MAC in payload bytes 1..6
+// little-endian). Returns a 12-hex-char MAC (matching node-hid's serialNumber
+// format for pads that DO expose one) or null.
+function macProbeFor(vendorId, productId) {
+  if (vendorId === 0x054c && productId === 0x05c4) return { reportId: 0x12, length: 16 }; // DualShock 4
+  return null; // DualSense/Switch/Steam already surface serialNumber
+}
+const _macProbeCache = new Map(); // path -> mac | null (avoids re-opening each poll)
+function probeUnitMac(device) {
+  if (!nodeHid || !device.path) return null;
+  if (_macProbeCache.has(device.path)) return _macProbeCache.get(device.path);
+  const probe = macProbeFor(device.vendorId, device.productId);
+  if (!probe) { _macProbeCache.set(device.path, null); return null; }
+  let mac = null;
+  try {
+    const h = new nodeHid.HID(device.path);
+    let bytes;
+    try { bytes = h.getFeatureReport(probe.reportId, probe.length); }
+    finally { h.close(); }
+    const raw = (bytes || []).slice(1, 7).reverse(); // 6 MAC bytes, little-endian -> MSB first
+    if (raw.length === 6 && raw.some((b) => b)) {
+      mac = raw.map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch (e) {
+    console.log('[inventory] MAC probe failed —', device.product || device.productId, '-', e.message);
+  }
+  _macProbeCache.set(device.path, mac);
+  if (mac) console.log('[inventory] MAC probe:', device.product || device.productId, '→', mac);
+  return mac;
+}
+
 // #106: rebuild the inventory from node-hid's live device list. `devices()`
 // returns metadata (vid/pid/path/serialNumber/product) WITHOUT opening the
 // device, so it never contends with the renderer's WebHID handles. No gesture
@@ -155,11 +190,14 @@ function enumerateHidViaNodeHid() {
     // Skip non-controllers sharing a vendor (e.g. Microsoft 045e keyboards/mice
     // and productId-0 virtual HID collections that carry no name or serial).
     if (!INVENTORY_VIDS.has(d.vendorId) || !d.productId) continue;
+    // #106 win-2: for pads that expose no iSerialNumber (USB DS4), fall back to
+    // their MAC read from a feature report — a stable per-unit id.
+    const serial = sanitizeSerial(d.serialNumber) || probeUnitMac(d);
     upsertHidController({
       vendorId: d.vendorId,
       productId: d.productId,
       name: d.product || null,
-      serialNumber: d.serialNumber || null,
+      serialNumber: serial,
       deviceId: d.path, // node-hid path → stable per-unit key via hidKey()
     }, true, true);
   }
