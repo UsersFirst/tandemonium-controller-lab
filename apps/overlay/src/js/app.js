@@ -952,19 +952,24 @@ function autoAdoptFromPool() {
 // showed, open the AVAILABLE list so the user can pick.
 function tryAdoptLastUsed(now) {
   if (hidDevice || _preferredGyroDevice || switchingController) return;
-  if (!_lastUsed) { _lastUsedFallbackDone = true; return; } // first-ever run: nothing to restore
   if (now <= _lastUsedDeadline) {
+    // Within the grace window: adopt the remembered pad the moment it's receiving.
+    // No remembered pad yet (first run) → nothing to match; keep waiting out the
+    // window (which also lets the user press a controller to select it first).
+    if (!_lastUsed) return;
     const entry = [...listManager._hidPool.values()].find(
       (e) => e.hidActiveSince > 0 && matchesLastUsed(e.device));
-    if (!entry) return;                       // keep waiting within the window
+    if (!entry) return;                       // remembered pad not up yet — keep waiting
     const d = entry.device, hx = (n) => n.toString(16).padStart(4, '0');
     const stub = { id: `${d.productName || 'Controller'} (STANDARD GAMEPAD Vendor: ${hx(d.vendorId)} Product: ${hx(d.productId)})`,
       index: -1, axes: [0, 0, 0, 0], buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })) };
     console.log('[last-used] auto-selecting remembered controller', d.productName || `${hx(d.vendorId)}:${hx(d.productId)}`);
     switchController(stub, d);
   } else if (!_lastUsedFallbackDone) {
+    // Grace expired with nothing SELECTED → open the AVAILABLE list so the user can
+    // pick, whether or not a pad was remembered. The No-Controller splash stays.
     _lastUsedFallbackDone = true;
-    console.log('[last-used] remembered controller not available after grace — opening the list');
+    console.log('[last-used] nothing selected after grace — opening the controllers list');
     try { window.electronAPI?.openHudWindow?.('controllers', currentControllerType, { on: false }); } catch { /* no-op */ }
   }
 }
