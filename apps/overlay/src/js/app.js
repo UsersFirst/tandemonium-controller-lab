@@ -685,7 +685,9 @@ async function init() {
   initSerialInventory();
 
   // Start the last-used grace window (#104) now that the pool is populating.
-  _lastUsedDeadline = performance.now() + LAST_USED_GRACE_MS;
+  // Full wait only when we're actually waiting for a REMEMBERED pad to enumerate;
+  // with nothing remembered there's nothing to wait for, so open the list sooner.
+  _lastUsedDeadline = performance.now() + (_lastUsed ? LAST_USED_GRACE_MS : NO_PAD_GRACE_MS);
 
   requestAnimationFrame(loop);
 
@@ -903,7 +905,8 @@ function onGamepadDisconnected(index) {
 // an Electron serial refinement is a follow-up). On launch the remembered pad
 // gets a grace window to enumerate (BT/wireless are slow) before we fall back
 // to opening the AVAILABLE list.
-const LAST_USED_GRACE_MS = 6000;
+const LAST_USED_GRACE_MS = 6000;  // wait for a REMEMBERED pad to enumerate (BT/wireless is slow)
+const NO_PAD_GRACE_MS = 2000;     // nothing remembered: a brief beat to press a pad, else open the list
 function readLastUsed() {
   try { return JSON.parse(localStorage.getItem('overlay:lastController') || 'null'); }
   catch { return null; }
