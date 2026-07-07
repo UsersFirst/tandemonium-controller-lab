@@ -929,13 +929,17 @@ function readLastUsed() {
 let _lastUsed = readLastUsed();
 let _lastUsedDeadline = 0;           // set in init: performance.now() + grace
 let _lastUsedFallbackDone = false;
-function rememberLastUsed(device) {
+function rememberLastUsed(device, connType) {
   if (!device) return;
-  _lastUsed = { v: device.vendorId, p: device.productId, name: device.productName || '' };
+  const vp = { vendorId: device.vendorId, productId: device.productId };
+  const s = serialForDevice(vp, connType);
+  // Keep a serial only when it's unit-specific (a real MAC/serial) — drop the
+  // '(no serial)' / '(USB — no serial)' / 'a / b' placeholders that don't pin one
+  // unit. Transport (conn) is ALWAYS kept: it distinguishes two same-model pads on
+  // different buses (BT clone vs USB DS4) even before any serial scan has run.
+  const serial = (s && !s.startsWith('(') && !s.includes(' / ')) ? s : null;
+  _lastUsed = { v: device.vendorId, p: device.productId, name: device.productName || '', conn: connType || null, serial };
   try { localStorage.setItem('overlay:lastController', JSON.stringify(_lastUsed)); } catch { /* ignore */ }
-}
-function matchesLastUsed(device) {
-  return !!(_lastUsed && device && device.vendorId === _lastUsed.v && device.productId === _lastUsed.p);
 }
 
 // Input-driven auto-adopt from the WebHID pool: when NOTHING is SELECTED,
@@ -975,9 +979,21 @@ function tryAdoptLastUsed(now) {
     // No remembered pad yet (first run) → nothing to match; keep waiting out the
     // window (which also lets the user press a controller to select it first).
     if (!_lastUsed) return;
-    const entry = [...listManager._hidPool.values()].find(
-      (e) => e.hidActiveSince > 0 && matchesLastUsed(e.device));
-    if (!entry) return;                       // remembered pad not up yet — keep waiting
+    const connOf = (e) => (e.driver && e.driver.connectionType) || 'hid';
+    const vpMatches = [...listManager._hidPool.values()].filter(
+      (e) => e.hidActiveSince > 0 && e.device.vendorId === _lastUsed.v && e.device.productId === _lastUsed.p);
+    if (!vpMatches.length) return;            // remembered pad not up yet — keep waiting
+    // Pick the exact UNIT among same-model pads: prefer a serial match (needs the
+    // main-process inventory, populated after a list/pair gesture), else the same
+    // transport (distinguishes a BT clone from a USB DS4 on the same vid:pid),
+    // else any same-model receiving pad.
+    let entry = null;
+    if (_lastUsed.serial) {
+      entry = vpMatches.find((e) => serialForDevice(
+        { vendorId: e.device.vendorId, productId: e.device.productId }, connOf(e)) === _lastUsed.serial);
+    }
+    if (!entry && _lastUsed.conn) entry = vpMatches.find((e) => connOf(e) === _lastUsed.conn);
+    if (!entry) entry = vpMatches[0];
     const d = entry.device, hx = (n) => n.toString(16).padStart(4, '0');
     const stub = { id: `${d.productName || 'Controller'} (STANDARD GAMEPAD Vendor: ${hx(d.vendorId)} Product: ${hx(d.productId)})`,
       index: -1, axes: [0, 0, 0, 0], buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })) };
@@ -1232,7 +1248,7 @@ function designateEntry(entry) {
   if (isPuckDevice(hidDevice)) onPuckConnected();
   else onPuckDisconnected();
   maybeSwapProfileAfterImuProbe();
-  rememberLastUsed(entry.device); // #104: this pad becomes the launch default
+  rememberLastUsed(entry.device, entry.driver?.connectionType); // #104: this pad becomes the launch default
   updateLiveBadge();
   updatePreviewLabel();
 }
