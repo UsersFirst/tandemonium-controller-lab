@@ -661,6 +661,45 @@
   }
   #no-controller .splash-list-glyph { opacity: 0.9; }
 
+  /* LIVE badge (#104) — opt-in "this controller is driving the overlay". */
+  #live-badge {
+    position: fixed;
+    top: 12px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 55;
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #e8e8ee;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    -webkit-app-region: no-drag;
+  }
+  #live-badge.hidden { display: none; }
+  #live-badge .live-dot { color: #33dd77; font-size: 0.7em; }
+
+  /* PREVIEW label (#104) — shown while browsing a model with nothing selected. */
+  #preview-label {
+    position: fixed;
+    bottom: 14px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 55;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.5);
+    color: #c9c9d2;
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+    pointer-events: none;
+    -webkit-app-region: no-drag;
+  }
+  #preview-label.hidden { display: none; }
+
   /* ── Button HUD — compact 2D readout of gamepad state ── */
   /* Renders face buttons, dpad, shoulders, analog triggers, stick positions,
      and system buttons. Each element flips between 'idle' and 'pressed' via
@@ -967,6 +1006,11 @@
   </div>
 
   <div class="setting-row">
+    <label title="Show a small badge with the SELECTED controller's name while it is live driving the overlay. Off by default.">Show Controller Badge</label>
+    <input type="checkbox" id="badge-toggle" autocomplete="off">
+  </div>
+
+  <div class="setting-row">
     <label>Gyro (WebHID)</label>
     <button id="connect-gyro-btn">Connect</button>
   </div>
@@ -1247,7 +1291,7 @@
   <!-- Build stamp. CI rewrites the inner content of #build-version with the
        commit short SHA + UTC build time (see the "Stamp build version" steps
        in build-desktop.yml and deploy-pages.yml). Stays "dev build" locally. -->
-  <div class="build-stamp"><span id="build-version">PR #105 &middot; <a href="https://github.com/UsersFirst/tandemonium-controller-lab/commit/cfa6fe91a72377c58ba7ff0f73649186ba16298f" target="_blank" rel="noopener">v.cfa6fe9</a> &middot; 2026-07-07 00:04 UTC</span></div>
+  <div class="build-stamp"><span id="build-version">PR #105 &middot; <a href="https://github.com/UsersFirst/tandemonium-controller-lab/commit/4e008884d46ea073c736fefbb8ef8238064c27c8" target="_blank" rel="noopener">v.4e00888</a> &middot; 2026-07-07 00:36 UTC</span></div>
 </div>
 
 <!-- Floating numeric editor for the selected Edit-Layout part. Outside the
@@ -1315,6 +1359,14 @@
 <div id="status-bar">
   <span class="status-badge" id="gamepad-status">No gamepad</span>
 </div>
+
+<!-- LIVE badge (#104): opt-in indicator that a controller is SELECTED and
+     driving the overlay. Hidden by default (setting: Show Controller Badge). -->
+<div id="live-badge" class="hidden"><span class="live-dot">&#x25CF;</span> <span id="live-badge-name"></span></div>
+
+<!-- PREVIEW label (#104): shown when browsing a model from the dropdown with no
+     controller SELECTED — the viewport is a preview, not a live controller. -->
+<div id="preview-label" class="hidden">Preview &middot; not selected</div>
 
 <!-- Live axis readout (pitch/yaw/roll in degrees) -->
 <div id="axis-readout">

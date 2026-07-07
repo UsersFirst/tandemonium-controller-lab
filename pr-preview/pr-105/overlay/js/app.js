@@ -50,6 +50,17 @@ const gamepadStatusEl = document.getElementById('gamepad-status');
 const gyroToggleBtn = document.getElementById('gyro-toggle');
 const clickThroughIndicator = document.getElementById('click-through-indicator');
 const noControllerSplash = document.getElementById('no-controller');
+// LIVE badge (#104): opt-in indicator showing the SELECTED controller's name
+// while it drives the overlay. Default OFF — only shown when the user enables
+// "Show Controller Badge" in settings.
+const liveBadge = document.getElementById('live-badge');
+const liveBadgeName = document.getElementById('live-badge-name');
+let showBadge = localStorage.getItem('overlay:showBadge') === '1';
+// PREVIEW state (#104): a model picked from the dropdown while nothing is
+// SELECTED is a temporary browse-preview — not persisted, and reset to
+// Auto-Detect once a real controller takes over.
+const previewLabel = document.getElementById('preview-label');
+let _previewPick = false;
 const puckHint = document.getElementById('puck-hint');
 const puckStatusBanner = document.getElementById('puck-status-banner');
 const puckStatusDismiss = document.getElementById('puck-status-dismiss');
@@ -817,6 +828,10 @@ async function switchController(gamepad, preferredDevice = null) {
   switchingController = true;
   _preferredGyroDevice = preferredDevice;   // bind THIS exact handle if given (list-selection)
 
+  // #104: a model picked while nothing was selected is a temporary PREVIEW — a
+  // real controller now taking over shows ITS model, so drop back to Auto-Detect.
+  if (_previewPick) { controllerTypeSelect.value = 'auto'; _previewPick = false; }
+
   try {
     const newType = controllerTypeSelect.value === 'auto'
       ? pickControllerProfile(gamepad.id)
@@ -1172,6 +1187,27 @@ async function finishGyroConnect(device) {
 // Point the overlay's viz at a pool entry: alias hidDevice/controllerDriver/
 // syntheticGamepad/gyroFusion to it, apply the overlay's gravity/yaw prefs to
 // its fusion, and run the post-connect hooks. The manager keeps feeding it.
+// Show/hide the opt-in LIVE badge (#104): visible only when a controller is
+// SELECTED (hidDevice set) AND the user has enabled the badge setting.
+function updateLiveBadge() {
+  if (!liveBadge) return;
+  if (showBadge && hidDevice) {
+    const vp = { vendorId: hidDevice.vendorId, productId: hidDevice.productId };
+    liveBadgeName.textContent = _ctrlName(vp, hidDevice.productName || 'Controller');
+    liveBadge.classList.remove('hidden');
+  } else {
+    liveBadge.classList.add('hidden');
+  }
+}
+
+// Show the "Preview · not selected" label while browsing a model with nothing
+// SELECTED (dropdown on a specific model, no live controller). #104.
+function updatePreviewLabel() {
+  if (!previewLabel) return;
+  const previewing = !hidDevice && controllerTypeSelect.value !== 'auto';
+  previewLabel.classList.toggle('hidden', !previewing);
+}
+
 function designateEntry(entry) {
   selectedEntry = entry;
   hidDevice = entry.device;
@@ -1197,6 +1233,8 @@ function designateEntry(entry) {
   else onPuckDisconnected();
   maybeSwapProfileAfterImuProbe();
   rememberLastUsed(entry.device); // #104: this pad becomes the launch default
+  updateLiveBadge();
+  updatePreviewLabel();
 }
 
 // Stop showing the current controller (device stays pooled + live). Used on
@@ -1211,6 +1249,8 @@ function undesignateEntry() {
   gyroActive = false;
   gyroPermitted = false;
   onPuckDisconnected();
+  updateLiveBadge();
+  updatePreviewLabel();
 }
 
 /**
@@ -2253,38 +2293,61 @@ window.addEventListener('mousedown', (e) => {
   setSettingsVisible(false, 'click-outside');
 });
 
+// LIVE badge toggle (#104) — default OFF; persists in localStorage.
+const badgeToggle = document.getElementById('badge-toggle');
+if (badgeToggle) {
+  badgeToggle.checked = showBadge;
+  badgeToggle.addEventListener('change', (e) => {
+    showBadge = e.target.checked;
+    localStorage.setItem('overlay:showBadge', showBadge ? '1' : '0');
+    updateLiveBadge();
+  });
+}
+
 controllerTypeSelect.addEventListener('change', async (e) => {
-  // Persist the user's manual choice so it survives a relaunch — without
-  // this, every restart would revert to 'auto' and undo their preference.
-  localStorage.setItem('overlay:controllerType', e.target.value);
+  const val = e.target.value;
+  // #104: persist ONLY a deliberate override (chosen while a controller is
+  // SELECTED) or an explicit Auto-Detect. A model picked with nothing selected
+  // is a temporary browse-PREVIEW — don't persist it (so it never becomes a
+  // sticky default) and flag it so a real controller resets back to Auto-Detect.
+  if (hidDevice || val === 'auto') {
+    localStorage.setItem('overlay:controllerType', val);
+    _previewPick = false;
+  } else {
+    _previewPick = true;
+  }
 
   const gp = gamepadIndex !== null ? navigator.getGamepads()[gamepadIndex] : null;
-  if (e.target.value === 'auto' && gp) {
-    const type = pickControllerProfile(gp.id);
-    if (type !== currentControllerType) {
+  if (val === 'auto') {
+    if (gp) {
+      const type = pickControllerProfile(gp.id);
+      if (type !== currentControllerType) {
+        modelReady = false;
+        currentControllerType = type;
+        applyHudLabels(type);
+        await overlay.setControllerType(type);
+        modelReady = true;
+      }
+    }
+    // Auto-Detect with nothing live → back to the IDLE splash (stop previewing).
+    if (!hidDevice) {
+      overlay.setVisible(false);
+      noControllerSplash.classList.remove('hidden');
+    }
+  } else {
+    if (val !== currentControllerType) {
       modelReady = false;
-      currentControllerType = type;
-      applyHudLabels(type);
-      await overlay.setControllerType(type);
+      currentControllerType = val;
+      applyHudLabels(val);
+      await overlay.setControllerType(val);
       modelReady = true;
     }
-  } else if (e.target.value !== 'auto') {
-    if (e.target.value !== currentControllerType) {
-      modelReady = false;
-      currentControllerType = e.target.value;
-      applyHudLabels(e.target.value);
-      await overlay.setControllerType(e.target.value);
-      modelReady = true;
-    }
-    // Even when the type didn't change (e.g. user picks the profile the
-    // overlay already loaded by default), force the model visible and
-    // hide the no-controller splash. Manually picking a profile is an
-    // explicit "I want to see this model" — useful for previewing a
-    // controller's GLB without one actually connected (e.g. Steam
-    // Controller, which Chromium's Gamepad API can't enumerate at all).
+    // Manually picking a profile is an explicit "show me this model" — visible +
+    // splash hidden. With nothing selected this is a browse-PREVIEW (labeled).
     overlay.setVisible(true);
     noControllerSplash.classList.add('hidden');
   }
+  updatePreviewLabel();
 });
 
 // Settings panel gyro button also connects
