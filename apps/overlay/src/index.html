@@ -683,6 +683,23 @@
   #live-badge.hidden { display: none; }
   #live-badge .live-dot { color: #33dd77; font-size: 0.7em; }
 
+  /* PREVIEW label (#104) — shown while browsing a model with nothing selected. */
+  #preview-label {
+    position: fixed;
+    bottom: 14px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 55;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.5);
+    color: #c9c9d2;
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+    pointer-events: none;
+    -webkit-app-region: no-drag;
+  }
+  #preview-label.hidden { display: none; }
+
   /* ── Button HUD — compact 2D readout of gamepad state ── */
   /* Renders face buttons, dpad, shoulders, analog triggers, stick positions,
      and system buttons. Each element flips between 'idle' and 'pressed' via
@@ -1346,6 +1363,10 @@
 <!-- LIVE badge (#104): opt-in indicator that a controller is SELECTED and
      driving the overlay. Hidden by default (setting: Show Controller Badge). -->
 <div id="live-badge" class="hidden"><span class="live-dot">&#x25CF;</span> <span id="live-badge-name"></span></div>
+
+<!-- PREVIEW label (#104): shown when browsing a model from the dropdown with no
+     controller SELECTED — the viewport is a preview, not a live controller. -->
+<div id="preview-label" class="hidden">Preview &middot; not selected</div>
 
 <!-- Live axis readout (pitch/yaw/roll in degrees) -->
 <div id="axis-readout">
