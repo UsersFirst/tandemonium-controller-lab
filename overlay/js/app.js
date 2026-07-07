@@ -50,6 +50,17 @@ const gamepadStatusEl = document.getElementById('gamepad-status');
 const gyroToggleBtn = document.getElementById('gyro-toggle');
 const clickThroughIndicator = document.getElementById('click-through-indicator');
 const noControllerSplash = document.getElementById('no-controller');
+// LIVE badge (#104): opt-in indicator showing the SELECTED controller's name
+// while it drives the overlay. Default OFF — only shown when the user enables
+// "Show Controller Badge" in settings.
+const liveBadge = document.getElementById('live-badge');
+const liveBadgeName = document.getElementById('live-badge-name');
+let showBadge = localStorage.getItem('overlay:showBadge') === '1';
+// PREVIEW state (#104): a model picked from the dropdown while nothing is
+// SELECTED is a temporary browse-preview — not persisted, and reset to
+// Auto-Detect once a real controller takes over.
+const previewLabel = document.getElementById('preview-label');
+let _previewPick = false;
 const puckHint = document.getElementById('puck-hint');
 const puckStatusBanner = document.getElementById('puck-status-banner');
 const puckStatusDismiss = document.getElementById('puck-status-dismiss');
@@ -189,9 +200,27 @@ function initSerialInventory() {
   try {
     if (window.electronAPI.listHidControllers) window.electronAPI.listHidControllers().then((l) => { if (Array.isArray(l)) _hidInventory = l; }).catch(() => {});
     if (window.electronAPI.onHidControllersSnapshot) window.electronAPI.onHidControllersSnapshot((l) => { if (Array.isArray(l)) _hidInventory = l; });
-    // Serial scan happens on the "Show list…" gesture — requestDevice needs user
-    // activation, so a boot timer can't populate the inventory.
+    // A serial scan needs a user gesture (requestDevice). The "Show list…" button
+    // scans on click, but the #104 auto-opened list has NO gesture — so its rows
+    // showed no serials. Arm a one-shot scan on the user's first interaction with
+    // the overlay: Electron auto-picks (no chooser) and upserts every present
+    // device's serial into the inventory the (live) window reads.
+    armFirstGestureSerialScan();
   } catch (e) { /* best-effort */ }
+}
+
+let _serialScanArmed = false;
+function armFirstGestureSerialScan() {
+  if (_serialScanArmed) return;
+  if (!(navigator.hid && navigator.userAgent.includes('Electron'))) return;
+  _serialScanArmed = true;
+  const scan = () => {
+    document.removeEventListener('pointerdown', scan, true);
+    document.removeEventListener('keydown', scan, true);
+    try { navigator.hid.requestDevice({ filters: ControllerRegistry.getHIDFilters() }).catch(() => {}); } catch (e) { /* no-op */ }
+  };
+  document.addEventListener('pointerdown', scan, true);
+  document.addEventListener('keydown', scan, true);
 }
 // Match a handle to its main-process serial. Electron's main HIDDevice exposes
 // no `collections` (so a descriptor fingerprint is impossible there) — but the
@@ -684,6 +713,11 @@ async function init() {
   await initControllerList();
   initSerialInventory();
 
+  // Start the last-used grace window (#104) now that the pool is populating.
+  // Full wait only when we're actually waiting for a REMEMBERED pad to enumerate;
+  // with nothing remembered there's nothing to wait for, so open the list sooner.
+  _lastUsedDeadline = performance.now() + (_lastUsed ? LAST_USED_GRACE_MS : NO_PAD_GRACE_MS);
+
   requestAnimationFrame(loop);
 
   // Adopt an already-connected XInput pad at startup (Xbox has no HID interface,
@@ -812,6 +846,10 @@ async function switchController(gamepad, preferredDevice = null) {
   switchingController = true;
   _preferredGyroDevice = preferredDevice;   // bind THIS exact handle if given (list-selection)
 
+  // #104: a model picked while nothing was selected is a temporary PREVIEW — a
+  // real controller now taking over shows ITS model, so drop back to Auto-Detect.
+  if (_previewPick) { controllerTypeSelect.value = 'auto'; _previewPick = false; }
+
   try {
     const newType = controllerTypeSelect.value === 'auto'
       ? pickControllerProfile(gamepad.id)
@@ -894,6 +932,34 @@ function onGamepadDisconnected(index) {
   overlay.setVisible(false);
 }
 
+// ── Last-used controller default (issue #104) ─────────────────────────────
+// Persist the last SELECTED pad's identity so the next launch can auto-select
+// it. Baseline identity is vid:pid (the browser can't see a per-unit serial —
+// an Electron serial refinement is a follow-up). On launch the remembered pad
+// gets a grace window to enumerate (BT/wireless are slow) before we fall back
+// to opening the AVAILABLE list.
+const LAST_USED_GRACE_MS = 6000;  // wait for a REMEMBERED pad to enumerate (BT/wireless is slow)
+const NO_PAD_GRACE_MS = 2000;     // nothing remembered: a brief beat to press a pad, else open the list
+function readLastUsed() {
+  try { return JSON.parse(localStorage.getItem('overlay:lastController') || 'null'); }
+  catch { return null; }
+}
+let _lastUsed = readLastUsed();
+let _lastUsedDeadline = 0;           // set in init: performance.now() + grace
+let _lastUsedFallbackDone = false;
+function rememberLastUsed(device, connType) {
+  if (!device) return;
+  const vp = { vendorId: device.vendorId, productId: device.productId };
+  const s = serialForDevice(vp, connType);
+  // Keep a serial only when it's unit-specific (a real MAC/serial) — drop the
+  // '(no serial)' / '(USB — no serial)' / 'a / b' placeholders that don't pin one
+  // unit. Transport (conn) is ALWAYS kept: it distinguishes two same-model pads on
+  // different buses (BT clone vs USB DS4) even before any serial scan has run.
+  const serial = (s && !s.startsWith('(') && !s.includes(' / ')) ? s : null;
+  _lastUsed = { v: device.vendorId, p: device.productId, name: device.productName || '', conn: connType || null, serial };
+  try { localStorage.setItem('overlay:lastController', JSON.stringify(_lastUsed)); } catch { /* ignore */ }
+}
+
 // Input-driven auto-adopt from the WebHID pool: when NOTHING is SELECTED,
 // designate the controller the user has actually ENGAGED (a pool entry that has
 // been pressed), else the first receiving gyro-capable entry. This is the ONLY
@@ -916,6 +982,48 @@ function autoAdoptFromPool() {
   const stub = { id: `${d.productName || 'Controller'} (STANDARD GAMEPAD Vendor: ${hx(d.vendorId)} Product: ${hx(d.productId)})`,
     index: -1, axes: [0, 0, 0, 0], buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })) };
   switchController(stub, d);
+}
+
+// Launch default (issue #104): within a grace window after boot, auto-SELECT the
+// last-used controller as soon as it's RECEIVING — no button press required
+// (this relaxes the input-driven policy ONLY for the remembered pad). A real
+// press on any pad still wins, because press-based autoAdoptFromPool runs first
+// in the loop and sets hidDevice before this. After the window, if the pad never
+// showed, open the AVAILABLE list so the user can pick.
+function tryAdoptLastUsed(now) {
+  if (hidDevice || _preferredGyroDevice || switchingController) return;
+  if (now <= _lastUsedDeadline) {
+    // Within the grace window: adopt the remembered pad the moment it's receiving.
+    // No remembered pad yet (first run) → nothing to match; keep waiting out the
+    // window (which also lets the user press a controller to select it first).
+    if (!_lastUsed) return;
+    const connOf = (e) => (e.driver && e.driver.connectionType) || 'hid';
+    const vpMatches = [...listManager._hidPool.values()].filter(
+      (e) => e.hidActiveSince > 0 && e.device.vendorId === _lastUsed.v && e.device.productId === _lastUsed.p);
+    if (!vpMatches.length) return;            // remembered pad not up yet — keep waiting
+    // Pick the exact UNIT among same-model pads: prefer a serial match (needs the
+    // main-process inventory, populated after a list/pair gesture), else the same
+    // transport (distinguishes a BT clone from a USB DS4 on the same vid:pid),
+    // else any same-model receiving pad.
+    let entry = null;
+    if (_lastUsed.serial) {
+      entry = vpMatches.find((e) => serialForDevice(
+        { vendorId: e.device.vendorId, productId: e.device.productId }, connOf(e)) === _lastUsed.serial);
+    }
+    if (!entry && _lastUsed.conn) entry = vpMatches.find((e) => connOf(e) === _lastUsed.conn);
+    if (!entry) entry = vpMatches[0];
+    const d = entry.device, hx = (n) => n.toString(16).padStart(4, '0');
+    const stub = { id: `${d.productName || 'Controller'} (STANDARD GAMEPAD Vendor: ${hx(d.vendorId)} Product: ${hx(d.productId)})`,
+      index: -1, axes: [0, 0, 0, 0], buttons: Array.from({ length: 22 }, () => ({ pressed: false, value: 0 })) };
+    console.log('[last-used] auto-selecting remembered controller', d.productName || `${hx(d.vendorId)}:${hx(d.productId)}`);
+    switchController(stub, d);
+  } else if (!_lastUsedFallbackDone) {
+    // Grace expired with nothing SELECTED → open the AVAILABLE list so the user can
+    // pick, whether or not a pad was remembered. The No-Controller splash stays.
+    _lastUsedFallbackDone = true;
+    console.log('[last-used] nothing selected after grace — opening the controllers list');
+    try { window.electronAPI?.openHudWindow?.('controllers', currentControllerType, { on: false }); } catch { /* no-op */ }
+  }
 }
 
 // ── Gamepad events ──
@@ -1113,6 +1221,27 @@ async function finishGyroConnect(device) {
 // Point the overlay's viz at a pool entry: alias hidDevice/controllerDriver/
 // syntheticGamepad/gyroFusion to it, apply the overlay's gravity/yaw prefs to
 // its fusion, and run the post-connect hooks. The manager keeps feeding it.
+// Show/hide the opt-in LIVE badge (#104): visible only when a controller is
+// SELECTED (hidDevice set) AND the user has enabled the badge setting.
+function updateLiveBadge() {
+  if (!liveBadge) return;
+  if (showBadge && hidDevice) {
+    const vp = { vendorId: hidDevice.vendorId, productId: hidDevice.productId };
+    liveBadgeName.textContent = _ctrlName(vp, hidDevice.productName || 'Controller');
+    liveBadge.classList.remove('hidden');
+  } else {
+    liveBadge.classList.add('hidden');
+  }
+}
+
+// Show the "Preview · not selected" label while browsing a model with nothing
+// SELECTED (dropdown on a specific model, no live controller). #104.
+function updatePreviewLabel() {
+  if (!previewLabel) return;
+  const previewing = !hidDevice && controllerTypeSelect.value !== 'auto';
+  previewLabel.classList.toggle('hidden', !previewing);
+}
+
 function designateEntry(entry) {
   selectedEntry = entry;
   hidDevice = entry.device;
@@ -1137,6 +1266,9 @@ function designateEntry(entry) {
   if (isPuckDevice(hidDevice)) onPuckConnected();
   else onPuckDisconnected();
   maybeSwapProfileAfterImuProbe();
+  rememberLastUsed(entry.device, entry.driver?.connectionType); // #104: this pad becomes the launch default
+  updateLiveBadge();
+  updatePreviewLabel();
 }
 
 // Stop showing the current controller (device stays pooled + live). Used on
@@ -1151,6 +1283,8 @@ function undesignateEntry() {
   gyroActive = false;
   gyroPermitted = false;
   onPuckDisconnected();
+  updateLiveBadge();
+  updatePreviewLabel();
 }
 
 /**
@@ -1360,7 +1494,11 @@ function loop() {
   if (_now - _streamThrottle > 500) { _streamThrottle = _now; checkStalledStream(_now); }
   // Auto-adopt a HID controller from the pool when nothing is SELECTED (startup /
   // after a disconnect). Cheap: bails immediately once something is selected.
-  if (!hidDevice && _now - _adoptThrottle > 200) { _adoptThrottle = _now; autoAdoptFromPool(); }
+  if (!hidDevice && _now - _adoptThrottle > 200) {
+    _adoptThrottle = _now;
+    autoAdoptFromPool();                    // press-based (a real press wins)
+    if (!hidDevice) tryAdoptLastUsed(_now);  // else restore the last-used pad within grace (#104)
+  }
   if (!modelReady) return;
 
   const gamepad = readGamepad();
@@ -2189,38 +2327,61 @@ window.addEventListener('mousedown', (e) => {
   setSettingsVisible(false, 'click-outside');
 });
 
+// LIVE badge toggle (#104) — default OFF; persists in localStorage.
+const badgeToggle = document.getElementById('badge-toggle');
+if (badgeToggle) {
+  badgeToggle.checked = showBadge;
+  badgeToggle.addEventListener('change', (e) => {
+    showBadge = e.target.checked;
+    localStorage.setItem('overlay:showBadge', showBadge ? '1' : '0');
+    updateLiveBadge();
+  });
+}
+
 controllerTypeSelect.addEventListener('change', async (e) => {
-  // Persist the user's manual choice so it survives a relaunch — without
-  // this, every restart would revert to 'auto' and undo their preference.
-  localStorage.setItem('overlay:controllerType', e.target.value);
+  const val = e.target.value;
+  // #104: persist ONLY a deliberate override (chosen while a controller is
+  // SELECTED) or an explicit Auto-Detect. A model picked with nothing selected
+  // is a temporary browse-PREVIEW — don't persist it (so it never becomes a
+  // sticky default) and flag it so a real controller resets back to Auto-Detect.
+  if (hidDevice || val === 'auto') {
+    localStorage.setItem('overlay:controllerType', val);
+    _previewPick = false;
+  } else {
+    _previewPick = true;
+  }
 
   const gp = gamepadIndex !== null ? navigator.getGamepads()[gamepadIndex] : null;
-  if (e.target.value === 'auto' && gp) {
-    const type = pickControllerProfile(gp.id);
-    if (type !== currentControllerType) {
+  if (val === 'auto') {
+    if (gp) {
+      const type = pickControllerProfile(gp.id);
+      if (type !== currentControllerType) {
+        modelReady = false;
+        currentControllerType = type;
+        applyHudLabels(type);
+        await overlay.setControllerType(type);
+        modelReady = true;
+      }
+    }
+    // Auto-Detect with nothing live → back to the IDLE splash (stop previewing).
+    if (!hidDevice) {
+      overlay.setVisible(false);
+      noControllerSplash.classList.remove('hidden');
+    }
+  } else {
+    if (val !== currentControllerType) {
       modelReady = false;
-      currentControllerType = type;
-      applyHudLabels(type);
-      await overlay.setControllerType(type);
+      currentControllerType = val;
+      applyHudLabels(val);
+      await overlay.setControllerType(val);
       modelReady = true;
     }
-  } else if (e.target.value !== 'auto') {
-    if (e.target.value !== currentControllerType) {
-      modelReady = false;
-      currentControllerType = e.target.value;
-      applyHudLabels(e.target.value);
-      await overlay.setControllerType(e.target.value);
-      modelReady = true;
-    }
-    // Even when the type didn't change (e.g. user picks the profile the
-    // overlay already loaded by default), force the model visible and
-    // hide the no-controller splash. Manually picking a profile is an
-    // explicit "I want to see this model" — useful for previewing a
-    // controller's GLB without one actually connected (e.g. Steam
-    // Controller, which Chromium's Gamepad API can't enumerate at all).
+    // Manually picking a profile is an explicit "show me this model" — visible +
+    // splash hidden. With nothing selected this is a browse-PREVIEW (labeled).
     overlay.setVisible(true);
     noControllerSplash.classList.add('hidden');
   }
+  updatePreviewLabel();
 });
 
 // Settings panel gyro button also connects
