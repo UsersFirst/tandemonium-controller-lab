@@ -40,5 +40,10 @@ module.exports = {
     //   },
     // },
   ],
-  plugins: [],
+  plugins: [
+    // #106: node-hid is a native module — unpack its .node binary out of the
+    // asar archive so it's loadable at runtime. Forge's package/make step also
+    // rebuilds native modules for the target Electron ABI via @electron/rebuild.
+    { name: '@electron-forge/plugin-auto-unpack-natives', config: {} },
+  ],
 };
