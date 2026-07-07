@@ -50,6 +50,12 @@ const gamepadStatusEl = document.getElementById('gamepad-status');
 const gyroToggleBtn = document.getElementById('gyro-toggle');
 const clickThroughIndicator = document.getElementById('click-through-indicator');
 const noControllerSplash = document.getElementById('no-controller');
+// LIVE badge (#104): opt-in indicator showing the SELECTED controller's name
+// while it drives the overlay. Default OFF — only shown when the user enables
+// "Show Controller Badge" in settings.
+const liveBadge = document.getElementById('live-badge');
+const liveBadgeName = document.getElementById('live-badge-name');
+let showBadge = localStorage.getItem('overlay:showBadge') === '1';
 const puckHint = document.getElementById('puck-hint');
 const puckStatusBanner = document.getElementById('puck-status-banner');
 const puckStatusDismiss = document.getElementById('puck-status-dismiss');
@@ -1172,6 +1178,19 @@ async function finishGyroConnect(device) {
 // Point the overlay's viz at a pool entry: alias hidDevice/controllerDriver/
 // syntheticGamepad/gyroFusion to it, apply the overlay's gravity/yaw prefs to
 // its fusion, and run the post-connect hooks. The manager keeps feeding it.
+// Show/hide the opt-in LIVE badge (#104): visible only when a controller is
+// SELECTED (hidDevice set) AND the user has enabled the badge setting.
+function updateLiveBadge() {
+  if (!liveBadge) return;
+  if (showBadge && hidDevice) {
+    const vp = { vendorId: hidDevice.vendorId, productId: hidDevice.productId };
+    liveBadgeName.textContent = _ctrlName(vp, hidDevice.productName || 'Controller');
+    liveBadge.classList.remove('hidden');
+  } else {
+    liveBadge.classList.add('hidden');
+  }
+}
+
 function designateEntry(entry) {
   selectedEntry = entry;
   hidDevice = entry.device;
@@ -1197,6 +1216,7 @@ function designateEntry(entry) {
   else onPuckDisconnected();
   maybeSwapProfileAfterImuProbe();
   rememberLastUsed(entry.device); // #104: this pad becomes the launch default
+  updateLiveBadge();
 }
 
 // Stop showing the current controller (device stays pooled + live). Used on
@@ -1211,6 +1231,7 @@ function undesignateEntry() {
   gyroActive = false;
   gyroPermitted = false;
   onPuckDisconnected();
+  updateLiveBadge();
 }
 
 /**
@@ -2252,6 +2273,17 @@ window.addEventListener('mousedown', (e) => {
   if (e.target === settingsToggle || settingsToggle.contains(e.target)) return;
   setSettingsVisible(false, 'click-outside');
 });
+
+// LIVE badge toggle (#104) — default OFF; persists in localStorage.
+const badgeToggle = document.getElementById('badge-toggle');
+if (badgeToggle) {
+  badgeToggle.checked = showBadge;
+  badgeToggle.addEventListener('change', (e) => {
+    showBadge = e.target.checked;
+    localStorage.setItem('overlay:showBadge', showBadge ? '1' : '0');
+    updateLiveBadge();
+  });
+}
 
 controllerTypeSelect.addEventListener('change', async (e) => {
   // Persist the user's manual choice so it survives a relaunch — without
