@@ -200,9 +200,27 @@ function initSerialInventory() {
   try {
     if (window.electronAPI.listHidControllers) window.electronAPI.listHidControllers().then((l) => { if (Array.isArray(l)) _hidInventory = l; }).catch(() => {});
     if (window.electronAPI.onHidControllersSnapshot) window.electronAPI.onHidControllersSnapshot((l) => { if (Array.isArray(l)) _hidInventory = l; });
-    // Serial scan happens on the "Show list…" gesture — requestDevice needs user
-    // activation, so a boot timer can't populate the inventory.
+    // A serial scan needs a user gesture (requestDevice). The "Show list…" button
+    // scans on click, but the #104 auto-opened list has NO gesture — so its rows
+    // showed no serials. Arm a one-shot scan on the user's first interaction with
+    // the overlay: Electron auto-picks (no chooser) and upserts every present
+    // device's serial into the inventory the (live) window reads.
+    armFirstGestureSerialScan();
   } catch (e) { /* best-effort */ }
+}
+
+let _serialScanArmed = false;
+function armFirstGestureSerialScan() {
+  if (_serialScanArmed) return;
+  if (!(navigator.hid && navigator.userAgent.includes('Electron'))) return;
+  _serialScanArmed = true;
+  const scan = () => {
+    document.removeEventListener('pointerdown', scan, true);
+    document.removeEventListener('keydown', scan, true);
+    try { navigator.hid.requestDevice({ filters: ControllerRegistry.getHIDFilters() }).catch(() => {}); } catch (e) { /* no-op */ }
+  };
+  document.addEventListener('pointerdown', scan, true);
+  document.addEventListener('keydown', scan, true);
 }
 // Match a handle to its main-process serial. Electron's main HIDDevice exposes
 // no `collections` (so a descriptor fingerprint is impossible there) — but the
