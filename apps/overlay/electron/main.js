@@ -88,15 +88,39 @@ const dragOffsets = new Map(); // BrowserWindow.id -> { dx, dy }
 const INVENTORY_VIDS = new Set([0x054c, 0x057e, 0x28de, 0x045e, 0x3537, 0x2dc8, 0x0f0d]);
 const hidControllers = new Map(); // key -> { vendorId, productId, name, serialNumber, connected }
 
+// #106: prefer node-hid for the inventory when available — the MAIN process can
+// enumerate serials + a per-unit `path` at launch with NO user gesture (the
+// renderer's WebHID requestDevice scan needs transient activation, which the
+// #104 auto-opened list lacks, so its rows showed no serials). Guarded: if the
+// native module isn't built for this Electron ABI it stays null and we degrade
+// to the Electron HID-event inventory below — no regression.
+let nodeHid = null;
+try {
+  nodeHid = require('node-hid');
+  console.log('[inventory] node-hid loaded — gesture-free serial enumeration active');
+} catch (e) {
+  console.log('[inventory] node-hid unavailable, using Electron HID events —', e.message);
+}
+
 // Drop XInput slot indices ("01"/"02") and other too-short non-serials so they
 // aren't mistaken for a per-unit id.
 function sanitizeSerial(s) {
   const t = s ? String(s).trim() : '';
   return t.length >= 6 ? t : null;
 }
-function hidKey(d) { return d.guid || d.deviceId || `${d.vendorId}:${d.productId}`; }
+function hidKey(d) {
+  // Prefer a physical-unit key (vid:pid:serial) so a multi-interface device
+  // collapses to ONE inventory entry — the Steam Puck exposes ~11 HID interfaces
+  // that all share a single serial, which would otherwise be 11 rows (#106).
+  const serial = sanitizeSerial(d.serialNumber);
+  if (serial) return `${d.vendorId}:${d.productId}:${serial}`;
+  return d.guid || d.deviceId || `${d.vendorId}:${d.productId}`;
+}
 
-function upsertHidController(d, connected) {
+function upsertHidController(d, connected, fromNodeHid = false) {
+  // When node-hid is the source of truth, ignore the Electron HID events so the
+  // two sources don't produce duplicate/rekeyed inventory entries.
+  if (nodeHid && !fromNodeHid) return;
   if (!d || !INVENTORY_VIDS.has(d.vendorId)) return;
   const key = hidKey(d);
   const prev = hidControllers.get(key) || {};
@@ -108,8 +132,41 @@ function upsertHidController(d, connected) {
     serialNumber: sanitizeSerial(d.serialNumber) || prev.serialNumber || null,
     connected,
   });
-  console.log('[inventory] HID', connected ? 'present' : 'gone', '-',
-    (d.name || d.productId), 'serial=', d.serialNumber || '(none)');
+  if (!fromNodeHid) {
+    console.log('[inventory] HID', connected ? 'present' : 'gone', '-',
+      (d.name || d.productId), 'serial=', d.serialNumber || '(none)');
+  }
+}
+
+// #106: rebuild the inventory from node-hid's live device list. `devices()`
+// returns metadata (vid/pid/path/serialNumber/product) WITHOUT opening the
+// device, so it never contends with the renderer's WebHID handles. No gesture
+// required. `path` is a stable per-unit id (distinguishes two same-vid:pid
+// units the renderer's WebHID handle cannot). Broadcasts only on change so the
+// polling interval doesn't spam snapshots.
+function enumerateHidViaNodeHid() {
+  if (!nodeHid) return;
+  let devices;
+  try { devices = nodeHid.devices(); }
+  catch (e) { console.log('[inventory] node-hid devices() failed —', e.message); return; }
+  const before = JSON.stringify([...hidControllers.values()]);
+  hidControllers.clear();
+  for (const d of devices) {
+    // Skip non-controllers sharing a vendor (e.g. Microsoft 045e keyboards/mice
+    // and productId-0 virtual HID collections that carry no name or serial).
+    if (!INVENTORY_VIDS.has(d.vendorId) || !d.productId) continue;
+    upsertHidController({
+      vendorId: d.vendorId,
+      productId: d.productId,
+      name: d.product || null,
+      serialNumber: d.serialNumber || null,
+      deviceId: d.path, // node-hid path → stable per-unit key via hidKey()
+    }, true, true);
+  }
+  if (JSON.stringify([...hidControllers.values()]) !== before) {
+    console.log('[inventory] node-hid enumeration:', hidControllers.size, 'controller(s)');
+    broadcastHidControllers();
+  }
 }
 
 function hidControllerList() { return [...hidControllers.values()]; }
@@ -274,6 +331,14 @@ app.commandLine.appendSwitch('disable-features', 'AutofillServerCommunication,Au
 
 app.whenReady().then(() => {
   createWindow();
+
+  // #106: populate the serial inventory immediately (no gesture) and poll for
+  // hot-plug/removal. node-hid enumeration is cheap and read-only; the interval
+  // only broadcasts when the device set actually changes.
+  if (nodeHid) {
+    enumerateHidViaNodeHid();
+    setInterval(enumerateHidViaNodeHid, 2000);
+  }
 
   // Create tray icon if asset exists
   try {
