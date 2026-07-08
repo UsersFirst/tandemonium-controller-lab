@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { ControllerOverlay, detectControllerType, PROFILES, GyroGimbal } from '@usersfirst/controller-visualizer';
-import { ControllerRegistry, SensorFusion, analyzeImuStep, SteamControllerDriver, ControllerManager } from '@usersfirst/controller-core';
+import { ControllerRegistry, SensorFusion, analyzeImuStep, SteamControllerDriver, ControllerManager, isPresentableEntry } from '@usersfirst/controller-core';
 import { recordStep, buildReport, exportReport, stepsForEntry, parseImuSamples,
   areasForSteps, filterStepsByAreas, AREA_LABELS, STEP_AREAS } from './test-report.js';
 
@@ -169,10 +169,11 @@ const listManager = new ControllerManager({ slotIds: ['_ovl'] });
 async function initControllerList() {
   if (!navigator.hid) return;
   try {
-    const approved = await navigator.hid.getDevices();
-    for (const d of approved) {
-      if (ControllerRegistry.isKnownDevice(d)) await listManager.poolDevice(d);
-    }
+    // WebHID-first: pool every approved, known HID device (no Gamepad-API gate).
+    // Shared with the multi/lobby apps so all three boot HID the same way — this
+    // used to be an inline loop here that drifted from the gated version those
+    // apps called. See ControllerManager.autoPoolApprovedHid.
+    await listManager.autoPoolApprovedHid();
     listManager.wireHidHotplug();
   } catch (e) { console.warn('[overlay] controller-pool init failed', e); }
 }
@@ -1096,7 +1097,7 @@ function scheduleGyroConnect() {
     if (gyroActive) return;
     console.log('Auto-connecting gyro for', currentControllerType, '...');
     try {
-      await connectControllerGyro();
+      await connectControllerGyro(false);   // boot auto-connect: no gesture → getDevices only, never the blocking scan
       if (gyroActive) {
         console.log('Gyro auto-connected successfully');
       } else {
@@ -1123,7 +1124,7 @@ function cancelGyroConnect() {
  * Step 2: requestDevice() — triggers Electron's select-hid-device handler
  *         which auto-approves. Also works in browsers with user gesture.
  */
-async function connectControllerGyro() {
+async function connectControllerGyro(allowRequest = true) {
   if (hidDevice && gyroActive) return;
   if (!navigator.hid) return;
 
@@ -1159,8 +1160,12 @@ async function connectControllerGyro() {
     console.log('connectControllerGyro: getDevices failed:', err.message);
   }
 
-  // Step 2: requestDevice() if no granted device
-  if (!device) {
+  // Step 2: requestDevice() if no granted device — only when the caller allows
+  // it (a real user gesture). The boot auto-connect timer has no gesture, so a
+  // requestDevice there just throws "Must be handling a user gesture" (and in
+  // Electron would run the blocking system HID scan); skip it and let the user's
+  // explicit Connect click do the granting.
+  if (!device && allowRequest) {
     console.log('connectControllerGyro: trying requestDevice()...');
     try {
       const devices = await navigator.hid.requestDevice({ filters });
@@ -1208,7 +1213,12 @@ async function finishGyroConnect(device) {
 
   // Steam Controller Puck: the picked handle may be a sibling that never emits
   // STATE reports — designate the same-vid:pid interface that IS receiving them.
-  if (entry.driver?.constructor?.needsSiblingFanout) {
+  // Only reroute a SILENT handle, though: the 2026 Puck is a multi-receiver and
+  // each paired body streams on its own interface, so a streaming handle is
+  // already its own unit. Rerouting a live handle to rx[0] would make selecting
+  // the second controller silently snap back to the first (see the multi-Steam
+  // per-unit rollup below).
+  if (entry.driver?.constructor?.needsSiblingFanout && !(entry.hidActiveSince > 0)) {
     const rx = pool().filter((e) => forVp(e) && e.hidActiveSince > 0);
     if (rx.length) entry = rx[0];
   }
@@ -1372,17 +1382,21 @@ function overlayControllerRows() {
     rows.push({ key: 'active', sortId: deviceIdFor(hidDevice), name: _ctrlName(vp, hidDevice.productName), state: 'SELECTED',
       conn, vp, serial: serialForDevice(vp, conn), active: _padActive(readGamepad()), selected: true });
   }
-  // Pool entries → rows. A fan-out device (Steam Controller Puck: 5 same-vid:pid
-  // HID interfaces on ONE physical unit) rolls up to a SINGLE row; other handles
-  // are one row each. Siblings of the SELECTED controller are hidden.
-  // TODO: multiple Steam Controllers on one Puck will need per-unit rollup (issue).
+  // Pool entries → rows. A fan-out device (Steam Controller Puck) exposes several
+  // same-vid:pid HID interfaces, but — crucially — the 2026 Puck is a MULTI-
+  // receiver: each paired controller body streams STATE on its OWN vendor
+  // interface (verified: body#1→MI_02, body#2→MI_03). So a fan-out interface is
+  // its own logical controller *iff it is actually streaming* (hidActiveSince>0);
+  // the Puck's silent siblings (keyboard/mouse collections, unpaired receiver
+  // slots) are NOT controllers and must not appear as phantom rows. Non-fan-out
+  // handles are one row each as before. (This replaces the old fan:vid:pid rollup
+  // that collapsed every Puck interface — and thus BOTH bodies — into one row.)
   const groups = new Map();
   for (const entry of listManager._hidPool.values()) {
     const d = entry.device;
     if (d === hidDevice) continue;   // the SELECTED device is now pooled too — shown as its own row above
-    const isFanout = !!(entry.driver && entry.driver.constructor && entry.driver.constructor.needsSiblingFanout);
-    if (isFanout && hidDevice && d.vendorId === hidDevice.vendorId && d.productId === hidDevice.productId) continue;
-    const gk = isFanout ? ('fan:' + d.vendorId + ':' + d.productId) : ('dev:' + deviceIdFor(d));
+    if (!isPresentableEntry(entry)) continue;   // hide idle Puck siblings (shared core filter)
+    const gk = 'dev:' + deviceIdFor(d);   // per-interface row (per-unit for the multi-receiver Puck)
     const a = _padActive(entry.synthetic);
     const g = groups.get(gk);
     if (g) { g.active = g.active || a; } else groups.set(gk, { device: d, entry, active: a });
@@ -1405,6 +1419,22 @@ function overlayControllerRows() {
   // Stable order by first-sighting (deviceId) so SELECTING a controller does NOT
   // reorder the list — the row you clicked stays put instead of jumping to top.
   rows.sort((x, y) => x.sortId - y.sortId);
+  // Disambiguate identical display names: two Steam Controller bodies on one
+  // multi-receiver Puck share name + vid:pid + serial (the serial is the PUCK's,
+  // not the body's — see [[multi-steam-controller]]), so the rows are otherwise
+  // indistinguishable. Append a stable ' #n' by first-sighting order (sortId,
+  // already applied) so the user can tell them apart. Also covers any two
+  // truly-identical pads (e.g. two DS4s). Single-of-a-kind names are untouched.
+  const nameCounts = new Map();
+  for (const r of rows) nameCounts.set(r.name, (nameCounts.get(r.name) || 0) + 1);
+  const nameSeen = new Map();
+  for (const r of rows) {
+    if (nameCounts.get(r.name) > 1) {
+      const n = (nameSeen.get(r.name) || 0) + 1;
+      nameSeen.set(r.name, n);
+      r.name = `${r.name} #${n}`;
+    }
+  }
   return rows;
 }
 
@@ -1456,6 +1486,10 @@ function forwardControllerList() {
 const _PHANTOM_MS = 3000;
 function evictPhantoms(now) {
   for (const entry of [...listManager._hidPool.values()]) {
+    // Never evict a fan-out (Steam Puck) interface for silence: it's present as
+    // long as the dongle is plugged, just idle until a body powers on. Evicting
+    // it would drop a receiver slot that a controller is about to stream into.
+    if (entry.driver?.constructor?.needsSiblingFanout) continue;
     if (entry.lastRawReportAt === 0 && typeof entry.pooledAt === 'number' && (now - entry.pooledAt) > _PHANTOM_MS) {
       const dev = entry.device;
       console.log('[overlay] evicting phantom (no reports in ' + Math.round((now - entry.pooledAt)) + 'ms):',
