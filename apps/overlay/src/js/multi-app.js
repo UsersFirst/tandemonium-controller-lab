@@ -263,16 +263,21 @@ function reconcileViews() {
   if (emptyState) emptyState.classList.toggle('hidden', views.size > 0);
 }
 
-// ── AVAILABLE / PLAYER roster list (toggled by the List button) ──
+// ── AVAILABLE / PLAYER roster (forwarded to the detached List popout) ──
+//
+// The List is an independent always-on-top window (kind 'multi-controllers'):
+// the button opens it, and rosterRows() is forwarded each frame over IPC. The
+// window renders read-only — players join by pressing a button, not by clicking.
 
-const listPanel = document.getElementById('controller-list');
-const listBody = document.getElementById('controller-list-body');
-const listCount = document.getElementById('controller-list-count');
 const listToggle = document.getElementById('list-toggle');
-if (listToggle && listPanel) {
+if (listToggle) {
   listToggle.addEventListener('click', () => {
-    const open = listPanel.classList.toggle('hidden');
-    listToggle.classList.toggle('open', !open);
+    if (window.electronAPI && window.electronAPI.openHudWindow) {
+      window.electronAPI.openHudWindow('multi-controllers').catch(() => {});
+      listToggle.classList.add('open');
+    } else {
+      console.warn('[multi] List popout needs Electron (window.electronAPI unavailable)');
+    }
   });
 }
 
@@ -289,6 +294,9 @@ function synthActive(gp) {
   for (const b of (gp.buttons || [])) if (b && (b.pressed || (b.value || 0) > 0.5)) return true;
   for (const a of (gp.axes || [])) if (Math.abs(a) > 0.5) return true;
   return false;
+}
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
 // Build the roster: every claimed controller (as PLAYER n) + every pooled,
@@ -331,32 +339,15 @@ function rosterRows() {
   return rows;
 }
 
+// Forward the roster to the detached List window each frame (throttled). main.js
+// drops the message if the window isn't open, so this is a cheap no-op when the
+// popout is closed.
 let _listLastUpdate = 0;
-function renderRoster(now) {
-  if (!listBody || !listPanel || listPanel.classList.contains('hidden')) return;
+function forwardRoster(now) {
+  if (!(window.electronAPI && window.electronAPI.sendHudState)) return;
   if (now - _listLastUpdate < 200) return;   // ~5Hz
   _listLastUpdate = now;
-  const rows = rosterRows();
-  if (listCount) listCount.textContent = String(rows.length);
-  if (rows.length === 0) {
-    listBody.innerHTML = '<div class="cl-empty">No controllers connected. Power one on.</div>';
-    return;
-  }
-  listBody.innerHTML = rows.map((r) => {
-    const isPlayer = r.state.startsWith('PLAYER');
-    const dotCls = r.active ? 'on' : (isPlayer ? 'player' : '');
-    const stateCls = isPlayer ? 'player' : 'avail';
-    return `<div class="cl-row">
-      <span class="cl-dot ${dotCls}"></span>
-      <span class="cl-name">${escapeHtml(r.name)}</span>
-      <span class="cl-vp">${escapeHtml(r.vp)}</span>
-      <span class="cl-state ${stateCls}">${escapeHtml(r.state)}</span>
-    </div>`;
-  }).join('');
-}
-
-function escapeHtml(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  try { window.electronAPI.sendHudState('multi-controllers', rosterRows()); } catch { /* window closed */ }
 }
 
 // ── Diagnostics panel (per PLAYER) ──
@@ -447,7 +438,7 @@ function loop() {
     renderSlotDiagnostics(v, pads);
   }
 
-  renderRoster(now);
+  forwardRoster(now);
   renderDebugStrip(pads);
 
   requestAnimationFrame(loop);
