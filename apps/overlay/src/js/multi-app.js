@@ -100,6 +100,18 @@ class SlotView {
       });
     }
 
+    // Resize the WebGL renderer whenever THIS panel's canvas changes size. The
+    // grid reflows when a player joins/leaves, which resizes every other panel's
+    // canvas (CSS) but not its drawing buffer — leaving the 3D model stretched
+    // until a manual window nudge. Observing the canvas fixes each panel the
+    // instant it reflows. (renderer.setSize(w,h,false) doesn't touch CSS size,
+    // so this can't feed back into a ResizeObserver loop.)
+    this._resizeObserver = null;
+    if (typeof ResizeObserver !== 'undefined' && this.canvas) {
+      this._resizeObserver = new ResizeObserver(() => this._resize());
+      this._resizeObserver.observe(this.canvas);
+    }
+
     this._unsub = slot.on((s, reason, data) => this._onSlotChange(reason, data));
     // The view is created the frame AFTER the claim, so we missed the initial
     // 'claimed'/'hid-bound' events — render current state directly instead.
@@ -120,6 +132,7 @@ class SlotView {
   }
 
   dispose() {
+    if (this._resizeObserver) { try { this._resizeObserver.disconnect(); } catch {} this._resizeObserver = null; }
     if (this._unsub) { try { this._unsub(); } catch {} this._unsub = null; }
     try { this.overlay?.dispose?.(); } catch {}
     this.overlay = null;

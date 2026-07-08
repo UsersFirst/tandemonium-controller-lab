@@ -331,13 +331,31 @@
 
 <button id="list-toggle" title="Toggle controller list">&#x25BE; List</button>
 <button id="debug-toggle" title="Toggle debug readout">&#x25BE; Debug</button>
+<button id="close-app" title="Close application">&times;</button>
 <div id="debug-readout" class="hidden"></div>
 
 <style>
+  #close-app {
+    position: fixed;
+    top: 6px;
+    right: 10px;
+    z-index: 211;
+    width: 26px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.06);
+    color: #9aa3b4;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    font-size: 15px; line-height: 1;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    font-family: inherit;
+  }
+  #close-app:hover { background: rgba(230,70,70,0.85); color: #fff; border-color: rgba(230,70,70,0.9); }
   #list-toggle {
     position: fixed;
     top: 6px;
-    right: 78px;
+    right: 122px;
     z-index: 210;
     background: rgba(255,255,255,0.06);
     color: #9aa3b4;
@@ -355,7 +373,7 @@
   #debug-toggle {
     position: fixed;
     top: 6px;
-    right: 10px;
+    right: 46px;
     z-index: 210;
     background: rgba(255,255,255,0.06);
     color: #9aa3b4;
@@ -397,6 +415,11 @@
     btn.addEventListener('click', () => {
       const open = panel.classList.toggle('hidden');
       btn.classList.toggle('open', !open);
+    });
+    const closeBtn = document.getElementById('close-app');
+    if (closeBtn) closeBtn.addEventListener('click', () => {
+      if (window.electronAPI && window.electronAPI.quit) window.electronAPI.quit();
+      else if (window.close) window.close();
     });
   })();
 </script>
