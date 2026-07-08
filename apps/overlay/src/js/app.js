@@ -169,10 +169,11 @@ const listManager = new ControllerManager({ slotIds: ['_ovl'] });
 async function initControllerList() {
   if (!navigator.hid) return;
   try {
-    const approved = await navigator.hid.getDevices();
-    for (const d of approved) {
-      if (ControllerRegistry.isKnownDevice(d)) await listManager.poolDevice(d);
-    }
+    // WebHID-first: pool every approved, known HID device (no Gamepad-API gate).
+    // Shared with the multi/lobby apps so all three boot HID the same way — this
+    // used to be an inline loop here that drifted from the gated version those
+    // apps called. See ControllerManager.autoPoolApprovedHid.
+    await listManager.autoPoolApprovedHid();
     listManager.wireHidHotplug();
   } catch (e) { console.warn('[overlay] controller-pool init failed', e); }
 }

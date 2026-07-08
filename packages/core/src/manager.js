@@ -1205,37 +1205,30 @@ export class ControllerManager {
   }
 
   /**
-   * Pool approved HID devices at boot (no user gesture required).
-   * Only pools devices whose vid:pid has a live Gamepad API counterpart,
-   * so stale pairings from prior sessions don't get initialized.
+   * Pool every approved, known HID device at boot (no user gesture required).
+   *
+   * WebHID-first: WebHID is the primary input path, so we pool any controller
+   * with a WebHID driver regardless of whether the Gamepad API also sees it.
+   * The Gamepad API / XInput is the FALLBACK — ingestFrame's Gamepad-claim loop
+   * covers controllers that provide input only there (Xbox), and a WebHID-pooled
+   * pad that ALSO enumerates in the Gamepad API is de-duped at claim time.
+   *
+   * There is deliberately NO "is it live in the Gamepad API?" gate here: it
+   * structurally excluded HID-only controllers (the Steam Controller Puck is
+   * vendor-defined HID and never appears in the Gamepad API), so a present Puck
+   * was dropped whenever any other Gamepad-API pad was connected. Stale pairings
+   * from prior sessions (approved but not physically present) are handled the
+   * same way the single overlay handles them — the phantom-eviction sweep in
+   * ingestFrame drops any pooled handle that never streams a raw report within
+   * the probation window. See [[multi-steam-controller]].
    */
   async autoPoolApprovedHid() {
     if (!navigator.hid) return;
     try {
       const approved = await navigator.hid.getDevices();
-      const known = approved.filter((d) => ControllerRegistry.isKnownDevice(d));
-      const liveVidPids = new Set();
-      const pads = (navigator.getGamepads && navigator.getGamepads()) || [];
-      for (const gp of pads) {
-        if (!gp) continue;
-        const vp = ControllerRegistry.parseGamepadVendorProduct(gp.id);
-        if (vp) liveVidPids.add(`${vp.vendorId}:${vp.productId}`);
-      }
-      for (const d of known) {
+      for (const d of approved) {
+        if (!ControllerRegistry.isKnownDevice(d)) continue;
         if (this._isDeviceInPoolOrSlot(d)) continue;
-        const key = `${d.vendorId}:${d.productId}`;
-        // HID-only controllers (Steam Controller Puck — vendor-defined HID,
-        // never enumerated by the Gamepad API) can't be "live in the Gamepad
-        // API" by definition, so the stale-pairing skip would wrongly drop a
-        // PRESENT one whenever some other Gamepad-API pad (an Xbox, say) is
-        // also connected — breaking Steam multiplayer in a mixed setup. Pool
-        // them regardless; the phantom-eviction sweep removes any that never
-        // stream. See [[multi-steam-controller]].
-        const hidOnly = !!ControllerRegistry.getEntry(d.vendorId, d.productId)?.hidOnly;
-        if (!hidOnly && liveVidPids.size > 0 && !liveVidPids.has(key)) {
-          console.log(`[manager] skipping stale HID pairing ${key} (not live in Gamepad API)`);
-          continue;
-        }
         await this.poolDevice(d);
       }
     } catch (err) {
