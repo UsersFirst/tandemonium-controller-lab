@@ -266,6 +266,68 @@
     letter-spacing: 0.6px;
     pointer-events: none;
   }
+
+  /* Empty state — shown when no players have joined yet */
+  #empty-state {
+    position: fixed;
+    top: 36px; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    pointer-events: none;
+    z-index: 5;
+  }
+  #empty-state.hidden { display: none; }
+  #empty-state .es-icon { font-size: 46px; opacity: 0.5; margin-bottom: 14px; }
+  #empty-state .es-title {
+    font-size: 15px; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; color: #8a93a7;
+  }
+  #empty-state .es-sub { font-size: 12px; color: #5b6374; margin-top: 8px; line-height: 1.6; }
+
+  /* Controller roster list (toggled by the List button) */
+  #controller-list {
+    position: fixed;
+    top: 36px; right: 10px;
+    width: min(360px, 80vw);
+    max-height: 70vh;
+    overflow: auto;
+    background: rgba(6,9,16,0.94);
+    border: 1px solid rgba(120,180,255,0.22);
+    border-radius: 10px;
+    z-index: 205;
+    backdrop-filter: blur(6px);
+    padding: 10px 8px 8px 8px;
+  }
+  #controller-list.hidden { display: none; }
+  #controller-list .cl-head {
+    font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase;
+    color: #6a7184; padding: 0 8px 8px 8px;
+  }
+  #controller-list-body { display: flex; flex-direction: column; gap: 2px; }
+  .cl-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 8px; border-radius: 6px;
+    font-size: 12px; color: #cfd6e4;
+  }
+  .cl-row:hover { background: rgba(255,255,255,0.04); }
+  .cl-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+    background: rgba(255,255,255,0.18);
+  }
+  .cl-dot.player { background: #5fd184; box-shadow: 0 0 6px rgba(95,209,132,0.6); }
+  .cl-dot.on { background: #ffd166; box-shadow: 0 0 7px rgba(255,209,102,0.8); }
+  .cl-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cl-vp { font-family: monospace; font-size: 10px; color: #5b6374; flex: 0 0 auto; }
+  .cl-state {
+    flex: 0 0 auto; font-size: 9px; letter-spacing: 0.6px; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 8px;
+  }
+  .cl-state.avail { background: rgba(120,150,200,0.16); color: #9db4da; }
+  .cl-state.player { background: rgba(95,209,132,0.18); color: #8be0a8; }
+  .cl-empty { padding: 12px 10px; font-size: 12px; color: #5b6374; text-align: center; }
 </style>
 </head>
 <body>
@@ -274,6 +336,12 @@
 <div id="app-title">Tandemonium · Multi-Controller Prototype</div>
 
 <div id="slots"></div>
+
+<div id="empty-state">
+  <div class="es-icon">🎮</div>
+  <div class="es-title">Waiting for players</div>
+  <div class="es-sub">Power on a controller, then press any button to join.<br>Open <b>List</b> to see connected controllers.</div>
+</div>
 
 <template id="slot-template">
   <div class="slot empty">
@@ -301,11 +369,36 @@
   </div>
 </template>
 
-<div id="status-line">Hold PS/Home 2s to release a slot · First input claims next empty slot</div>
+<div id="status-line">Press any button on a connected controller to join · Hold PS/Home 2s to leave · Open List to see all controllers</div>
 
+<button id="list-toggle" title="Toggle controller list">&#x25BE; List</button>
 <button id="debug-toggle" title="Toggle debug readout">&#x25BE; Debug</button>
 <div id="debug-readout" class="hidden"></div>
+
+<div id="controller-list" class="hidden">
+  <div class="cl-head">Controllers (<span id="controller-list-count">0</span>)</div>
+  <div id="controller-list-body"></div>
+</div>
+
 <style>
+  #list-toggle {
+    position: fixed;
+    top: 6px;
+    right: 78px;
+    z-index: 210;
+    background: rgba(255,255,255,0.06);
+    color: #9aa3b4;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 10px;
+    letter-spacing: 0.6px;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    font-family: inherit;
+  }
+  #list-toggle:hover { background: rgba(255,255,255,0.12); color: #e0e6f0; }
+  #list-toggle.open { background: rgba(80,150,255,0.2); color: #cfe0ff; border-color: rgba(80,150,255,0.4); }
   #debug-toggle {
     position: fixed;
     top: 6px;
