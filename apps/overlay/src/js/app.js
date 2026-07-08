@@ -1483,6 +1483,10 @@ function forwardControllerList() {
 const _PHANTOM_MS = 3000;
 function evictPhantoms(now) {
   for (const entry of [...listManager._hidPool.values()]) {
+    // Never evict a fan-out (Steam Puck) interface for silence: it's present as
+    // long as the dongle is plugged, just idle until a body powers on. Evicting
+    // it would drop a receiver slot that a controller is about to stream into.
+    if (entry.driver?.constructor?.needsSiblingFanout) continue;
     if (entry.lastRawReportAt === 0 && typeof entry.pooledAt === 'number' && (now - entry.pooledAt) > _PHANTOM_MS) {
       const dev = entry.device;
       console.log('[overlay] evicting phantom (no reports in ' + Math.round((now - entry.pooledAt)) + 'ms):',

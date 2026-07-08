@@ -1179,6 +1179,14 @@ export class ControllerManager {
     // it are never swept.
     for (const [device, entry] of [...this._hidPool]) {
       if (typeof entry.pooledAt !== 'number') continue;
+      // Fan-out (Steam Puck) interfaces are present as long as the dongle is
+      // plugged, even before any body is paired/streaming — an idle receiver
+      // slot is NOT a ghost. Evicting it breaks power-on-after-launch: the
+      // controller streams into an already-enumerated interface, which fires no
+      // WebHID 'connect', so nothing re-pools it and the user must restart the
+      // app. Real removal comes from the hotplug 'disconnect' path (whole Puck
+      // unplugged), not this silence sweep. See [[multi-steam-controller]].
+      if (entry.driver?.constructor?.needsSiblingFanout) continue;
       if (entry.lastRawReportAt === 0 && (now - entry.pooledAt) > this.opts.poolProbationMs) {
         console.log(`[manager] evicting phantom HID handle ${device.vendorId?.toString(16)}:${device.productId?.toString(16)} (${device.productName || '?'}) — silent for ${Math.round(now - entry.pooledAt)}ms`);
         this._evictFromPool(device);

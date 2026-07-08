@@ -56,3 +56,19 @@ test('test doubles without a numeric pooledAt are never swept', () => {
   m.ingestFrame([], 999999);
   assert.equal(m._hidPool.has(d), true, 'entries without pooledAt are left alone');
 });
+
+test('a fan-out (Steam Puck) interface is NOT evicted for silence — it waits for a body', () => {
+  // An idle Puck interface (receiver slot with no body paired yet) streams no
+  // reports, but it is present, not a ghost. Evicting it breaks power-on after
+  // launch. Removal is via hotplug disconnect (whole Puck unplugged), not this
+  // silence sweep. See [[multi-steam-controller]].
+  class FanoutDriver {}
+  FanoutDriver.needsSiblingFanout = true;
+  const m = new ControllerManager({ slotIds: ['P1', 'P2'] });
+  const puck = { vendorId: 0x28de, productId: 0x1304, productName: 'Steam Controller Puck' };
+  const e = fakeEntry(puck, { pooledAt: 1000, lastRawReportAt: 0 }); // never streamed
+  e.driver = new FanoutDriver();
+  m._hidPool.set(puck, e);
+  m.ingestFrame([], 1000 + m.opts.poolProbationMs + 5000);   // well past probation
+  assert.equal(m._hidPool.has(puck), true, 'idle Puck interface kept, not swept as a phantom');
+});
