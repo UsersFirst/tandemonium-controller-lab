@@ -118,6 +118,8 @@
   #ctrl-count { font: 11px/1 var(--mono); color: #8a93a6; letter-spacing: .3px; }
   .pairbtn-sm { font: 11px/1 var(--mono); color: #cdd6e6; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 7px 11px; cursor: pointer; }
   .pairbtn-sm:hover { color: #fff; border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.12); }
+  .pairbtn-close { font: 15px/1 var(--mono); color: #cdd6e6; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .pairbtn-close:hover { color: #fff; background: rgba(230,70,70,0.85); border-color: rgba(230,70,70,0.9); }
 
   /* controllers panel */
   #ctrl-panel { position: fixed; top: 44px; right: 12px; z-index: 101; width: 300px; max-width: 82vw; background: rgba(9,13,11,0.97); border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; padding: 11px 12px; box-shadow: 0 20px 44px -18px #000; -webkit-app-region: no-drag; }
@@ -155,6 +157,7 @@
   <span id="ctrl-count">no controllers</span>
   <button id="btn-ctrl-list" class="pairbtn-sm" title="Show every controller — active, paired, and open" aria-expanded="false">Controllers ▾</button>
   <button id="btn-pair-global" class="pairbtn-sm" title="Approve a controller for this app (WebHID). Steam Controller needs this; DualSense too for lightbar/gyro.">🎮 Pair controller</button>
+  <button id="btn-close-app" class="pairbtn-close" title="Close application">&times;</button>
 </div>
 <div id="ctrl-panel" hidden>
   <div class="cp-head">CONTROLLERS <span id="cp-note"></span></div>

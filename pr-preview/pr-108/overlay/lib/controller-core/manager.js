@@ -27,6 +27,18 @@ import { ControllerRegistry } from './drivers/controller-registry.js';
 // no `npm install`) and matches core's package.json, which doesn't declare
 // `three` directly.
 
+// Default maximum number of controllers/players an app pre-allocates slots for.
+// Slots are cheap (a Slot is just state — no canvas); a view/panel is created
+// only when a slot is CLAIMED, so this is a safety ceiling well past a practical
+// local-multiplayer count, not a per-slot cost. Apps import this instead of
+// hardcoding their own cap so the overlay, multi, and lobby stay consistent.
+export const MAX_CONTROLLERS = 16;
+
+/** Convenience: ['P1','P2',…,'Pn'] for `new ControllerManager({ slotIds })`. */
+export function playerSlotIds(n = MAX_CONTROLLERS) {
+  return Array.from({ length: n }, (_, i) => `P${i + 1}`);
+}
+
 const DEFAULTS = {
   releaseHoldMs: 2000,
   reclaimCooldownMs: 1500,

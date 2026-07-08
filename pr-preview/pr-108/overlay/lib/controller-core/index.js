@@ -11,6 +11,8 @@
 export {
   ControllerManager,
   Slot,
+  MAX_CONTROLLERS,
+  playerSlotIds,
   gamepadHasActivity,
   gamepadHasFreshActivity,
   stableIdFor,

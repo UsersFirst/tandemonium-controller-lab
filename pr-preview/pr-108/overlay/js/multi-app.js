@@ -22,13 +22,12 @@
 // ============================================================
 
 import { ControllerOverlay, detectControllerType } from '@usersfirst/controller-visualizer';
-import { ControllerRegistry, ControllerManager } from '@usersfirst/controller-core';
+import { ControllerRegistry, ControllerManager, MAX_CONTROLLERS, playerSlotIds } from '@usersfirst/controller-core';
 
-// Pre-allocated slot cap. Panels/canvases are only created for CLAIMED slots, so
-// the real cost scales with active players, not this number. 16 is well past a
-// practical local-multiplayer ceiling; bump if ever needed.
-const MAX_PLAYERS = 16;
-const SLOT_IDS = Array.from({ length: MAX_PLAYERS }, (_, i) => `P${i + 1}`);
+// Pre-allocated slot cap (shared core constant). Panels/canvases are only created
+// for CLAIMED slots, so the real cost scales with active players, not this number.
+const MAX_PLAYERS = MAX_CONTROLLERS;
+const SLOT_IDS = playerSlotIds();
 
 // Re-pool interval: a controller powered on after launch streams into an
 // already-enumerated interface (no WebHID 'connect' event), so we periodically

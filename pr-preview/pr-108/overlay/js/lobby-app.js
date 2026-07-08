@@ -15,9 +15,14 @@
 // into the game (sync-controller-core).
 // ============================================================
 
-import { ControllerManager, ControllerRegistry } from '@usersfirst/controller-core';
+import { ControllerManager, ControllerRegistry, MAX_CONTROLLERS, playerSlotIds } from '@usersfirst/controller-core';
 
-const SLOT_IDS = ['P1', 'P2', 'P3', 'P4'];
+// Pre-allocate a generous slot pool (shared core constant) so MORE controllers
+// than there are seats can be RECOGNIZED (ACTIVE) and wait in the lounge for a
+// seat to open — the modes cap seats at 4 (versus 2v2), but a 5th+ controller
+// should still be seen and queue, not silently do nothing (it had nowhere to go
+// with only 4 slots). Only claimed slots cost anything.
+const SLOT_IDS = playerSlotIds();
 const manager = new ControllerManager({ slotIds: SLOT_IDS });
 window.__manager = manager;
 
@@ -529,6 +534,10 @@ async function boot() {
   $('btn-pair').addEventListener('click', pairController);
   $('btn-pair-global').addEventListener('click', pairController);
   $('btn-ctrl-list').addEventListener('click', toggleCtrlPanel);
+  $('btn-close-app').addEventListener('click', () => {
+    if (window.electronAPI && window.electronAPI.quit) window.electronAPI.quit();
+    else if (window.close) window.close();
+  });
 
   // Per-unit serial/MAC inventory from the Electron main process (no-op on web).
   if (window.electronAPI) {
