@@ -286,7 +286,9 @@ function updateControllerCount() {
   const el = $('ctrl-count'); if (!el) return;
   if (pairMsg && performance.now() < pairMsgUntil) { el.textContent = pairMsg; return; }
   const claimed = manager.slots.filter((s) => s.state === 'claimed').length;
-  const pooled = manager._hidPool.size;
+  // Count only usable pooled controllers — excludes idle Steam Puck receiver
+  // interfaces (shared core filter), same as the list.
+  const pooled = manager.presentablePoolEntries().length;
   el.textContent = (claimed === 0 && pooled === 0)
     ? 'no controllers — press a button or Pair →'
     : `${claimed} in use${pooled ? ` · ${pooled} available` : ''}`;
@@ -379,7 +381,9 @@ function ctrlEntries(pads) {
     });
   }
   let hi = 0;
-  for (const entry of manager._hidPool.values()) {
+  // presentablePoolEntries hides idle Steam Puck receiver interfaces (kept pooled
+  // for power-on, but not usable controllers) — shared core filter.
+  for (const entry of manager.presentablePoolEntries()) {
     const nm = (entry.driver && entry.driver.entry && entry.driver.entry.name) || (entry.device && entry.device.productName) || 'Controller';
     items.push({
       // index in the key: two identical-vid:pid devices (real DS4 + GameSir spoof)
