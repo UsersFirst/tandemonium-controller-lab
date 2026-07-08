@@ -293,17 +293,45 @@ function updateControllerCount() {
     ? 'no controllers — press a button or Pair →'
     : `${claimed} in use${pooled ? ` · ${pooled} available` : ''}`;
 }
-// Approve/pool the next controller (main.js auto-selects a not-yet-picked one).
-// requestDevice needs the click as its user gesture; the Steam Controller is
-// HID-only, so it can only be recognized after this. Gives visible feedback:
-// after boot auto-pools everything, there's often nothing new to pair, and the
-// old silent no-op read as "the button is broken".
+// Approve/pool the next controller. requestDevice needs the click as its user
+// gesture; the Steam Controller is HID-only, so it can only be recognized after
+// this. Gives visible feedback: after boot auto-pools everything, there's often
+// nothing new to pair.
+//
+// Environment-aware, so a redundant click doesn't stall (issue seen in Electron):
+//   • Browser — the requestDevice picker IS the only way to grant access, so
+//     always allow it (prompt: true).
+//   • Electron — the app auto-grants + auto-pools, so requestDevice is only
+//     needed for the FIRST grant on a fresh profile. It also enumerates every
+//     system HID device and briefly blocks. So: pool an already-approved device
+//     cheaply; only run the scan when nothing is paired yet (first-time setup)
+//     or the user explicitly asks for it by clicking again ("force scan").
+const IS_ELECTRON = navigator.userAgent.includes('Electron');
+let _forceScanUntil = 0;
 async function pairController() {
   const free = SLOT_IDS.find((id) => manager.getSlot(id).state !== 'claimed') || SLOT_IDS[0];
   const before = manager._hidPool.size;
   flashPairMsg('pairing…'); openCtrlPanel(true);
   try {
-    const dev = await manager.connectHidForSlot(free);
+    let dev;
+    if (!IS_ELECTRON) {
+      dev = await manager.connectHidForSlot(free, { prompt: true });
+    } else {
+      dev = await manager.connectHidForSlot(free, { prompt: false });   // cheap: pool an already-approved device
+      if (!dev) {
+        const nothingPairedYet = manager._hidPool.size === 0;            // fresh profile — scan is justified
+        const armed = performance.now() < _forceScanUntil;              // user clicked again to force it
+        if (nothingPairedYet || armed) {
+          _forceScanUntil = 0;
+          dev = await manager.connectHidForSlot(free, { prompt: true }); // the (blocking) system HID scan
+        } else {
+          const n = manager.presentablePoolEntries().length;
+          _forceScanUntil = performance.now() + 5000;
+          flashPairMsg(n ? `✓ ${n} connected — click again to scan for a new one` : 'no controller found — click again to scan');
+          return;
+        }
+      }
+    }
     const after = manager._hidPool.size;
     if (dev) flashPairMsg('paired ✓ ' + (dev.productName || 'controller'));
     else if (after > before) flashPairMsg('paired ✓');
