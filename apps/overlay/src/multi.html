@@ -266,6 +266,26 @@
     letter-spacing: 0.6px;
     pointer-events: none;
   }
+
+  /* Empty state — shown when no players have joined yet */
+  #empty-state {
+    position: fixed;
+    top: 36px; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    pointer-events: none;
+    z-index: 5;
+  }
+  #empty-state.hidden { display: none; }
+  #empty-state .es-icon { font-size: 46px; opacity: 0.5; margin-bottom: 14px; }
+  #empty-state .es-title {
+    font-size: 15px; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; color: #8a93a7;
+  }
+  #empty-state .es-sub { font-size: 12px; color: #5b6374; margin-top: 8px; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -274,6 +294,12 @@
 <div id="app-title">Tandemonium · Multi-Controller Prototype</div>
 
 <div id="slots"></div>
+
+<div id="empty-state">
+  <div class="es-icon">🎮</div>
+  <div class="es-title">Waiting for players</div>
+  <div class="es-sub">Power on a controller, then press any button to join.<br>Open <b>List</b> to see connected controllers.</div>
+</div>
 
 <template id="slot-template">
   <div class="slot empty">
@@ -301,15 +327,53 @@
   </div>
 </template>
 
-<div id="status-line">Hold PS/Home 2s to release a slot · First input claims next empty slot</div>
+<div id="status-line">Press any button on a connected controller to join · Hold PS/Home 2s to leave · Open List to see all controllers</div>
 
+<button id="list-toggle" title="Toggle controller list">&#x25BE; List</button>
 <button id="debug-toggle" title="Toggle debug readout">&#x25BE; Debug</button>
+<button id="close-app" title="Close application">&times;</button>
 <div id="debug-readout" class="hidden"></div>
+
 <style>
-  #debug-toggle {
+  #close-app {
     position: fixed;
     top: 6px;
     right: 10px;
+    z-index: 211;
+    width: 26px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.06);
+    color: #9aa3b4;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    font-size: 15px; line-height: 1;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    font-family: inherit;
+  }
+  #close-app:hover { background: rgba(230,70,70,0.85); color: #fff; border-color: rgba(230,70,70,0.9); }
+  #list-toggle {
+    position: fixed;
+    top: 6px;
+    right: 122px;
+    z-index: 210;
+    background: rgba(255,255,255,0.06);
+    color: #9aa3b4;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 10px;
+    letter-spacing: 0.6px;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    font-family: inherit;
+  }
+  #list-toggle:hover { background: rgba(255,255,255,0.12); color: #e0e6f0; }
+  #list-toggle.open { background: rgba(80,150,255,0.2); color: #cfe0ff; border-color: rgba(80,150,255,0.4); }
+  #debug-toggle {
+    position: fixed;
+    top: 6px;
+    right: 46px;
     z-index: 210;
     background: rgba(255,255,255,0.06);
     color: #9aa3b4;
@@ -351,6 +415,11 @@
     btn.addEventListener('click', () => {
       const open = panel.classList.toggle('hidden');
       btn.classList.toggle('open', !open);
+    });
+    const closeBtn = document.getElementById('close-app');
+    if (closeBtn) closeBtn.addEventListener('click', () => {
+      if (window.electronAPI && window.electronAPI.quit) window.electronAPI.quit();
+      else if (window.close) window.close();
     });
   })();
 </script>

@@ -15,9 +15,14 @@
 // into the game (sync-controller-core).
 // ============================================================
 
-import { ControllerManager, ControllerRegistry } from '@usersfirst/controller-core';
+import { ControllerManager, ControllerRegistry, MAX_CONTROLLERS, playerSlotIds } from '@usersfirst/controller-core';
 
-const SLOT_IDS = ['P1', 'P2', 'P3', 'P4'];
+// Pre-allocate a generous slot pool (shared core constant) so MORE controllers
+// than there are seats can be RECOGNIZED (ACTIVE) and wait in the lounge for a
+// seat to open — the modes cap seats at 4 (versus 2v2), but a 5th+ controller
+// should still be seen and queue, not silently do nothing (it had nowhere to go
+// with only 4 slots). Only claimed slots cost anything.
+const SLOT_IDS = playerSlotIds();
 const manager = new ControllerManager({ slotIds: SLOT_IDS });
 window.__manager = manager;
 
@@ -281,22 +286,52 @@ function updateControllerCount() {
   const el = $('ctrl-count'); if (!el) return;
   if (pairMsg && performance.now() < pairMsgUntil) { el.textContent = pairMsg; return; }
   const claimed = manager.slots.filter((s) => s.state === 'claimed').length;
-  const pooled = manager._hidPool.size;
+  // Count only usable pooled controllers — excludes idle Steam Puck receiver
+  // interfaces (shared core filter), same as the list.
+  const pooled = manager.presentablePoolEntries().length;
   el.textContent = (claimed === 0 && pooled === 0)
     ? 'no controllers — press a button or Pair →'
     : `${claimed} in use${pooled ? ` · ${pooled} available` : ''}`;
 }
-// Approve/pool the next controller (main.js auto-selects a not-yet-picked one).
-// requestDevice needs the click as its user gesture; the Steam Controller is
-// HID-only, so it can only be recognized after this. Gives visible feedback:
-// after boot auto-pools everything, there's often nothing new to pair, and the
-// old silent no-op read as "the button is broken".
+// Approve/pool the next controller. requestDevice needs the click as its user
+// gesture; the Steam Controller is HID-only, so it can only be recognized after
+// this. Gives visible feedback: after boot auto-pools everything, there's often
+// nothing new to pair.
+//
+// Environment-aware, so a redundant click doesn't stall (issue seen in Electron):
+//   • Browser — the requestDevice picker IS the only way to grant access, so
+//     always allow it (prompt: true).
+//   • Electron — the app auto-grants + auto-pools, so requestDevice is only
+//     needed for the FIRST grant on a fresh profile. It also enumerates every
+//     system HID device and briefly blocks. So: pool an already-approved device
+//     cheaply; only run the scan when nothing is paired yet (first-time setup)
+//     or the user explicitly asks for it by clicking again ("force scan").
+const IS_ELECTRON = navigator.userAgent.includes('Electron');
+let _forceScanUntil = 0;
 async function pairController() {
   const free = SLOT_IDS.find((id) => manager.getSlot(id).state !== 'claimed') || SLOT_IDS[0];
   const before = manager._hidPool.size;
   flashPairMsg('pairing…'); openCtrlPanel(true);
   try {
-    const dev = await manager.connectHidForSlot(free);
+    let dev;
+    if (!IS_ELECTRON) {
+      dev = await manager.connectHidForSlot(free, { prompt: true });
+    } else {
+      dev = await manager.connectHidForSlot(free, { prompt: false });   // cheap: pool an already-approved device
+      if (!dev) {
+        const nothingPairedYet = manager._hidPool.size === 0;            // fresh profile — scan is justified
+        const armed = performance.now() < _forceScanUntil;              // user clicked again to force it
+        if (nothingPairedYet || armed) {
+          _forceScanUntil = 0;
+          dev = await manager.connectHidForSlot(free, { prompt: true }); // the (blocking) system HID scan
+        } else {
+          const n = manager.presentablePoolEntries().length;
+          _forceScanUntil = performance.now() + 5000;
+          flashPairMsg(n ? `✓ ${n} connected — click again to scan for a new one` : 'no controller found — click again to scan');
+          return;
+        }
+      }
+    }
     const after = manager._hidPool.size;
     if (dev) flashPairMsg('paired ✓ ' + (dev.productName || 'controller'));
     else if (after > before) flashPairMsg('paired ✓');
@@ -374,7 +409,9 @@ function ctrlEntries(pads) {
     });
   }
   let hi = 0;
-  for (const entry of manager._hidPool.values()) {
+  // presentablePoolEntries hides idle Steam Puck receiver interfaces (kept pooled
+  // for power-on, but not usable controllers) — shared core filter.
+  for (const entry of manager.presentablePoolEntries()) {
     const nm = (entry.driver && entry.driver.entry && entry.driver.entry.name) || (entry.device && entry.device.productName) || 'Controller';
     items.push({
       // index in the key: two identical-vid:pid devices (real DS4 + GameSir spoof)
@@ -529,6 +566,10 @@ async function boot() {
   $('btn-pair').addEventListener('click', pairController);
   $('btn-pair-global').addEventListener('click', pairController);
   $('btn-ctrl-list').addEventListener('click', toggleCtrlPanel);
+  $('btn-close-app').addEventListener('click', () => {
+    if (window.electronAPI && window.electronAPI.quit) window.electronAPI.quit();
+    else if (window.close) window.close();
+  });
 
   // Per-unit serial/MAC inventory from the Electron main process (no-op on web).
   if (window.electronAPI) {

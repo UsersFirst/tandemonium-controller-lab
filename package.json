@@ -12,6 +12,7 @@
     "split-glb": "node tools/split-glb.js",
     "hid-probe": "npx -y serve tools/hid-probe",
     "hid-dump": "node tools/hid-serial-dump.mjs",
+    "steam-multi-probe": "node tools/steam-multi-probe.mjs",
     "inventory-preview": "npx -y serve ."
   },
   "devDependencies": {

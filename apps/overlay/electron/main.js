@@ -361,6 +361,7 @@ app.whenReady().then(() => {
     axis:   { file: 'axis-window.html',        width: 280, height: 90 },
     roll:   { file: 'roll-window.html',        width: 240, height: 170 },
     controllers: { file: 'controllers-window.html', width: 320, height: 460 },
+    'multi-controllers': { file: 'multi-controllers-window.html', width: 340, height: 500 },
   };
 
   ipcMain.handle('open-hud-window', async (_event, { kind, profile, greenScreen }) => {
