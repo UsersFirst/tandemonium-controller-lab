@@ -1224,7 +1224,15 @@ export class ControllerManager {
       for (const d of known) {
         if (this._isDeviceInPoolOrSlot(d)) continue;
         const key = `${d.vendorId}:${d.productId}`;
-        if (liveVidPids.size > 0 && !liveVidPids.has(key)) {
+        // HID-only controllers (Steam Controller Puck — vendor-defined HID,
+        // never enumerated by the Gamepad API) can't be "live in the Gamepad
+        // API" by definition, so the stale-pairing skip would wrongly drop a
+        // PRESENT one whenever some other Gamepad-API pad (an Xbox, say) is
+        // also connected — breaking Steam multiplayer in a mixed setup. Pool
+        // them regardless; the phantom-eviction sweep removes any that never
+        // stream. See [[multi-steam-controller]].
+        const hidOnly = !!ControllerRegistry.getEntry(d.vendorId, d.productId)?.hidOnly;
+        if (!hidOnly && liveVidPids.size > 0 && !liveVidPids.has(key)) {
           console.log(`[manager] skipping stale HID pairing ${key} (not live in Gamepad API)`);
           continue;
         }

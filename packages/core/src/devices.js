@@ -48,6 +48,12 @@
 //                               entry is a clone advertising another
 //                               device's USB identity. `of` is the
 //                               human-readable name of the spoofed device.
+//   hidOnly?:         boolean — true when input comes ONLY over WebHID and
+//                               the device is NEVER enumerated by the Gamepad
+//                               API (vendor-defined HID, e.g. the Steam
+//                               Controller Puck). Lets boot-pooling skip the
+//                               "must be live in the Gamepad API" stale-pairing
+//                               guard for a device that can't be, by definition.
 //   controllerProfile?: string — visualizer profile key (a key in the
 //                               visualizer's PROFILES map). Defaults to
 //                               `protocol` when missing — so Sony DS4/DS5
@@ -257,6 +263,7 @@ export const DEVICES = [
     name: 'Steam Controller 2026 (direct USB-C)',
     vendorId: 0x28de, productId: 0x1302,
     protocol: 'steam-controller',
+    hidOnly: true,
     capabilities: PS_CAPS,
     features: { faceButtons: true, systemButtons: true, triggers: 'analog', shoulders: true, sticks: 2, dpad: true, gyro: true, accel: true, touchpad: true, backPaddles: true, gripSense: true, lightbar: false, rumble: true },
     trackpadCount: 2, haptics: HAPTICS.steam,
@@ -268,6 +275,7 @@ export const DEVICES = [
     name: 'Steam Controller 2026 (via Puck)',
     vendorId: 0x28de, productId: 0x1304,
     protocol: 'steam-controller',
+    hidOnly: true,
     capabilities: PS_CAPS,
     features: { faceButtons: true, systemButtons: true, triggers: 'analog', shoulders: true, sticks: 2, dpad: true, gyro: true, accel: true, touchpad: true, backPaddles: true, gripSense: true, lightbar: false, rumble: true },
     trackpadCount: 2, haptics: HAPTICS.steam,
