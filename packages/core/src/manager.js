@@ -39,6 +39,23 @@ export function playerSlotIds(n = MAX_CONTROLLERS) {
   return Array.from({ length: n }, (_, i) => `P${i + 1}`);
 }
 
+/**
+ * Is a POOLED HID entry a real, currently-usable controller worth showing in a
+ * controller list — as opposed to a latent fan-out sibling interface? A fan-out
+ * driver (SteamControllerDriver.needsSiblingFanout) exposes several same-vid:pid
+ * interfaces per physical Puck; only the ones actually streaming STATE
+ * (hidActiveSince > 0, i.e. a body is paired on that receiver slot) represent a
+ * real controller — the idle siblings are kept pooled (so a later power-on is
+ * caught) but must not appear as phantom "AVAILABLE" rows. Non-fan-out entries
+ * are always presentable. This is the single source of truth for the filter the
+ * overlay / multi / lobby controller lists all share.
+ */
+export function isPresentableEntry(entry) {
+  if (!entry) return false;
+  const fanout = entry.driver && entry.driver.constructor && entry.driver.constructor.needsSiblingFanout;
+  return fanout ? entry.hidActiveSince > 0 : true;
+}
+
 const DEFAULTS = {
   releaseHoldMs: 2000,
   reclaimCooldownMs: 1500,
@@ -530,6 +547,16 @@ export class ControllerManager {
   }
 
   getSlot(id) { return this._slotById[id] || null; }
+
+  /**
+   * Pooled entries worth listing as controllers — hides latent fan-out sibling
+   * interfaces (idle Steam Puck receiver slots). See isPresentableEntry. Used by
+   * the overlay / multi / lobby "controllers" lists so the filter lives in one
+   * place instead of being re-implemented per app.
+   */
+  presentablePoolEntries() {
+    return [...this._hidPool.values()].filter(isPresentableEntry);
+  }
 
   /**
    * Public seat-release used by the lobby's "leave" (B on a joined seat).

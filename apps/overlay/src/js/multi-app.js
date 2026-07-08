@@ -328,10 +328,8 @@ function rosterRows() {
     });
   }
   let avail = 1000;
-  for (const entry of manager._hidPool.values()) {
+  for (const entry of manager.presentablePoolEntries()) {   // hides idle Puck siblings (core)
     const d = entry.device;
-    const isFanout = !!entry.driver?.constructor?.needsSiblingFanout;
-    if (isFanout && !(entry.hidActiveSince > 0)) continue;   // idle Puck sibling — not a controller
     rows.push({
       name: ctrlName(d),
       vp: vpStr(d),

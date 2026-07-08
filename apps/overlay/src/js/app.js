@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { ControllerOverlay, detectControllerType, PROFILES, GyroGimbal } from '@usersfirst/controller-visualizer';
-import { ControllerRegistry, SensorFusion, analyzeImuStep, SteamControllerDriver, ControllerManager } from '@usersfirst/controller-core';
+import { ControllerRegistry, SensorFusion, analyzeImuStep, SteamControllerDriver, ControllerManager, isPresentableEntry } from '@usersfirst/controller-core';
 import { recordStep, buildReport, exportReport, stepsForEntry, parseImuSamples,
   areasForSteps, filterStepsByAreas, AREA_LABELS, STEP_AREAS } from './test-report.js';
 
@@ -1391,8 +1391,7 @@ function overlayControllerRows() {
   for (const entry of listManager._hidPool.values()) {
     const d = entry.device;
     if (d === hidDevice) continue;   // the SELECTED device is now pooled too — shown as its own row above
-    const isFanout = !!(entry.driver && entry.driver.constructor && entry.driver.constructor.needsSiblingFanout);
-    if (isFanout && !(entry.hidActiveSince > 0)) continue;   // silent Puck sibling — not a real controller
+    if (!isPresentableEntry(entry)) continue;   // hide idle Puck siblings (shared core filter)
     const gk = 'dev:' + deviceIdFor(d);   // per-interface row (per-unit for the multi-receiver Puck)
     const a = _padActive(entry.synthetic);
     const g = groups.get(gk);
