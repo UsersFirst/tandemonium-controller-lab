@@ -632,8 +632,15 @@ export class ControllerManager {
     // getDevices() can hand back a different handle object for the same physical
     // device — fall back to a streaming same-vid:pid entry.
     if (!entry) { for (const e of this._hidPool.values()) if (sameVp(e) && e.hidActiveSince > 0) { entry = e; break; } }
-    // Fan-out (Steam Puck): designate the sibling actually emitting STATE reports.
-    if (entry && entry.driver?.constructor?.needsSiblingFanout) {
+    // Fan-out (Steam Puck): the designated handle may be a sibling interface
+    // that never emits STATE — reroute to a same-vid:pid sibling that IS
+    // streaming. BUT only when the designated handle isn't itself streaming:
+    // the 2026 Puck is a MULTI-receiver where each paired body streams on its
+    // OWN interface, so a streaming handle already IS its own unit. Collapsing
+    // to "the first streaming sibling" here would attach the same body to every
+    // seat (see [[multi-steam-controller]]). Keep a live handle; only rescue a
+    // silent one.
+    if (entry && entry.driver?.constructor?.needsSiblingFanout && !(entry.hidActiveSince > 0)) {
       for (const e of this._hidPool.values()) if (sameVp(e) && e.hidActiveSince > 0) { entry = e; break; }
     }
     if (!entry) return null;

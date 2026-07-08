@@ -1208,7 +1208,12 @@ async function finishGyroConnect(device) {
 
   // Steam Controller Puck: the picked handle may be a sibling that never emits
   // STATE reports — designate the same-vid:pid interface that IS receiving them.
-  if (entry.driver?.constructor?.needsSiblingFanout) {
+  // Only reroute a SILENT handle, though: the 2026 Puck is a multi-receiver and
+  // each paired body streams on its own interface, so a streaming handle is
+  // already its own unit. Rerouting a live handle to rx[0] would make selecting
+  // the second controller silently snap back to the first (see the multi-Steam
+  // per-unit rollup below).
+  if (entry.driver?.constructor?.needsSiblingFanout && !(entry.hidActiveSince > 0)) {
     const rx = pool().filter((e) => forVp(e) && e.hidActiveSince > 0);
     if (rx.length) entry = rx[0];
   }
@@ -1372,17 +1377,22 @@ function overlayControllerRows() {
     rows.push({ key: 'active', sortId: deviceIdFor(hidDevice), name: _ctrlName(vp, hidDevice.productName), state: 'SELECTED',
       conn, vp, serial: serialForDevice(vp, conn), active: _padActive(readGamepad()), selected: true });
   }
-  // Pool entries → rows. A fan-out device (Steam Controller Puck: 5 same-vid:pid
-  // HID interfaces on ONE physical unit) rolls up to a SINGLE row; other handles
-  // are one row each. Siblings of the SELECTED controller are hidden.
-  // TODO: multiple Steam Controllers on one Puck will need per-unit rollup (issue).
+  // Pool entries → rows. A fan-out device (Steam Controller Puck) exposes several
+  // same-vid:pid HID interfaces, but — crucially — the 2026 Puck is a MULTI-
+  // receiver: each paired controller body streams STATE on its OWN vendor
+  // interface (verified: body#1→MI_02, body#2→MI_03). So a fan-out interface is
+  // its own logical controller *iff it is actually streaming* (hidActiveSince>0);
+  // the Puck's silent siblings (keyboard/mouse collections, unpaired receiver
+  // slots) are NOT controllers and must not appear as phantom rows. Non-fan-out
+  // handles are one row each as before. (This replaces the old fan:vid:pid rollup
+  // that collapsed every Puck interface — and thus BOTH bodies — into one row.)
   const groups = new Map();
   for (const entry of listManager._hidPool.values()) {
     const d = entry.device;
     if (d === hidDevice) continue;   // the SELECTED device is now pooled too — shown as its own row above
     const isFanout = !!(entry.driver && entry.driver.constructor && entry.driver.constructor.needsSiblingFanout);
-    if (isFanout && hidDevice && d.vendorId === hidDevice.vendorId && d.productId === hidDevice.productId) continue;
-    const gk = isFanout ? ('fan:' + d.vendorId + ':' + d.productId) : ('dev:' + deviceIdFor(d));
+    if (isFanout && !(entry.hidActiveSince > 0)) continue;   // silent Puck sibling — not a real controller
+    const gk = 'dev:' + deviceIdFor(d);   // per-interface row (per-unit for the multi-receiver Puck)
     const a = _padActive(entry.synthetic);
     const g = groups.get(gk);
     if (g) { g.active = g.active || a; } else groups.set(gk, { device: d, entry, active: a });
@@ -1405,6 +1415,22 @@ function overlayControllerRows() {
   // Stable order by first-sighting (deviceId) so SELECTING a controller does NOT
   // reorder the list — the row you clicked stays put instead of jumping to top.
   rows.sort((x, y) => x.sortId - y.sortId);
+  // Disambiguate identical display names: two Steam Controller bodies on one
+  // multi-receiver Puck share name + vid:pid + serial (the serial is the PUCK's,
+  // not the body's — see [[multi-steam-controller]]), so the rows are otherwise
+  // indistinguishable. Append a stable ' #n' by first-sighting order (sortId,
+  // already applied) so the user can tell them apart. Also covers any two
+  // truly-identical pads (e.g. two DS4s). Single-of-a-kind names are untouched.
+  const nameCounts = new Map();
+  for (const r of rows) nameCounts.set(r.name, (nameCounts.get(r.name) || 0) + 1);
+  const nameSeen = new Map();
+  for (const r of rows) {
+    if (nameCounts.get(r.name) > 1) {
+      const n = (nameSeen.get(r.name) || 0) + 1;
+      nameSeen.set(r.name, n);
+      r.name = `${r.name} #${n}`;
+    }
+  }
   return rows;
 }
 
