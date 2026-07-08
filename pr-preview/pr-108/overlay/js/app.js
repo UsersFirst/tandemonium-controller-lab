@@ -1097,7 +1097,7 @@ function scheduleGyroConnect() {
     if (gyroActive) return;
     console.log('Auto-connecting gyro for', currentControllerType, '...');
     try {
-      await connectControllerGyro();
+      await connectControllerGyro(false);   // boot auto-connect: no gesture → getDevices only, never the blocking scan
       if (gyroActive) {
         console.log('Gyro auto-connected successfully');
       } else {
@@ -1124,7 +1124,7 @@ function cancelGyroConnect() {
  * Step 2: requestDevice() — triggers Electron's select-hid-device handler
  *         which auto-approves. Also works in browsers with user gesture.
  */
-async function connectControllerGyro() {
+async function connectControllerGyro(allowRequest = true) {
   if (hidDevice && gyroActive) return;
   if (!navigator.hid) return;
 
@@ -1160,8 +1160,12 @@ async function connectControllerGyro() {
     console.log('connectControllerGyro: getDevices failed:', err.message);
   }
 
-  // Step 2: requestDevice() if no granted device
-  if (!device) {
+  // Step 2: requestDevice() if no granted device — only when the caller allows
+  // it (a real user gesture). The boot auto-connect timer has no gesture, so a
+  // requestDevice there just throws "Must be handling a user gesture" (and in
+  // Electron would run the blocking system HID scan); skip it and let the user's
+  // explicit Connect click do the granting.
+  if (!device && allowRequest) {
     console.log('connectControllerGyro: trying requestDevice()...');
     try {
       const devices = await navigator.hid.requestDevice({ filters });

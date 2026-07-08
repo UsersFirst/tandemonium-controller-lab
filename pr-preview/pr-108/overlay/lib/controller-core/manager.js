@@ -1302,8 +1302,16 @@ export class ControllerManager {
    * User-gesture HID pairing, initiated from a Connect button. If a slot
    * is specified and is currently claimed, attach the newly-paired device
    * to that slot. Otherwise pool it and let ingestFrame assign on claim.
+   *
+   * Two phases: (1) pool an already-approved-but-unpooled device (cheap —
+   * getDevices only); (2) if none and `prompt` is set, fall back to
+   * requestDevice to grant a new one. `prompt` defaults true (browser: the
+   * picker IS the connect mechanism). Callers that want to avoid the
+   * requestDevice scan — which in Electron enumerates every system HID device
+   * and briefly blocks even when nothing new is present — pass `prompt: false`
+   * for the cheap phase and only opt into the scan when it's actually useful.
    */
-  async connectHidForSlot(slotId) {
+  async connectHidForSlot(slotId, { prompt = true } = {}) {
     if (!navigator.hid) throw new Error('WebHID not available');
     const slot = slotId ? this.getSlot(slotId) : null;
     const approved = await navigator.hid.getDevices();
@@ -1311,7 +1319,7 @@ export class ControllerManager {
       ControllerRegistry.isKnownDevice(d) && !this._isDeviceInPoolOrSlot(d)
     );
     let device = candidate;
-    if (!device) {
+    if (!device && prompt) {
       const filters = ControllerRegistry.getHIDFilters();
       const picked = await navigator.hid.requestDevice({ filters });
       device = (picked || []).find((d) => !this._isDeviceInPoolOrSlot(d));
