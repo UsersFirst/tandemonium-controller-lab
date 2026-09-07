@@ -48,6 +48,16 @@ function applyPlayerColor(root, titleEl, playerNum) {
   if (titleEl) titleEl.style.color = `hsl(${h}, 72%, 72%)`;
 }
 
+/**
+ * Tell the main-process HID picker what we already hold, so a pairing prompt
+ * grants a controller we do NOT have. Cheap; call right before prompting.
+ */
+function publishHeldHidDevices() {
+  const api = window.electronAPI;
+  if (!api || typeof api.setHeldHidDevices !== 'function') return;
+  try { api.setHeldHidDevices(manager.heldHidDescriptors()); } catch { /* not fatal */ }
+}
+
 // ── View: per-slot DOM wiring (created on claim, disposed on release) ──
 
 class SlotView {
@@ -78,6 +88,7 @@ class SlotView {
 
     if (this.connectBtn) {
       this.connectBtn.addEventListener('click', () => {
+        publishHeldHidDevices();
         manager.connectHidForSlot(slot.id).catch((err) => {
           this.hintEl.textContent = `HID error: ${err.message}`;
         });
