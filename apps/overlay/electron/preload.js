@@ -27,6 +27,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowDragMove: () => ipcRenderer.send('window-drag-move'),
   windowDragEnd: () => ipcRenderer.send('window-drag-end'),
 
+  // ── WebHID pairing ──
+  // Devices the renderer already holds (ControllerManager.heldHidDescriptors()).
+  // Call this immediately before a connectHidForSlot() that may prompt: the
+  // main-process picker feeds it to pickNewHidDevice() so the grant lands on a
+  // controller we do NOT already have — which is what makes pairing a second
+  // pad possible at all.
+  setHeldHidDevices: (list) => ipcRenderer.send('hid:held', list),
+
   // Test Report export — writes JSON to a user-chosen path via native save dialog.
   // Returns { saved: true, path } or { saved: false, reason: 'cancelled' | 'error: ...' }.
   saveTestReport: (json, suggestedName) =>

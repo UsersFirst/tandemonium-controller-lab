@@ -26,6 +26,16 @@ const SLOT_IDS = playerSlotIds();
 const manager = new ControllerManager({ slotIds: SLOT_IDS });
 window.__manager = manager;
 
+/**
+ * Tell the main-process HID picker what we already hold, so a pairing prompt
+ * grants a controller we do NOT have. Cheap; call right before prompting.
+ */
+function publishHeldHidDevices() {
+  const api = window.electronAPI;
+  if (!api || typeof api.setHeldHidDevices !== 'function') return;
+  try { api.setHeldHidDevices(manager.heldHidDescriptors()); } catch { /* not fatal */ }
+}
+
 const $ = (id) => document.getElementById(id);
 
 // ── seat topology per mode ──
