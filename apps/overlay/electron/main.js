@@ -17,6 +17,24 @@ let mainWindow = null;
 let tray = null;
 let clickThrough = false;
 
+// ── WebHID pairing policy (@usersfirst/controller-core) ──
+// Which of the attached devices should a requestDevice() grant? That question
+// has one right answer and it lives in the core (pickNewHidDevice), so this app
+// and every host embedding the packages behave identically. Loaded from the
+// copy scripts/copy-workspace.js drops into src/lib — the core is ESM and this
+// file is CommonJS, so the import is dynamic and resolved once at startup.
+let pickNewHidDevice = null;
+const { pathToFileURL } = require('url');
+import(pathToFileURL(path.join(__dirname, '..', 'src', 'lib', 'controller-core', 'controller-inventory.js')).href)
+  .then((m) => { pickNewHidDevice = m.pickNewHidDevice; })
+  .catch((err) => console.warn('[hid] pick policy unavailable, falling back to first device:', err.message));
+
+// Devices the renderer already holds, pushed over 'hid:held' before it prompts.
+let heldHidDevices = [];
+ipcMain.on('hid:held', (_event, list) => {
+  heldHidDevices = Array.isArray(list) ? list.filter(Boolean) : [];
+});
+
 // ── Persisted window size (issue #69) ──
 // The controller body window should reopen at the size it was last left, so
 // the user can line it up once for OBS and just hit "start recording" next
@@ -507,12 +525,15 @@ app.on('web-contents-created', (_, contents) => {
     broadcastHidControllers();
     if (details.deviceList && details.deviceList.length > 0) {
       if (selectTimeout) { clearTimeout(selectTimeout); selectTimeout = null; }
-      // Prefer a device we haven't picked yet in this session. Falls back to
-      // the first device when all have been handed out (single-controller case).
-      const d = details.deviceList.find((x) => !alreadyPicked.has(x.deviceId))
-                || details.deviceList[0];
+      // Shared policy: serials prove which units we already hold, and per-model
+      // counts cover the rest — so two identical pads still pair. The
+      // already-picked set only breaks ties within a rank.
+      const chosen = pickNewHidDevice
+        ? pickNewHidDevice(details.deviceList, { held: heldHidDevices, grantedIds: alreadyPicked })
+        : { device: details.deviceList.find((x) => !alreadyPicked.has(x.deviceId)) || details.deviceList[0], reason: 'fallback: policy unavailable' };
+      const d = chosen.device;
       alreadyPicked.add(d.deviceId);
-      console.log('select-hid-device: selecting', d.name || d.productId, '(alreadyPicked:', alreadyPicked.size, ')');
+      console.log('select-hid-device: selecting', d.name || d.productId, '—', chosen.reason);
       try {
         callback(d.deviceId);
       } catch (e) {

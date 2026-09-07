@@ -24,6 +24,41 @@ Vendor-agnostic gamepad drivers, WebHID sensor fusion, and the slot/claim `Contr
 
 No bundler is required — this is plain ESM. Designed for direct use in Electron + browser contexts via importmap, as well as bundlers (Vite, webpack, esbuild) for web apps.
 
+## Pairing a second controller (host HID picker)
+
+A renderer can only use HID devices the user has **granted**, and `requestDevice()`
+lets the host choose which one to hand back. Get that choice wrong and a second
+controller can never be paired: every prompt re-grants the pad you already have.
+The policy is `pickNewHidDevice`, so every host answers it the same way.
+
+```js
+// renderer — right before a prompt
+window.electronAPI.setHeldHidDevices(manager.heldHidDescriptors());
+await manager.connectHidForSlot('P2', { prompt: true });
+
+// main process — inside Electron's select-hid-device
+const { device, reason } = pickNewHidDevice(details.deviceList, {
+  held: heldHidDevices,      // what the renderer told us it has
+  grantedIds: alreadyPicked, // deviceIds handed out this session
+});
+console.log('granting', device.name, '—', reason);
+callback(device.deviceId);
+```
+
+It ranks candidates by evidence rather than excluding by vid:pid:
+
+| Evidence | Meaning |
+|---|---|
+| serial not among the held serials | certainly new — picked first |
+| model not held at all | certainly new |
+| more units of that model attached than held | a spare exists — this is what makes **two identical pads** work |
+| same model, no spare | probably one we hold — picked last |
+
+`grantedIds` only breaks ties within a rank, so repeated prompts walk through
+the attached controllers instead of repeating one. `reason` is meant to be
+logged: it distinguishes "nothing new is attached" from "we picked the wrong
+one", which is otherwise invisible from outside the picker.
+
 ## Device dictionary
 
 All controller identity lives in [`src/devices.js`](./src/devices.js). Driver classes are pure protocol implementations; the dictionary maps physical (`vendorId`, `productId`) pairs to a protocol + per-device metadata.
