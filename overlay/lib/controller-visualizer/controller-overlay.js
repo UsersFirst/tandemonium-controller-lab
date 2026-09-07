@@ -40,15 +40,35 @@ const FLOAT_ZERO = new THREE.Vector3(); // shared read-only lerp target (parts s
 
 export class ControllerOverlay {
   /**
+   * Normalize an `assetBase` option: '' / null → '' (page-relative, the
+   * default); anything else gets exactly one trailing slash so it can be
+   * concatenated straight onto a profile's `model` path.
+   * @param {string} [base]
+   * @returns {string}
+   */
+  static normalizeAssetBase(base) {
+    if (!base) return '';
+    const b = String(base);
+    return b.endsWith('/') ? b : b + '/';
+  }
+
+  /**
    * @param {Object} options
    * @param {HTMLCanvasElement} options.canvas — target canvas element
    * @param {boolean} [options.transparent=true] — transparent background
    * @param {string} [options.controllerType='dualsense'] — profile key
+   * @param {string} [options.assetBase=''] — URL prefix prepended to each
+   *   profile's `model` path (e.g. 'assets/controllers/dualsense.glb'). The
+   *   profiles resolve relative to the host PAGE by default; a host that
+   *   vendors the GLBs somewhere else (or serves the page from a deeper path)
+   *   passes the directory that contains `assets/`, e.g. 'shared/visualizer/'.
+   *   A trailing slash is added when missing.
    */
   constructor(options = {}) {
     this.canvas = options.canvas;
     this.transparent = options.transparent !== false;
     this.controllerType = options.controllerType || 'dualsense';
+    this.assetBase = ControllerOverlay.normalizeAssetBase(options.assetBase);
 
     this.renderer = null;
     this.scene = null;
@@ -220,6 +240,7 @@ export class ControllerOverlay {
       return;
     }
 
+    const modelUrl = this.assetBase + profile.model;
     return new Promise((resolve, reject) => {
       const loader = new GLTFLoader();
       // MeshoptDecoder is a WASM-backed module; the registration tells
@@ -227,7 +248,7 @@ export class ControllerOverlay {
       // Cheap to call repeatedly — Three's loader checks if it's already set.
       loader.setMeshoptDecoder(MeshoptDecoder);
       loader.load(
-        profile.model,
+        modelUrl,
         (gltf) => {
           // A newer setControllerType() superseded this load — discard the
           // freshly-parsed scene so it doesn't stack onto the current model.
@@ -247,7 +268,7 @@ export class ControllerOverlay {
         },
         undefined,
         (err) => {
-          console.error(`Failed to load model ${profile.model}:`, err);
+          console.error(`Failed to load model ${modelUrl}:`, err);
           if (token !== this._loadSeq) { resolve(); return; }
           // Fall back to a placeholder
           this._createPlaceholder(profile);
