@@ -24,3 +24,12 @@ Subpaths (`/controller-overlay`, `/controller-profiles`, `/gyro-gimbal`) are exp
 `assets/controllers/{dualsense,switch-pro,xbox}.glb` derive from [larfingshnew/3d-controller-overlay](https://github.com/larfingshnew/3d-controller-overlay) (MIT). See [`ASSETS_ATTRIBUTION.md`](./ASSETS_ATTRIBUTION.md) for the upstream copyright + license text.
 
 `PROFILES` references the models with relative paths (e.g. `assets/controllers/dualsense.glb`) — the host app is responsible for serving them at that URL. The reference app under `apps/overlay/` does this by copying the GLBs into its `src/assets/controllers/` directory at build time (see `apps/overlay/scripts/copy-workspace.js`).
+
+A host that keeps the GLBs somewhere other than page-relative `assets/controllers/` passes `assetBase` — a URL prefix prepended to every profile's `model` path:
+
+```js
+// GLBs vendored at shared/visualizer/assets/controllers/*.glb, page at the site root
+const overlay = new ControllerOverlay({ canvas, assetBase: 'shared/visualizer/' });
+```
+
+The default (`''`) keeps the page-relative behaviour above. A trailing slash is added if missing.
