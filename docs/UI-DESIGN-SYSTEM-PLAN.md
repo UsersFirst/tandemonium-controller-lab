@@ -1,6 +1,6 @@
 # UI design system — controller lab + Tandemonium
 
-_2026-10-18 · lab branch `feat/ui-design-system`, game branch `feat/ui-design-system`. Status: **implemented across both repos as two PRs**; the remaining phases (§4) are the follow-ups._
+_2026-10-18 · Status: **kit 0.2 + every lab page + the game's buttons, lobby navigation and Room step are on the system** (lab PRs #116 #118 #119 merged, tags `ui-v0.1.0` / `ui-v0.2.0`; game #411 merged, #413 + Room PR open for playtest). §4 lists what shipped and what is next._
 
 ## 0. The problem, named
 
@@ -87,11 +87,22 @@ Why not Lit / Preact / React: all want a build or a CDN import. Lit is the only 
 - Dominant literals in the page CSS are tokens: accent green (40 sites), gold (26), danger red (7), surface (3), the font stack (20), and the four pre-existing page variables alias the tokens.
 - Smoke scripts count `uf-button` alongside `button`. Unit tests (411), lobby smoke, end-screen layout check and the ride/crash/slingshot/CTA/tutorial/economy smokes pass.
 
+### Shipped — lab overlay pages (UsersFirst/tandemonium-controller-lab#119)
+- `index.html`, `multi.html`, `inventory.html` and the six HUD windows on the kit: 46 buttons → `uf-button`, tokens linked everywhere, 262 literals → tokens; lab raw `<button>` count is 0.
+
+### Shipped — game lobby navigation (petegordon/Tandemonium#413, awaiting controller playtest)
+- The eight lobby steps are `uf-step`s in `<uf-flow id="lobby-flow">`; `_showStep` → `flow.go()`; side effects on `uf-flow:change`. FocusController comes from the vendored kit. `docs/screen-flow.md` step table generated (`npm run docs:screen-flow --check`). `jsconfig.json` + ambient types; `@ts-check` on the small modules.
+
+### Shipped — Room step on the kit (petegordon/Tandemonium, `feat/room-on-kit`, stacked on #413; closes #173)
+- `uf-chip` room code, `uf-seat` ×2 framing the video PiPs (who sits where, present or not), `uf-button` CTAs; every lobby back button on the kit; room `!important`s → 0.
+
 ### Next
-1. **Lab overlay pages** (`index.html`, `multi.html`, HUD windows) onto the kit; then the lab's button/seat/chip CSS is gone entirely.
-2. **Game navigation**: `uf-flow` hosts the eight `lobby-step`s; `_showStep` → `flow.go(id)`; per-step side effects become `uf-flow:change` handlers; FocusController scope per step; `docs/screen-flow.md` generated from the step list. Closes #167 §1–2, gives #346 its boundary.
-3. **Game screens** rebuilt from the kit, Room step (#173) first: `uf-step` + `uf-seat` + `uf-button` + `uf-chip`; then victory / game-over / options; add `uf-card` and `uf-sheet` when the second use appears.
-4. **Ratchet**: `ui:audit` in CI with thresholds that never go up; every new screen is born as a `uf-step`.
+1. **Focus scoping from the kit**: replace the lobby's hand-kept `_stepCenterItems` lists with `uf-step.focusables()` via `uf-flow.attachFocus()`; the toggle columns outside the steps need a home (a `uf-step`-level `data-focusable` rail or a second scope).
+2. **Captain → stoker step sync** sends the flow's current id (#167 §2) once a two-device playtest of #413 is in.
+3. **`@ts-check` on `lobby.js` / `game.js`**: 293 / 755 errors today, nearly all DOM narrowing (`getElementById` → `.disabled`/`.value`); a pass that types the element lookups.
+4. **Game-side ratchet**: run `ui:audit --check` for the game target in its CI (clone the lab's tools next to the kit sparse checkout).
+5. **Remaining game screens** on the kit as they are touched: victory / game-over / options / quick menu; `uf-card` / `uf-sheet` when the second use appears.
+6. **Palette** (Q1): a `tokens.css` edit whenever decided.
 
 ## 5. Open questions for Pete
 
