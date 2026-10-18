@@ -1,0 +1,12 @@
+{
+  "game": {
+    "root": "../tandemonium",
+    "html": ["index.html"],
+    "js": ["js/*.js", "js/lobby/*.js", "js/nav/*.js", "js/versus/*.js"]
+  },
+  "lab": {
+    "root": ".",
+    "html": ["apps/overlay/src/*.html", "web/index.html", "packages/ui/gallery.html"],
+    "js": ["apps/overlay/src/js/*.js", "packages/ui/src/**/*.js"]
+  }
+}

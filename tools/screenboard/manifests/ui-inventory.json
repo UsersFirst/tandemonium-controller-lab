@@ -1,0 +1,13 @@
+{
+  "root": ".",
+  "entry": "design/inventory/index.html",
+  "waitFor": "() => document.readyState === 'complete'",
+  "settleMs": 300,
+  "viewports": {
+    "phone":   { "width": 390,  "height": 844,  "deviceScaleFactor": 2, "isMobile": true, "hasTouch": true },
+    "desktop": { "width": 1280, "height": 1600, "deviceScaleFactor": 1 }
+  },
+  "screens": [
+    { "id": "inventory", "title": "Design system inventory", "ops": [] }
+  ]
+}

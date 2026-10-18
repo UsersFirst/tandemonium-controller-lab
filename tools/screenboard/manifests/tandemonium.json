@@ -1,0 +1,43 @@
+{
+  "root": "../tandemonium",
+  "entry": "index.html",
+  "waitFor": "() => !!window._game && !!window._game.lobby",
+  "settleMs": 500,
+  "allow": [],
+  "viewports": {
+    "phone":   { "width": 390,  "height": 844,  "deviceScaleFactor": 2, "isMobile": true, "hasTouch": true },
+    "desktop": { "width": 1280, "height": 800,  "deviceScaleFactor": 1 },
+    "tv":      { "width": 1920, "height": 1080, "deviceScaleFactor": 1 }
+  },
+  "setup": [
+    { "eval": "document.getElementById('tap-to-start')?.remove(); document.querySelectorAll('.build-badge, #build-badge').forEach(e => e.remove());" }
+  ],
+  "screens": [
+    { "id": "lobby-mode",    "title": "Lobby · Mode",            "ops": [ { "eval": "window._game.lobby._showStep(window._game.lobby.modeStep)" } ] },
+    { "id": "lobby-level",   "title": "Lobby · Level & difficulty", "ops": [ { "eval": "window._game.lobby._showStep(window._game.lobby.levelStep)" } ] },
+    { "id": "lobby-role",    "title": "Lobby · Role",            "ops": [ { "eval": "window._game.lobby._showStep(window._game.lobby.roleStep)" } ] },
+    { "id": "lobby-host",    "title": "Lobby · Host (room code)", "ops": [ { "eval": "window._game.lobby._showStep(window._game.lobby.hostStep)" }, { "text": "#room-code", "value": "GOOSE" } ] },
+    { "id": "lobby-join",    "title": "Lobby · Join",            "ops": [ { "eval": "window._game.lobby._showStep(window._game.lobby.joinStep)" } ] },
+    { "id": "lobby-room",    "title": "Lobby · Room (#173)",     "ops": [ { "eval": "window._game.lobby._showStep(window._game.lobby.roomStep)" } ] },
+    { "id": "lobby-versus",  "title": "Lobby · Versus team setup", "ops": [ { "eval": "window._game.lobby._showStep(window._game.lobby.versusStep)" } ] },
+    { "id": "lobby-tourist", "title": "Lobby · Tourist",         "ops": [ { "eval": "window._game.lobby._showStep(window._game.lobby.touristStep)" } ] },
+    { "id": "profile-popup", "title": "Lobby · Profile popup",   "ops": [ { "class": "#profile-popup", "add": "visible" } ] },
+    { "id": "help-modal",    "title": "Lobby · Help modal",      "ops": [ { "class": "#help-modal", "add": "visible" } ] },
+    { "id": "leaderboard",   "title": "Lobby · Leaderboard",     "ops": [ { "class": "#leaderboard-modal", "add": "visible" }, { "show": "#leaderboard-modal", "display": "flex" } ] },
+    { "id": "options",       "title": "Options overlay",         "ops": [ { "class": "#options-overlay", "add": "visible" } ] },
+    { "id": "pair-panel",    "title": "Controller pair panel",   "ops": [ { "show": "#pair-panel", "display": "flex" }, { "class": "#pair-panel", "add": "visible" } ] },
+    { "id": "ride-hud",      "title": "In-ride HUD (worst case)", "ops": [
+      { "eval": "document.getElementById('lobby').style.display='none'; document.getElementById('hud-top').style.display=''; document.getElementById('bottom-hud').style.display=''; const g=window._game; g.hud.setSeat('stoker', true); document.getElementById('disruption-banner')?.classList.add('show'); document.getElementById('ranked-badge')?.classList.add('show'); document.getElementById('grade-row')?.classList.add('visible','up');" }
+    ] },
+    { "id": "quick-menu",    "title": "In-ride quick menu",      "ops": [ { "eval": "document.getElementById('lobby').style.display='none'; document.getElementById('hud-top').style.display='';" }, { "class": "#quick-menu-overlay", "add": "visible" } ] },
+    { "id": "countdown",     "title": "Countdown",               "ops": [ { "eval": "document.getElementById('lobby').style.display='none'" }, { "class": "#countdown-overlay", "add": "visible" }, { "text": "#countdown-number", "value": "3" } ] },
+    { "id": "gameover",      "title": "Game over (crash)",       "ops": [ { "eval": "document.getElementById('lobby').style.display='none'" }, { "show": "#gameover-overlay", "display": "flex" } ] },
+    { "id": "victory",       "title": "Victory",                 "ops": [ { "eval": "document.getElementById('lobby').style.display='none'" }, { "show": "#victory-overlay", "display": "flex" } ] },
+    { "id": "tutorial-complete", "title": "Tutorial complete",   "ops": [ { "eval": "document.getElementById('lobby').style.display='none'" }, { "class": "#tutorial-complete", "add": "visible" } ] },
+    { "id": "sling-garage",  "title": "Slingshot garage",        "ops": [ { "eval": "document.getElementById('lobby').style.display='none'" }, { "class": "#sling-garage", "add": "visible" } ] },
+    { "id": "sling-results", "title": "Slingshot results",       "ops": [ { "eval": "document.getElementById('lobby').style.display='none'" }, { "class": "#sling-results", "add": "visible" } ] },
+    { "id": "daily-mode",    "title": "Today's Road overlay",    "ops": [ { "class": "#daily-mode-overlay", "add": "visible" } ] },
+    { "id": "stoker-cta",    "title": "Stoker wishlist CTA",     "ops": [ { "eval": "document.getElementById('lobby').style.display='none'" }, { "show": "#stoker-cta-overlay", "display": "flex" }, { "class": "#stoker-cta-overlay", "add": "visible" } ] },
+    { "id": "disconnect",    "title": "Disconnect overlay",      "ops": [ { "show": "#disconnect-overlay", "display": "flex" }, { "class": "#disconnect-overlay", "add": "visible" } ] }
+  ]
+}

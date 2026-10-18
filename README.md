@@ -14,6 +14,7 @@ Pre-1.0 — the API will change.
 
 - [`@usersfirst/controller-core`](./packages/core) — vendor-agnostic gamepad drivers (DualSense, Switch Pro, Xbox) plus the WebHID sensor-fusion runtime and the slot/claim `ControllerManager` (exported at `@usersfirst/controller-core/manager`, drivers at `@usersfirst/controller-core/drivers/*`, sensor fusion at `@usersfirst/controller-core/sensor-fusion`).
 - [`@usersfirst/controller-visualizer`](./packages/visualizer) — Three.js-based 3D controller overlay/visualizer. Ships per-vendor GLB models and the `controller-profiles` that bind Gamepad-API indices to mesh names. `three` is a peer dependency.
+- [`@usersfirst/ui`](./packages/ui) — the shared design system: `tokens.css` plus typed, build-free Web Components (`uf-button`, `uf-step`, `uf-flow`, `uf-seat`, `uf-chip`) used by the overlay lobby and vendored into the game (`shared/ui/`). Rationale and roadmap in [`docs/UI-DESIGN-SYSTEM-PLAN.md`](./docs/UI-DESIGN-SYSTEM-PLAN.md).
 - [`apps/overlay`](./apps/overlay) — reference Electron overlay app that consumes both packages. Mirrors the original `petegordon/tandemonium/controller-overlay` UX (transparent always-on-top window, button-combo settings, gyro HUD, multi-player slot/claim demo).
 
 A Steam companion package (`@usersfirst/controller-steam`) will land in a later pass. The Steamworks SDK is never bundled or auto-downloaded by this repo.

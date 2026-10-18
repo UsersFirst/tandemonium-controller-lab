@@ -44,3 +44,21 @@ jobs:
       - name: Visualizer unit tests
         run: node --test
         working-directory: packages/visualizer
+
+  ui:
+    name: ui kit (typecheck + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      # Only `typescript` is needed (tsc --checkJs, no emit). --ignore-scripts
+      # skips the overlay's prestart copies; nothing here runs them.
+      - run: npm ci --ignore-scripts
+      - name: Typecheck @usersfirst/ui
+        run: npm run typecheck
+      - name: Test @usersfirst/ui
+        run: node --test
+        working-directory: packages/ui

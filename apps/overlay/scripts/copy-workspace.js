@@ -25,6 +25,11 @@ const targets = [
     dest: path.join(appRoot, 'src', 'lib', 'controller-visualizer'),
   },
   {
+    label: '@usersfirst/ui',
+    src: path.join(repoRoot, 'packages', 'ui', 'src'),
+    dest: path.join(appRoot, 'src', 'lib', 'ui'),
+  },
+  {
     label: 'visualizer GLB assets',
     src: path.join(repoRoot, 'packages', 'visualizer', 'assets', 'controllers'),
     dest: path.join(appRoot, 'src', 'assets', 'controllers'),
