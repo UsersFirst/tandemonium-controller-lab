@@ -18,7 +18,8 @@
     "ui:audit": "node tools/ui-audit/ui-audit.mjs",
     "ui:screenboard": "node tools/screenboard/screenboard.mjs",
     "ui:new-element": "node tools/ui-kit/new-element.mjs",
-    "ui:gallery": "npx -y serve ."
+    "ui:gallery": "npx -y serve .",
+    "ui:inventory": "node tools/ui-inventory/ui-inventory.mjs"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.1.0",

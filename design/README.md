@@ -5,4 +5,5 @@ See `docs/UI-DESIGN-SYSTEM-PLAN.md`.
 | folder | written by | contents |
 |---|---|---|
 | `audit/` | `npm run ui:audit` | measured UI inventory of the game + lab (markdown + json): the scoreboard |
+| `inventory/` | `npm run ui:inventory` | the design system itself: tokens, controls (typed props, events, methods), usage per repo, adoption table |
 | `screenboard/<manifest>/` | `npm run ui:screenboard -- --manifest <name>` | every registered screen at phone / desktop / TV. PNGs are git-ignored (regenerable); `run.json` + `index.html` are kept |

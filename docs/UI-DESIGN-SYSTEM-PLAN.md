@@ -98,6 +98,7 @@ Why not Lit / Preact / React: all want a build or a CDN import. Lit is the only 
 |---|---|---|
 | `npm run ui:audit` | measures colours, sizes, vars, screens, imperative DOM sites, custom-element adoption in both repos | `design/audit/` |
 | `npm run ui:screenboard -- --manifest <name>` | headless capture of every registered screen at phone / desktop / TV; `--root` captures another checkout, `--debug` logs the page console | `design/screenboard/<name>/` |
+| `npm run ui:inventory` | inventories the design system itself: every token (with live swatches), every control with typed props / events / methods / tokens used / gallery states, usage per repo, and what is still outside the system | `design/inventory/{index.html,README.md,inventory.json}` |
 | `npm run ui:new-element -- uf-x --props "…"` | scaffolds a typed element end to end | `packages/ui/src/elements/uf-x.js` + 4 edits |
 | `npm run typecheck` · `npm test` | tsc over the kit · node:test (all workspaces) | — |
 | `npm run ui:gallery` | serves the repo; open `/packages/ui/gallery.html` | — |
