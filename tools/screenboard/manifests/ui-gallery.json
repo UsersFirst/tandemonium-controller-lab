@@ -1,0 +1,68 @@
+{
+  "root": ".",
+  "entry": "packages/ui/gallery.html",
+  "waitFor": "() => document.readyState === 'complete'",
+  "settleMs": 300,
+  "viewports": {
+    "phone": {
+      "width": 390,
+      "height": 844,
+      "deviceScaleFactor": 2,
+      "isMobile": true,
+      "hasTouch": true
+    },
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1
+    },
+    "tv": {
+      "width": 1920,
+      "height": 1080,
+      "deviceScaleFactor": 1
+    }
+  },
+  "screens": [
+    {
+      "id": "gallery",
+      "title": "Gallery · whole page",
+      "ops": []
+    },
+    {
+      "id": "tokens",
+      "title": "Gallery · tokens",
+      "clip": "#tokens",
+      "ops": []
+    },
+    {
+      "id": "uf-button",
+      "title": "Gallery · <uf-button>",
+      "clip": "#uf-button",
+      "ops": []
+    },
+    {
+      "id": "uf-step",
+      "title": "Gallery · <uf-step>",
+      "clip": "#uf-step",
+      "ops": []
+    },
+    {
+      "id": "uf-flow",
+      "title": "Gallery · <uf-flow>",
+      "clip": "#uf-flow",
+      "ops": []
+    },
+    {
+      "id": "uf-seat",
+      "title": "Gallery · <uf-seat>",
+      "clip": "#uf-seat",
+      "ops": []
+    },
+    {
+      "id": "uf-chip",
+      "title": "Gallery · <uf-chip>",
+      "clip": "#uf-chip",
+      "ops": []
+    }
+  ]
+}

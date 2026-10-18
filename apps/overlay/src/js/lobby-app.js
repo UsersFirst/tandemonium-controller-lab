@@ -16,6 +16,10 @@
 // ============================================================
 
 import { ControllerManager, ControllerRegistry, MAX_CONTROLLERS, playerSlotIds } from '@usersfirst/controller-core';
+// The UI kit (uf-flow / uf-step / uf-button / uf-seat / uf-chip). Importing
+// registers the elements; lobby.html links tokens.css. Screen state now lives
+// in <uf-flow>, seats are <uf-seat> driven from `state`, buttons are <uf-button>.
+import '@usersfirst/ui';
 
 // Pre-allocate a generous slot pool (shared core constant) so MORE controllers
 // than there are seats can be RECOGNIZED (ACTIVE) and wait in the lounge for a
@@ -205,24 +209,28 @@ function devName(slotId) {
 }
 
 // ── screens ──
-function showScreen(name) {
-  state.screen = name;
+// <uf-flow id="lobby-flow"> owns which <uf-step> is visible (ids: mode | lobby |
+// level). We never hide/show steps by hand; we ask the flow, and mirror its
+// current id into state.screen for the per-screen input drivers in loop().
+const flow = /** @type {import('@usersfirst/ui').UfFlow} */ ($('lobby-flow'));
+flow.addEventListener('uf-flow:change', (e) => {
+  state.screen = e.detail.to;
   edge.clear();   // re-prime every slot on the new screen (a button still held from the last screen won't fire)
-  $('step-mode').hidden = name !== 'mode';
-  $('step-lobby').hidden = name !== 'lobby';
-  $('step-level').hidden = name !== 'level';
-}
+});
+function showScreen(name) { flow.go(name); }
 
 let modeIdx = 0;
+const modeButtons = () => /** @type {import('@usersfirst/ui').UfButton[]} */ (Array.from(document.querySelectorAll('#mode uf-button[data-mode]')));
 function setModeIdx(i) {
   modeIdx = (i + MODES.length) % MODES.length;
-  document.querySelectorAll('#step-mode [data-mode]').forEach((b, k) => b.classList.toggle('sel', k === modeIdx));
+  modeButtons().forEach((b, k) => { b.selected = k === modeIdx; });
 }
 function enterMode(mode) {
   state.mode = mode; const m = makeSeats(mode); state.seats = m.seats; state.fill = m.fill;
   state.occ.clear(); state.bySlot.clear(); state.nextP = 1;
-  $('lobby-title').textContent = mode === 'versus' ? 'Build your teams' : mode === 'solo' ? 'Solo ride' : 'Crew your tandem';
-  $('join-hint').innerHTML = mode === 'versus'
+  const lobbyStep = /** @type {import('@usersfirst/ui').UfStep} */ ($('lobby'));
+  lobbyStep.prompt = mode === 'versus' ? 'Build your teams' : mode === 'solo' ? 'Solo ride' : 'Crew your tandem';
+  lobbyStep.hint = mode === 'versus'
     ? 'Press a button = active · <strong>A</strong> take seat → ready · <strong>◀ ▶</strong> team · <strong>▲ ▼</strong> swap · <strong>B</strong> back (ready→seat→active) · hold <strong>PS</strong> to release · all ready? <strong>A</strong> → level'
     : 'Press a button = active · <strong>A</strong> take a seat → ready · <strong>B</strong> back (ready→seat→active) · hold <strong>PS/Home</strong> to release · all ready? <strong>A</strong> → level';
   showScreen('lobby'); syncSeats(); render();
@@ -243,15 +251,16 @@ function goLevel() {
 }
 
 // ── render ──
+// One <uf-seat> per seat, a pure function of state (the element owns its look).
 function cardHTML(s) {
-  const kind = s.team ? (s.team === 'a' ? 'ta' : 'tb') : s.kind;
-  if (s.locked) return `<div class="seat locked"><span class="role">${s.role}</span><span class="who">LOCKED</span><span class="dev">solo</span></div>`;
+  const tone = s.team ? (s.team === 'a' ? 'team-a' : 'team-b') : (s.kind === 'cap' ? 'captain' : 'stoker');
+  if (s.locked) return `<uf-seat seat="${s.role}" tone="${tone}" who="LOCKED" dev="solo" state="locked"></uf-seat>`;
   const slotId = state.occ.get(s.id);
   if (slotId) {
     const L = state.bySlot.get(slotId); const rdy = L && L.phase === 'ready';
-    return `<div class="seat ${kind} ${rdy ? 'ready' : 'joined'}"><span class="badge">P${L ? L.player : '?'}</span>${rdy ? '<span class="check">✓ READY</span>' : ''}<span class="role">${s.role}</span><span class="who">${devName(slotId)}</span><span class="dev">${rdy ? 'ready' : 'press A to ready'}</span></div>`;
+    return `<uf-seat seat="${s.role}" tone="${tone}" who="${esc(devName(slotId))}" dev="${rdy ? 'ready' : 'press A to ready'}" state="${rdy ? 'ready' : 'joined'}" badge="P${L ? L.player : '?'}"></uf-seat>`;
   }
-  return `<div class="seat open" data-seat="${s.id}"><span class="role">${s.role}</span><span class="who">OPEN</span><span class="dev">press a button</span></div>`;
+  return `<uf-seat seat="${s.role}" tone="${tone}" who="OPEN" dev="press a button" state="open" data-seat="${s.id}"></uf-seat>`;
 }
 // Recognized-but-seatless controllers waiting to pick a seat.
 function loungeHTML() {
@@ -259,7 +268,7 @@ function loungeHTML() {
   if (!active.length) return '';
   const chips = active.map((id) => {
     const L = state.bySlot.get(id);
-    return `<div class="lounge-chip"><span class="lc-badge">P${L.player}</span><span class="lc-name">${devName(id)}</span><span class="lc-hint">press A to take a seat</span></div>`;
+    return `<div class="lounge-chip"><uf-chip tone="warn">P${L.player}</uf-chip><span class="lc-name">${esc(devName(id))}</span><span class="lc-hint">press A to take a seat</span></div>`;
   }).join('');
   return `<div class="lounge"><div class="lounge-title">RECOGNIZED · pick a seat</div><div class="lounge-chips">${chips}</div></div>`;
 }
@@ -276,8 +285,8 @@ function render() {
   updateCTA(); updateDebug();
 }
 function updateCTA() {
-  const btn = $('btn-choose-level'); const r = allReady();
-  btn.disabled = !r; btn.classList.toggle('ready', r);
+  const btn = /** @type {import('@usersfirst/ui').UfButton} */ ($('btn-choose-level')); const r = allReady();
+  btn.disabled = !r; btn.selected = r;   // accent + selected = the filled, pulsing "go" look
   const mu = state.mode === 'versus' && (teamCount('a') || teamCount('b')) ? ` (${teamCount('a')} v ${teamCount('b')})` : '';
   btn.textContent = (r ? '▶ CHOOSE LEVEL' : 'CHOOSE LEVEL') + mu;
 }
@@ -450,6 +459,8 @@ function ctrlEntries(pads) {
   for (const it of items) it.id = esc(identityLine(it.vp, it.conn));
   return items;
 }
+// Controller-layer vs game-layer states, as chip tones (legend in lobby.html).
+const CHIP_TONE = { AVAILABLE: 'info', ACTIVE: 'warn', ASSIGNED: 'neutral', READY: 'accent' };
 function buildCtrlRows(items) {
   const list = $('cp-list'); if (!list) return;
   if (!items.length) { list.innerHTML = '<div class="cp-empty">No controllers detected.<br>Press a button, or “🎮 Pair controller”.</div>'; return; }
@@ -458,8 +469,8 @@ function buildCtrlRows(items) {
     `<div class="cp-main"><div class="cp-name">${it.name}</div><div class="cp-sub">${it.sub} · ${it.conn} · ${vpStr(it.vp)}</div>` +
     `${it.hw ? `<div class="cp-hw">▪ ${it.hw}</div>` : ''}` +
     `${it.id ? `<div class="cp-id${it.id[0] === '⚠' ? ' warn' : ''}">${it.id}</div>` : ''}</div>` +
-    `<div class="cp-tags"><span class="cp-tag ${it.cstate.toLowerCase()}">${it.cstate}</span>` +
-    `${it.gstate ? `<span class="cp-tag ${it.gstate.toLowerCase()}">${it.gstate}</span>` : ''}</div></div>`
+    `<div class="cp-tags"><uf-chip tone="${CHIP_TONE[it.cstate]}">${it.cstate}</uf-chip>` +
+    `${it.gstate ? `<uf-chip tone="${CHIP_TONE[it.gstate]}">${it.gstate}</uf-chip>` : ''}</div></div>`
   ).join('');
 }
 let ctrlSig = '';
@@ -566,13 +577,13 @@ function loop() {
 
 async function boot() {
   // Mode buttons: click + controller.
-  document.querySelectorAll('#step-mode [data-mode]').forEach((b, k) => {
+  modeButtons().forEach((b, k) => {
     b.addEventListener('click', () => { setModeIdx(k); enterMode(b.dataset.mode); });
     b.addEventListener('mouseenter', () => setModeIdx(k));
   });
-  $('btn-back-mode').addEventListener('click', () => { for (const id of state.bySlot.keys()) clearFb(id); showScreen('mode'); });
+  $('btn-back-mode').addEventListener('click', () => { for (const id of state.bySlot.keys()) clearFb(id); if (!flow.back()) flow.go('mode'); });
   $('btn-choose-level').addEventListener('click', goLevel);
-  $('btn-restart').addEventListener('click', () => enterMode(state.mode));
+  $('btn-restart').addEventListener('click', () => { flow.back(); enterMode(state.mode); });
   $('btn-pair').addEventListener('click', pairController);
   $('btn-pair-global').addEventListener('click', pairController);
   $('btn-ctrl-list').addEventListener('click', toggleCtrlPanel);

@@ -1,0 +1,42 @@
+{
+  "manifest": "ui-gallery",
+  "root": "C:\\Users\\pete\\SoftwareDev\\tandemonium-controller-lab",
+  "entry": "packages/ui/gallery.html",
+  "generated": "2026-10-18T19:03:18.217Z",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1
+    }
+  },
+  "screens": [
+    {
+      "id": "uf-button",
+      "title": "Gallery · <uf-button>",
+      "viewport": "desktop",
+      "file": "uf-button.desktop.png",
+      "ids": [],
+      "classes": [
+        "gamepad-focus",
+        "state",
+        "states"
+      ],
+      "buttons": 10,
+      "errors": []
+    },
+    {
+      "id": "uf-step",
+      "title": "Gallery · <uf-step>",
+      "viewport": "desktop",
+      "file": "uf-step.desktop.png",
+      "ids": [],
+      "classes": [
+        "uf-step__hint",
+        "uf-step__prompt"
+      ],
+      "buttons": 3,
+      "errors": []
+    }
+  ]
+}

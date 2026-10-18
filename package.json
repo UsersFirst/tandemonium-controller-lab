@@ -13,12 +13,18 @@
     "hid-probe": "npx -y serve tools/hid-probe",
     "hid-dump": "node tools/hid-serial-dump.mjs",
     "steam-multi-probe": "node tools/steam-multi-probe.mjs",
-    "inventory-preview": "npx -y serve ."
+    "inventory-preview": "npx -y serve .",
+    "typecheck": "tsc -p packages/ui/tsconfig.json",
+    "ui:audit": "node tools/ui-audit/ui-audit.mjs",
+    "ui:screenboard": "node tools/screenboard/screenboard.mjs",
+    "ui:new-element": "node tools/ui-kit/new-element.mjs",
+    "ui:gallery": "npx -y serve ."
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.1.0",
     "@gltf-transform/extensions": "^4.1.0",
     "@gltf-transform/functions": "^4.1.0",
-    "meshoptimizer": "^0.20.0"
+    "meshoptimizer": "^0.20.0",
+    "typescript": "^5.4.5"
   }
 }

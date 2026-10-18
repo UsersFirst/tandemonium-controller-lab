@@ -13,3 +13,11 @@ steamworks_sdk/
 # committing them would leave stale duplicates whenever core/visualizer change.
 apps/overlay/src/lib/
 apps/overlay/src/assets/controllers/
+
+# UI-kit screenboard (docs/UI-DESIGN-SYSTEM-PLAN.md). Captures are regenerable
+# (npm run ui:screenboard); run.json + index.html stay so reviews can link.
+design/screenboard/*/*.png
+design/screenboard/*.log
+
+# Audit JSON is regenerable detail (npm run ui:audit); the markdown is the record.
+design/audit/*.json

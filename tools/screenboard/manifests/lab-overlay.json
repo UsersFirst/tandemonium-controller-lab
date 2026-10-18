@@ -1,0 +1,22 @@
+{
+  "root": "./apps/overlay/src",
+  "entry": "lobby.html",
+  "waitFor": "() => !!window.__manager && !!customElements.get('uf-flow')",
+  "settleMs": 500,
+  "viewports": {
+    "phone":   { "width": 390,  "height": 844,  "deviceScaleFactor": 2, "isMobile": true, "hasTouch": true },
+    "desktop": { "width": 1280, "height": 800,  "deviceScaleFactor": 1 },
+    "tv":      { "width": 1920, "height": 1080, "deviceScaleFactor": 1 }
+  },
+  "screens": [
+    { "id": "lobby-mode",  "title": "Seat-select · Mode",  "ops": [ { "eval": "document.getElementById('lobby-flow').go('mode')" } ] },
+    { "id": "lobby-seats", "title": "Seat-select · Seats (co-op)", "ops": [
+      { "eval": "const f = document.getElementById('lobby-flow'); f.go('lobby'); const st = document.getElementById('lobby'); st.prompt = 'Crew your tandem'; st.hint = 'Press a button = active · <strong>A</strong> take a seat → ready · <strong>B</strong> back · hold <strong>PS/Home</strong> to release';" },
+      { "html": "#seat-area", "value": "<div class=\"tandem\"><div class=\"tandem-title\">🚲 YOUR TANDEM</div><div class=\"tandem-seats\"><uf-seat seat=\"Captain\" tone=\"captain\" who=\"DualSense\" dev=\"press A to ready\" state=\"joined\" badge=\"P1\"></uf-seat><uf-seat seat=\"Stoker\" tone=\"stoker\" who=\"OPEN\" dev=\"press a button\" state=\"open\"></uf-seat></div></div><div class=\"lounge\"><div class=\"lounge-title\">RECOGNIZED · pick a seat</div><div class=\"lounge-chips\"><div class=\"lounge-chip\"><uf-chip tone=\"warn\">P2</uf-chip><span class=\"lc-name\">Steam Controller</span><span class=\"lc-hint\">press A to take a seat</span></div></div></div>" } ] },
+    { "id": "lobby-versus", "title": "Seat-select · Versus 2v2 (all ready)", "ops": [
+      { "eval": "const f = document.getElementById('lobby-flow'); f.go('lobby'); const st = document.getElementById('lobby'); st.prompt = 'Build your teams'; const b = document.getElementById('btn-choose-level'); b.disabled = false; b.selected = true; b.textContent = '▶ CHOOSE LEVEL (2 v 2)';" },
+      { "html": "#seat-area", "value": "<div class=\"teams\"><div class=\"team a\"><div class=\"team-title\">TEAM BLUE</div><div class=\"team-slots\"><uf-seat seat=\"Captain\" tone=\"team-a\" who=\"DualSense\" dev=\"ready\" state=\"ready\" badge=\"P1\"></uf-seat><uf-seat seat=\"Stoker\" tone=\"team-a\" who=\"Xbox\" dev=\"ready\" state=\"ready\" badge=\"P3\"></uf-seat></div></div><div class=\"vs\">VS</div><div class=\"team b\"><div class=\"team-title\">TEAM RED</div><div class=\"team-slots\"><uf-seat seat=\"Captain\" tone=\"team-b\" who=\"Steam Controller\" dev=\"ready\" state=\"ready\" badge=\"P2\"></uf-seat><uf-seat seat=\"Stoker\" tone=\"team-b\" who=\"Switch Pro\" dev=\"ready\" state=\"ready\" badge=\"P4\"></uf-seat></div></div></div>" } ] },
+    { "id": "lobby-level", "title": "Seat-select · Hand-off", "ops": [ { "eval": "document.getElementById('lobby-flow').go('level')" }, { "html": "#level-summary", "value": "<span class=\"big\">Co-op</span>Captain + Stoker<br><br>Captain: P1 <span style=\"opacity:.6\">(DualSense)</span><br>Stoker: P2 <span style=\"opacity:.6\">(Steam Controller)</span>" } ] },
+    { "id": "controllers-panel", "title": "Controllers panel", "ops": [ { "show": "#ctrl-panel", "display": "block" }, { "html": "#cp-list", "value": "<div class=\"cp-row\"><span class=\"cp-dot on\"></span><div class=\"cp-main\"><div class=\"cp-name\">DualSense</div><div class=\"cp-sub\">P1 · Captain · bluetooth · 054c:0ce6</div></div><div class=\"cp-tags\"><uf-chip tone=\"warn\">ACTIVE</uf-chip><uf-chip tone=\"accent\">READY</uf-chip></div></div><div class=\"cp-row\"><span class=\"cp-dot\"></span><div class=\"cp-main\"><div class=\"cp-name\">Steam Controller</div><div class=\"cp-sub\">WebHID · idle · hid · 28de:1205</div></div><div class=\"cp-tags\"><uf-chip tone=\"info\">AVAILABLE</uf-chip></div></div>" } ] }
+  ]
+}
