@@ -1,6 +1,6 @@
 # UI audit — lab
 
-_Generated 2026-10-18T20:10:39.721Z from `C:\Users\pete\SoftwareDev\tandemonium-controller-lab`_
+_Generated 2026-10-18T20:11:18.472Z from `C:\Users\pete\SoftwareDev\tandemonium-controller-lab`_
 
 ## Totals
 
@@ -9,16 +9,16 @@ _Generated 2026-10-18T20:10:39.721Z from `C:\Users\pete\SoftwareDev\tandemonium-
 | htmlFiles | 12 |
 | jsFiles | 21 |
 | cssLines | 1792 |
-| distinctColours | 177 |
-| hexColours | 108 |
+| distinctColours | 139 |
+| hexColours | 74 |
 | fontSizes | 22 |
 | radii | 17 |
 | varsDefined | 8 |
 | important | 4 |
 | screens | 13 |
-| buttons | 46 |
+| buttons | 0 |
 | inlineStyle | 23 |
-| customTags | 9 |
+| customTags | 18 |
 | innerHTML | 21 |
 | showHide | 22 |
 | classToggle | 31 |
@@ -30,16 +30,16 @@ _Generated 2026-10-18T20:10:39.721Z from `C:\Users\pete\SoftwareDev\tandemonium-
 
 | file | lines | style blocks | css lines | screens/overlays | buttons | inline style= | custom tags |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| apps/overlay/src/axis-window.html | 48 | 1 | 30 | 0 | 1 | 0 | 0 |
-| apps/overlay/src/button-hud-window.html | 208 | 1 | 142 | 0 | 1 | 0 | 0 |
-| apps/overlay/src/controllers-window.html | 50 | 1 | 32 | 1 | 1 | 0 | 0 |
-| apps/overlay/src/gyro-window.html | 60 | 1 | 24 | 0 | 1 | 0 | 0 |
-| apps/overlay/src/index.html | 1510 | 1 | 968 | 8 | 32 | 15 | 0 |
-| apps/overlay/src/inventory.html | 53 | 1 | 24 | 0 | 2 | 1 | 0 |
+| apps/overlay/src/axis-window.html | 50 | 1 | 30 | 0 | 0 | 0 | 1 |
+| apps/overlay/src/button-hud-window.html | 210 | 1 | 142 | 0 | 0 | 0 | 1 |
+| apps/overlay/src/controllers-window.html | 52 | 1 | 32 | 1 | 0 | 0 | 1 |
+| apps/overlay/src/gyro-window.html | 62 | 1 | 24 | 0 | 0 | 0 | 1 |
+| apps/overlay/src/index.html | 1512 | 1 | 968 | 8 | 0 | 15 | 1 |
+| apps/overlay/src/inventory.html | 55 | 1 | 24 | 0 | 0 | 1 | 1 |
 | apps/overlay/src/lobby.html | 163 | 1 | 83 | 2 | 0 | 1 | 4 |
-| apps/overlay/src/multi-controllers-window.html | 60 | 1 | 42 | 1 | 1 | 0 | 0 |
-| apps/overlay/src/multi.html | 453 | 2 | 357 | 0 | 6 | 1 | 0 |
-| apps/overlay/src/roll-window.html | 66 | 1 | 40 | 0 | 1 | 0 | 0 |
+| apps/overlay/src/multi-controllers-window.html | 62 | 1 | 42 | 1 | 0 | 0 | 1 |
+| apps/overlay/src/multi.html | 455 | 2 | 357 | 0 | 0 | 1 | 1 |
+| apps/overlay/src/roll-window.html | 68 | 1 | 40 | 0 | 0 | 0 | 1 |
 | packages/ui/gallery.html | 113 | 1 | 13 | 1 | 0 | 5 | 5 |
 | web/index.html | 71 | 1 | 37 | 0 | 0 | 0 | 0 |
 
@@ -77,61 +77,61 @@ _Generated 2026-10-18T20:10:39.721Z from `C:\Users\pete\SoftwareDev\tandemonium-
 
 ## Style tokens in the wild
 
-### Hex colours (108 distinct)
+### Hex colours (74 distinct)
 
 | value | uses |
 |---|---:|
-| `#3388ff` | 24 |
-| `#fff` | 21 |
 | `#ccc` | 13 |
-| `#eee` | 11 |
-| `#6ce08f` | 11 |
-| `#888` | 6 |
-| `#6a7184` | 6 |
 | `#8af` | 5 |
-| `#2ec27e` | 4 |
-| `#ed333b` | 4 |
-| `#f6c343` | 4 |
 | `#cfd` | 4 |
 | `#39404e` | 4 |
-| `#2a9d4f` | 4 |
 | `#e8e8ee` | 4 |
 | `#2a2a3e` | 4 |
-| `#e7ecf5` | 3 |
 | `#9fb0c6` | 3 |
-| `#8894a8` | 3 |
-| `#06140c` | 3 |
 | `#c9d6ff` | 3 |
 | `#104` | 3 |
-| `#8fffc1` | 3 |
 | `#000` | 3 |
 | `#9aa3b4` | 3 |
-| `#44dd66` | 2 |
-| `#ee4455` | 2 |
-| `#4488ff` | 2 |
-| `#999` | 2 |
 | `#777` | 2 |
-| … 78 more | |
-### rgba() colours (69 distinct)
+| `#222` | 2 |
+| `#66bbff` | 2 |
+| `#1a1205` | 2 |
+| `#bbb` | 2 |
+| `#ddd` | 2 |
+| `#e8ecf2` | 2 |
+| `#cfe0ff` | 2 |
+| `#8aa` | 2 |
+| `#aaa` | 1 |
+| `#26262c` | 1 |
+| `#ff5555` | 1 |
+| `#ff9999` | 1 |
+| `#1a1a20` | 1 |
+| `#9ad` | 1 |
+| `#34b85a` | 1 |
+| `#f88` | 1 |
+| `#6f6` | 1 |
+| `#c44` | 1 |
+| … 44 more | |
+### rgba() colours (65 distinct)
 
 | value | uses |
 |---|---:|
-| `rgba(255,255,255,0.12)` | 23 |
-| `rgba(255,255,255,0.08)` | 15 |
-| `rgba(255,255,255,0.15)` | 9 |
-| `rgba(255,255,255,0.05)` | 7 |
-| `rgba(255,255,255,0.06)` | 7 |
 | `rgba(255,255,255,0.25)` | 6 |
-| `rgba(255,255,255,0.1)` | 5 |
 | `rgba(51,136,255,0.65)` | 4 |
 | `rgba(255,255,255,0.09)` | 4 |
-| `rgba(255,255,255,0.04)` | 3 |
 | `rgba(110,168,255,0.18)` | 3 |
 | `rgba(110,168,255,0.4)` | 3 |
 | `rgba(255,255,255,0.2)` | 3 |
 | `rgba(46,194,126,0.65)` | 2 |
 | `rgba(237,51,59,0.65)` | 2 |
-| … 54 more | |
+| `rgba(246,195,67,0.65)` | 2 |
+| `rgba(0,0,0,0.8)` | 2 |
+| `rgba(12,15,20,0.98)` | 2 |
+| `rgba(255,255,255,0.28)` | 2 |
+| `rgba(108,224,143,.4)` | 2 |
+| `rgba(30,30,35,0.95)` | 2 |
+| `rgba(0,0,0,0.5)` | 2 |
+| … 50 more | |
 ### Font sizes (22 distinct)
 
 | value | uses |
@@ -162,11 +162,11 @@ _Generated 2026-10-18T20:10:39.721Z from `C:\Users\pete\SoftwareDev\tandemonium-
 
 | value | uses |
 |---|---:|
-| `monospace` | 10 |
-| `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif` | 10 |
+| `var(--uf-font-mono)` | 10 |
+| `var(--uf-font-ui)` | 10 |
 | `inherit` | 3 |
-| `var(--uf-font-ui)` | 1 |
 | `var(--mono)` | 1 |
+| `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif` | 1 |
 | `ui-monospace, SFMono-Regular, Menlo, monospace` | 1 |
 ### Border radii (17 distinct)
 
@@ -250,31 +250,31 @@ _Generated 2026-10-18T20:10:39.721Z from `C:\Users\pete\SoftwareDev\tandemonium-
 | `--versus` | 1 |
 | `--mono` | 1 |
 | `--muted` | 1 |
-### CSS custom properties used (42 distinct)
+### CSS custom properties used (45 distinct)
 
 | value | uses |
 |---|---:|
+| `--uf-color-fg` | 43 |
+| `--uf-color-line-soft` | 36 |
+| `--uf-font-mono` | 30 |
+| `--uf-color-accent` | 29 |
+| `--uf-color-info` | 28 |
+| `--uf-color-fg-muted` | 28 |
+| `--uf-color-surface-2` | 19 |
+| `--uf-color-surface-3` | 16 |
+| `--uf-color-warn` | 12 |
 | `--mono` | 12 |
+| `--uf-font-ui` | 11 |
 | `--hl-color` | 11 |
 | `--uf-size-xs` | 11 |
+| `--uf-color-danger` | 10 |
 | `--muted` | 9 |
 | `--roll-label-color` | 8 |
 | `--roll-label-bright` | 8 |
 | `--uf-size-sm` | 6 |
-| `--uf-color-warn` | 5 |
 | `--uf-space-4` | 5 |
-| `--accent` | 4 |
-| `--uf-color-line-soft` | 4 |
-| `--uf-color-fg` | 3 |
-| `--uf-font-mono` | 3 |
-| `--uf-color-fg-muted` | 3 |
-| `--uf-space-3` | 3 |
-| `--uf-radius-md` | 3 |
-| `--team-a` | 3 |
-| `--team-b` | 3 |
-| `--ax-pitch` | 2 |
-| `--ax-roll` | 2 |
-| … 22 more | |
+| `--uf-color-bg` | 4 |
+| … 25 more | |
 ### Media queries (2 distinct)
 
 | value | uses |

@@ -1,0 +1,22 @@
+{
+  "root": "./apps/overlay/src",
+  "entry": "index.html",
+  "waitFor": "() => !!customElements.get('uf-button') && document.readyState === 'complete'",
+  "settleMs": 800,
+  "viewports": {
+    "desktop": { "width": 1280, "height": 800, "deviceScaleFactor": 1 }
+  },
+  "screens": [
+    { "id": "overlay-main",     "title": "Overlay · main window", "ops": [] },
+    { "id": "overlay-settings", "title": "Overlay · settings panel", "ops": [ { "eval": "document.getElementById('settings-toggle').click()" }, { "wait": 400 } ] },
+    { "id": "overlay-exit",     "title": "Overlay · exit confirm", "ops": [ { "eval": "document.getElementById('settings-toggle').click(); setTimeout(() => document.getElementById('btn-exit-app').click(), 100)" }, { "wait": 500 } ] },
+    { "id": "multi",            "title": "Multi overlay", "entry": "multi.html", "ops": [] },
+    { "id": "inventory",        "title": "Inventory page", "entry": "inventory.html", "ops": [] },
+    { "id": "win-axis",         "title": "HUD window · axis", "entry": "axis-window.html", "ops": [ { "eval": "document.body.classList.add('hover')" } ] },
+    { "id": "win-button-hud",   "title": "HUD window · buttons", "entry": "button-hud-window.html", "ops": [] },
+    { "id": "win-controllers",  "title": "HUD window · controllers", "entry": "controllers-window.html", "ops": [] },
+    { "id": "win-gyro",         "title": "HUD window · gyro", "entry": "gyro-window.html", "ops": [] },
+    { "id": "win-roll",         "title": "HUD window · roll", "entry": "roll-window.html", "ops": [] },
+    { "id": "win-multi-ctrl",   "title": "HUD window · multi controllers", "entry": "multi-controllers-window.html", "ops": [] }
+  ]
+}

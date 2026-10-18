@@ -1,19 +1,19 @@
 # UI audit summary
 
-_Generated 2026-10-18T20:10:39.724Z. Re-run with `npm run ui:audit`. Per-target detail: [lab](lab.md)_
+_Generated 2026-10-18T20:11:18.475Z. Re-run with `npm run ui:audit`. Per-target detail: [lab](lab.md)_
 
 | metric | lab |
 |---|---:|
 | htmlFiles | 12 |
 | jsFiles | 21 |
 | cssLines | 1792 |
-| hexColours | 108 |
+| hexColours | 74 |
 | fontSizes | 22 |
 | radii | 17 |
 | varsDefined | 8 |
 | important | 4 |
 | screens | 13 |
-| buttons | 46 |
+| buttons | 0 |
 | inlineStyle | 23 |
 | innerHTML | 21 |
 | showHide | 22 |

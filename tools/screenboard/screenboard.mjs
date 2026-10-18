@@ -32,6 +32,7 @@
 //   { "text": "#sel", "value": "…" }
 //   { "html": "#sel", "value": "<b>…</b>" }
 //   { "wait": 400 }                             ms
+// A screen may set `"entry": "other.html"` to capture a different page of the same root.
 // The `root` capture region defaults to the viewport; a screen can set
 // `"clip": "#sel"` to capture just one element.
 
@@ -121,7 +122,7 @@ for (const [vpName, vp] of viewports) {
     try {
       await page.setViewport(vp);
       await interceptForCapture(page, { origin, threeRoot: THREE_ROOT, allow });
-      await page.goto(`${origin}/${manifest.entry}`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${origin}/${s.entry || manifest.entry}`, { waitUntil: 'domcontentloaded' });   // a screen may name its own page
       // waitFor is a function SOURCE ("() => …"); passing the string straight to
       // waitForFunction would evaluate it as an expression (a truthy function value)
       // and never wait. Evaluate the source, then call it, until it returns truthy.

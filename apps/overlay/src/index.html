@@ -4,14 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>3D Controller Overlay</title>
+<link rel="stylesheet" href="./lib/ui/tokens.css">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     width: 100%; height: 100%;
     overflow: hidden;
     background: transparent;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    color: #eee;
+    font-family: var(--uf-font-ui);
+    color: var(--uf-color-fg);
     user-select: none;
   }
 
@@ -43,7 +44,7 @@
     position: fixed;
     top: 6px; right: 8px;
     width: 28px; height: 28px;
-    background: rgba(255,255,255,0.12);
+    background: var(--uf-color-line-soft);
     border: none;
     border-radius: 50%;
     cursor: pointer;
@@ -65,7 +66,7 @@
     max-height: calc(100vh - 50px);
     overflow-y: auto;
     background: rgba(30,30,35,0.92);
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid var(--uf-color-surface-2);
     border-radius: 10px;
     padding: 14px;
     z-index: 120;
@@ -79,10 +80,10 @@
     position: absolute;
     top: 8px; right: 8px;
     width: 22px; height: 22px;
-    background: rgba(255,255,255,0.08);
+    background: var(--uf-color-surface-2);
     border: none;
     border-radius: 50%;
-    color: #888;
+    color: var(--uf-color-fg-muted);
     font-size: 14px;
     line-height: 1;
     cursor: pointer;
@@ -90,7 +91,7 @@
     align-items: center;
     justify-content: center;
   }
-  #settings-close:hover { background: rgba(255,255,255,0.2); color: #fff; }
+  #settings-close:hover { background: rgba(255,255,255,0.2); color: var(--uf-color-fg); }
 
   #settings-panel h3 {
     font-size: 13px;
@@ -103,18 +104,18 @@
 
   /* Controllers list (which controller drives the overlay) */
   #ovl-ctrl-list { display: flex; flex-direction: column; gap: 5px; max-height: 210px; overflow-y: auto; }
-  .ovl-ctrl-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09); cursor: pointer; }
+  .ovl-ctrl-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: var(--uf-color-surface-3); border: 1px solid rgba(255,255,255,0.09); cursor: pointer; }
   .ovl-ctrl-row:hover { border-color: rgba(255,255,255,0.28); }
-  .ovl-ctrl-row.sel { border-color: #6ce08f; box-shadow: 0 0 0 1px rgba(108,224,143,.4); }
+  .ovl-ctrl-row.sel { border-color: var(--uf-color-accent); box-shadow: 0 0 0 1px rgba(108,224,143,.4); }
   .ovl-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: #39404e; transition: background .08s, box-shadow .08s; }
-  .ovl-dot.on { background: #6ce08f; box-shadow: 0 0 7px 1px #6ce08f; }
+  .ovl-dot.on { background: var(--uf-color-accent); box-shadow: 0 0 7px 1px var(--uf-color-accent); }
   .ovl-ctrl-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-  .ovl-ctrl-name { font-size: 12px; font-weight: 600; color: #e7ecf5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ovl-ctrl-sub { font: 9px/1.3 ui-monospace, monospace; color: #8894a8; }
-  .ovl-tag { flex: 0 0 auto; font: 800 8px/1 ui-monospace, monospace; letter-spacing: .6px; padding: 3px 5px; border-radius: 4px; }
-  .ovl-tag.active { color: #06140c; background: #6ce08f; }
+  .ovl-ctrl-name { font-size: 12px; font-weight: 600; color: var(--uf-color-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ovl-ctrl-sub { font: 9px/1.3 ui-var(--uf-font-mono), monospace; color: var(--uf-color-fg-muted); }
+  .ovl-tag { flex: 0 0 auto; font: 800 8px/1 ui-var(--uf-font-mono), monospace; letter-spacing: .6px; padding: 3px 5px; border-radius: 4px; }
+  .ovl-tag.active { color: var(--uf-color-fg-on-accent); background: var(--uf-color-accent); }
   .ovl-tag.available { color: #c9d6ff; background: rgba(110,168,255,0.18); border: 1px solid rgba(110,168,255,0.4); }
-  .ovl-ctrl-empty { font: 10px/1.4 ui-monospace, monospace; color: #6a7184; text-align: center; padding: 8px; }
+  .ovl-ctrl-empty { font: 10px/1.4 ui-var(--uf-font-mono), monospace; color: var(--uf-color-fg-muted); text-align: center; padding: 8px; }
 
   .setting-row {
     display: flex;
@@ -126,18 +127,18 @@
   .setting-row label { color: #bbb; }
 
   .setting-row select,
-  .setting-row button {
-    background: rgba(255,255,255,0.08);
-    color: #eee;
-    border: 1px solid rgba(255,255,255,0.12);
+  .setting-row uf-button {
+    background: var(--uf-color-surface-2);
+    color: var(--uf-color-fg);
+    border: 1px solid var(--uf-color-line-soft);
     border-radius: 5px;
     padding: 4px 8px;
     font-size: 11px;
     cursor: pointer;
   }
   .setting-row select:hover,
-  .setting-row button:hover {
-    background: rgba(255,255,255,0.15);
+  .setting-row uf-button:hover {
+    background: var(--uf-color-line-soft);
   }
   /* The select's translucent dark bg + light text looks right on the panel,
      but the OPEN option list is drawn by the OS — on Windows it came up
@@ -147,14 +148,14 @@
   .setting-row select { color-scheme: dark; }
   .setting-row select option {
     background: #26262c;
-    color: #eee;
+    color: var(--uf-color-fg);
   }
 
   .setting-row input[type="color"] {
     width: 32px;
     height: 24px;
     padding: 0;
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid var(--uf-color-line-soft);
     border-radius: 4px;
     background: transparent;
     cursor: pointer;
@@ -169,15 +170,15 @@
   .color-combo { display: flex; align-items: center; gap: 6px; }
   .color-text {
     width: 78px;
-    background: rgba(255,255,255,0.08);
-    color: #eee;
-    border: 1px solid rgba(255,255,255,0.12);
+    background: var(--uf-color-surface-2);
+    color: var(--uf-color-fg);
+    border: 1px solid var(--uf-color-line-soft);
     border-radius: 4px;
     padding: 3px 5px;
-    font: 11px ui-monospace, Consolas, 'Courier New', monospace;
+    font: 11px ui-var(--uf-font-mono), Consolas, 'Courier New', monospace;
     text-transform: lowercase;
   }
-  .color-text:focus { outline: none; border-color: #3388ff; }
+  .color-text:focus { outline: none; border-color: var(--uf-color-info); }
   .color-text.invalid { border-color: #ff5555; color: #ff9999; }
   /* Grouped color rows (Roll / Axis): label on its own line, then a full-width
      row of swatch-over-text cells so all three fit the narrow panel. */
@@ -189,7 +190,7 @@
 
   .setting-row input[type="checkbox"] {
     width: 14px; height: 14px;
-    accent-color: #3388ff;
+    accent-color: var(--uf-color-info);
     cursor: pointer;
   }
 
@@ -217,20 +218,20 @@
     gap: 8px; cursor: move; margin-bottom: 8px;
   }
   #layout-editor-popup .lep-title {
-    color: #8af; font-family: monospace; font-weight: 600;
+    color: #8af; font-family: var(--uf-font-mono); font-weight: 600;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   #layout-editor-popup .lep-close {
     flex: none; width: 22px; height: 22px; line-height: 1; font-size: 14px;
     border: none; border-radius: 5px; cursor: pointer;
-    background: rgba(255,255,255,0.08); color: #ccc;
+    background: var(--uf-color-surface-2); color: #ccc;
   }
-  #layout-editor-popup .lep-close:hover { background: rgba(255,255,255,0.2); color: #fff; }
+  #layout-editor-popup .lep-close:hover { background: rgba(255,255,255,0.2); color: var(--uf-color-fg); }
   #layout-editor-popup .lep-reset {
     width: 100%; margin-top: 8px; padding: 6px; border: none; border-radius: 6px;
-    background: rgba(255,255,255,0.1); color: #ddd; font-size: 11px; cursor: pointer;
+    background: var(--uf-color-surface-2); color: #ddd; font-size: 11px; cursor: pointer;
   }
-  #layout-editor-popup .lep-reset:hover { background: rgba(255,255,255,0.18); }
+  #layout-editor-popup .lep-reset:hover { background: var(--uf-color-line-soft); }
   #layout-editor-popup .lep-hint {
     margin-top: 6px; font-size: 10px; color: rgba(255,255,255,0.4); line-height: 1.3;
   }
@@ -243,26 +244,26 @@
   #layout-editor-popup .lep-section-title { color: #bbb; font-size: 13px; margin-bottom: 5px; }
   #layout-editor-popup .lep-axes { display: flex; gap: 8px; }
   #layout-editor-popup .lep-axis { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
-  #layout-editor-popup .lep-ax { color: #8af; font-family: monospace; font-size: 13px; font-weight: 600; }
+  #layout-editor-popup .lep-ax { color: #8af; font-family: var(--uf-font-mono); font-size: 13px; font-weight: 600; }
   #layout-editor-popup input[type="number"] {
     flex: 1; min-width: 0;
-    background: rgba(255,255,255,0.08);
-    color: #eee;
-    border: 1px solid rgba(255,255,255,0.12);
+    background: var(--uf-color-surface-2);
+    color: var(--uf-color-fg);
+    border: 1px solid var(--uf-color-line-soft);
     border-radius: 5px;
     padding: 7px 8px;
     font-size: 14px;
     text-align: right;
   }
-  #layout-editor-popup input[type="number"]:focus { outline: none; border-color: #3388ff; }
+  #layout-editor-popup input[type="number"]:focus { outline: none; border-color: var(--uf-color-info); }
 
   .window-size-fields { display: flex; align-items: center; gap: 4px; }
-  .window-size-x { color: #888; font-size: 11px; }
+  .window-size-x { color: var(--uf-color-fg-muted); font-size: 11px; }
   .setting-row input[type="number"] {
     width: 52px;
-    background: rgba(255,255,255,0.08);
-    color: #eee;
-    border: 1px solid rgba(255,255,255,0.12);
+    background: var(--uf-color-surface-2);
+    color: var(--uf-color-fg);
+    border: 1px solid var(--uf-color-line-soft);
     border-radius: 5px;
     padding: 4px 6px;
     font-size: 11px;
@@ -270,11 +271,11 @@
   }
   .setting-row input[type="number"]:focus {
     outline: none;
-    border-color: #3388ff;
+    border-color: var(--uf-color-info);
   }
   .settings-divider {
     border: none;
-    border-top: 1px solid rgba(255,255,255,0.08);
+    border-top: 1px solid var(--uf-color-surface-2);
     margin: 10px 0;
   }
 
@@ -285,7 +286,7 @@
     margin-top: 4px;
     text-align: center;
     font-size: 10px;
-    font-family: monospace;
+    font-family: var(--uf-font-mono);
     color: rgba(255,255,255,0.3);
     white-space: nowrap;
     overflow: hidden;
@@ -297,7 +298,7 @@
   .combo-display {
     font-size: 10px;
     color: #8af;
-    font-family: monospace;
+    font-family: var(--uf-font-mono);
     white-space: nowrap;
   }
 
@@ -313,9 +314,9 @@
     transition: opacity 0.15s;
   }
   .settings-action-btn:hover { opacity: 0.85; }
-  .settings-action-btn.close { background: #2266cc; color: #fff; }
-  .settings-action-btn.exit { background: #cc2222; color: #fff; }
-  .settings-action-btn.capture { background: #2a9d4f; color: #fff; }
+  .settings-action-btn.close { background: var(--uf-color-info); color: var(--uf-color-fg); }
+  .settings-action-btn.exit { background: var(--uf-color-danger); color: var(--uf-color-fg); }
+  .settings-action-btn.capture { background: var(--uf-color-accent); color: var(--uf-color-fg); }
 
   /* ── Test Report modal ── */
   #test-report-modal {
@@ -331,13 +332,13 @@
   #test-report-modal.visible { display: flex; }
   #test-report-modal .dialog {
     background: #1a1a20;
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid var(--uf-color-line-soft);
     border-radius: 10px;
     width: min(520px, 92vw);
     max-height: 86vh;
     overflow-y: auto;
     padding: 20px 24px;
-    color: #eee;
+    color: var(--uf-color-fg);
     font-size: 13px;
   }
   #test-report-modal h2 {
@@ -349,7 +350,7 @@
   #test-report-modal h3 {
     margin: 0 0 12px;
     font-size: 13px;
-    color: #fff;
+    color: var(--uf-color-fg);
     font-weight: 600;
   }
   #test-report-modal p {
@@ -359,21 +360,21 @@
   }
   #test-report-modal .progress-bar {
     height: 6px;
-    background: rgba(255,255,255,0.08);
+    background: var(--uf-color-surface-2);
     border-radius: 3px;
     overflow: hidden;
     margin: 10px 0 16px;
   }
   #test-report-modal .progress-bar > div {
     height: 100%;
-    background: #2a9d4f;
+    background: var(--uf-color-accent);
     width: 0%;
     transition: width 100ms linear;
   }
   #test-report-modal .device-line {
     font-size: 11px;
-    color: #888;
-    font-family: monospace;
+    color: var(--uf-color-fg-muted);
+    font-family: var(--uf-font-mono);
     margin-bottom: 14px;
   }
   #test-report-modal .device-line strong { color: #ccc; }
@@ -383,28 +384,28 @@
     justify-content: flex-end;
     margin-top: 16px;
   }
-  #test-report-modal .actions button {
+  #test-report-modal .actions uf-button {
     padding: 8px 16px;
-    border: 1px solid rgba(255,255,255,0.15);
-    background: rgba(255,255,255,0.06);
-    color: #eee;
+    border: 1px solid var(--uf-color-line-soft);
+    background: var(--uf-color-surface-3);
+    color: var(--uf-color-fg);
     border-radius: 6px;
     font-size: 12px;
     cursor: pointer;
   }
-  #test-report-modal .actions button.primary {
-    background: #2a9d4f;
-    border-color: #2a9d4f;
-    color: #fff;
+  #test-report-modal .actions uf-button.primary {
+    background: var(--uf-color-accent);
+    border-color: var(--uf-color-accent);
+    color: var(--uf-color-fg);
     font-weight: 600;
   }
-  #test-report-modal .actions button.primary:hover { background: #34b85a; }
-  #test-report-modal .actions button:hover { background: rgba(255,255,255,0.12); }
-  #test-report-modal .actions button[disabled] { opacity: 0.5; cursor: not-allowed; }
+  #test-report-modal .actions uf-button.primary:hover { background: #34b85a; }
+  #test-report-modal .actions uf-button:hover { background: var(--uf-color-line-soft); }
+  #test-report-modal .actions uf-button[disabled] { opacity: 0.5; cursor: not-allowed; }
   #test-report-modal .status {
     color: #8af;
     font-size: 11px;
-    font-family: monospace;
+    font-family: var(--uf-font-mono);
     margin-top: 8px;
   }
   #test-report-modal .status.error { color: #f88; }
@@ -424,7 +425,7 @@
   #exit-confirm.visible { display: flex; }
   #exit-confirm .dialog {
     background: rgba(30,30,35,0.95);
-    border: 1px solid rgba(255,255,255,0.15);
+    border: 1px solid var(--uf-color-line-soft);
     border-radius: 12px;
     padding: 24px;
     text-align: center;
@@ -441,7 +442,7 @@
     gap: 10px;
     justify-content: center;
   }
-  #exit-confirm .dialog-buttons button {
+  #exit-confirm .dialog-buttons uf-button {
     padding: 8px 20px;
     border: none;
     border-radius: 6px;
@@ -449,9 +450,9 @@
     font-weight: 600;
     cursor: pointer;
   }
-  #exit-confirm .btn-cancel { background: rgba(255,255,255,0.12); color: #ccc; }
+  #exit-confirm .btn-cancel { background: var(--uf-color-line-soft); color: #ccc; }
   #exit-confirm .btn-cancel:hover { background: rgba(255,255,255,0.2); }
-  #exit-confirm .btn-exit-yes { background: #cc2222; color: #fff; }
+  #exit-confirm .btn-exit-yes { background: var(--uf-color-danger); color: var(--uf-color-fg); }
   #exit-confirm .btn-exit-yes:hover { opacity: 0.85; }
 
   /* Window display toggles — cosmetic only, hidden by default.
@@ -468,7 +469,7 @@
     flex-wrap: wrap;
     margin-top: 4px;
   }
-  .camera-presets button {
+  .camera-presets uf-button {
     flex: 1;
     min-width: 48px;
     text-align: center;
@@ -476,12 +477,12 @@
     font-size: 10px;
     transition: background 0.15s, border-color 0.15s;
   }
-  .camera-presets button.selected {
+  .camera-presets uf-button.selected {
     background: rgba(51,136,255,0.3);
     border-color: rgba(51,136,255,0.6);
-    color: #fff;
+    color: var(--uf-color-fg);
   }
-  .camera-presets button.nav-hover {
+  .camera-presets uf-button.nav-hover {
     outline: 2px solid rgba(255,255,255,0.6);
     outline-offset: 1px;
   }
@@ -512,7 +513,7 @@
     transform: translateX(-50%);
     display: none;
     gap: 14px;
-    font-family: monospace;
+    font-family: var(--uf-font-mono);
     font-size: 24px;
     font-weight: 600;
     z-index: 110;
@@ -524,11 +525,11 @@
   }
   body.show-axis-readout #axis-readout { display: flex; }
   /* Per-axis (Pitch/Roll/Yaw) colors — configurable via CSS vars set from settings. */
-  #axis-readout .ax-pitch { color: var(--ax-pitch, #44dd66); }
-  #axis-readout .ax-roll  { color: var(--ax-roll,  #ee4455); }
-  #axis-readout .ax-yaw   { color: var(--ax-yaw,   #4488ff); }
+  #axis-readout .ax-pitch { color: var(--ax-pitch, var(--uf-color-accent)); }
+  #axis-readout .ax-roll  { color: var(--ax-roll,  var(--uf-color-danger)); }
+  #axis-readout .ax-yaw   { color: var(--ax-yaw,   var(--uf-color-info)); }
 
-  /* ── Gyro toggle button (emoji) ── */
+  /* ── Gyro toggle uf-button (emoji) ── */
   #gyro-toggle {
     position: fixed;
     top: 2px; right: 42px;
@@ -714,11 +715,11 @@
     gap: 6px;
     padding: 8px 10px;
     background: rgba(15, 15, 20, 0.78);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--uf-color-line-soft);
     border-radius: 8px;
     pointer-events: none;
     z-index: 50;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--uf-font-ui);
     -webkit-app-region: no-drag;
     user-select: none;
   }
@@ -742,9 +743,9 @@
     justify-content: center;
     width: 22px; height: 22px;
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #999;
+    background: var(--uf-color-surface-3);
+    border: 1px solid var(--uf-color-line-soft);
+    color: var(--uf-color-fg-muted);
     font-size: 10px;
     font-weight: 600;
     line-height: 1;
@@ -753,17 +754,17 @@
   #button-hud .bh-btn.bh-sm { width: 20px; height: 16px; font-size: 9px; }
   #button-hud .bh-btn.bh-dp { width: 18px; height: 18px; font-size: 8px; color: #777; }
   #button-hud .bh-btn.pressed {
-    background: var(--hl-color, #3388ff);
-    color: #fff;
-    border-color: var(--hl-color, #3388ff);
+    background: var(--hl-color, var(--uf-color-info));
+    color: var(--uf-color-fg);
+    border-color: var(--hl-color, var(--uf-color-info));
     transform: scale(1.08);
-    box-shadow: 0 0 6px var(--hl-color, #3388ff);
+    box-shadow: 0 0 6px var(--hl-color, var(--uf-color-info));
   }
-  /* Face button accents — keep their familiar colors */
-  #button-hud .bh-face-a.pressed { background: #2ec27e; border-color: #2ec27e; box-shadow: 0 0 6px rgba(46,194,126,0.65); }
-  #button-hud .bh-face-b.pressed { background: #ed333b; border-color: #ed333b; box-shadow: 0 0 6px rgba(237,51,59,0.65); }
-  #button-hud .bh-face-x.pressed { background: #3388ff; border-color: #3388ff; box-shadow: 0 0 6px rgba(51,136,255,0.65); }
-  #button-hud .bh-face-y.pressed { background: #f6c343; border-color: #f6c343; color: #222; box-shadow: 0 0 6px rgba(246,195,67,0.65); }
+  /* Face uf-button accents — keep their familiar colors */
+  #button-hud .bh-face-a.pressed { background: var(--uf-color-accent); border-color: var(--uf-color-accent); box-shadow: 0 0 6px rgba(46,194,126,0.65); }
+  #button-hud .bh-face-b.pressed { background: var(--uf-color-danger); border-color: var(--uf-color-danger); box-shadow: 0 0 6px rgba(237,51,59,0.65); }
+  #button-hud .bh-face-x.pressed { background: var(--uf-color-info); border-color: var(--uf-color-info); box-shadow: 0 0 6px rgba(51,136,255,0.65); }
+  #button-hud .bh-face-y.pressed { background: var(--uf-color-warn); border-color: var(--uf-color-warn); color: #222; box-shadow: 0 0 6px rgba(246,195,67,0.65); }
 
   /* Dpad: 3-column grid (up centered, ←  → on a row, down centered) */
   #button-hud .bh-dpad {
@@ -796,8 +797,8 @@
   #button-hud .bh-trigger {
     position: relative;
     width: 18px; height: 30px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--uf-color-surface-3);
+    border: 1px solid var(--uf-color-line-soft);
     border-radius: 4px;
     overflow: hidden;
   }
@@ -805,7 +806,7 @@
     position: absolute;
     left: 0; right: 0; bottom: 0;
     height: 0%;
-    background: linear-gradient(to top, #3388ff, #66bbff);
+    background: linear-gradient(to top, var(--uf-color-info), #66bbff);
     transition: height 50ms linear;
   }
   #button-hud .bh-trigger-label {
@@ -824,14 +825,14 @@
   #button-hud .bh-stick {
     position: relative;
     width: 28px; height: 28px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--uf-color-surface-3);
+    border: 1px solid var(--uf-color-line-soft);
     border-radius: 50%;
     transition: border-color 60ms linear, box-shadow 60ms linear;
   }
   #button-hud .bh-stick.pressed {
-    border-color: var(--hl-color, #3388ff);
-    box-shadow: 0 0 6px var(--hl-color, #3388ff);
+    border-color: var(--hl-color, var(--uf-color-info));
+    box-shadow: 0 0 6px var(--hl-color, var(--uf-color-info));
   }
   #button-hud .bh-stick-dot {
     position: absolute;
@@ -863,7 +864,7 @@
     position: absolute;
     left: 50%; bottom: -10px;
     transform: translateX(-50%);
-    color: #888;
+    color: var(--uf-color-fg-muted);
     font-size: 8px;
     font-weight: 600;
     pointer-events: none;
@@ -889,7 +890,7 @@
      (the Roll "Normal" lean color) and one brightness multiplier, both set as
      CSS vars from app.js. The needle/arrows stay lean-banded. CSS presentation
      properties here override the SVG fill/stroke attributes in the markup. */
-  #gyro-hud { --roll-label-color: #ffffff; --roll-label-bright: 1; }
+  #gyro-hud { --roll-label-color: var(--uf-color-fg); --roll-label-bright: 1; }
   #gyro-hud #arc-band {
     fill: var(--roll-label-color); stroke: var(--roll-label-color);
     fill-opacity: calc(0.08 * var(--roll-label-bright));
@@ -898,7 +899,7 @@
   #gyro-hud #arc-ticks { stroke: var(--roll-label-color); opacity: var(--roll-label-bright); }
   #gyro-hud #arc-labels {
     fill: var(--roll-label-color); opacity: var(--roll-label-bright);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--uf-font-ui);
     font-weight: 600;
   }
 
@@ -966,10 +967,10 @@
   #button-hud .bh-grips { display: none; }
   body.has-grips #button-hud .bh-grips { display: flex; }
   #button-hud .bh-grip.active {
-    background: var(--hl-color, #3388ff);
-    border-color: var(--hl-color, #3388ff);
-    color: #fff;
-    box-shadow: 0 0 6px var(--hl-color, #3388ff);
+    background: var(--hl-color, var(--uf-color-info));
+    border-color: var(--hl-color, var(--uf-color-info));
+    color: var(--uf-color-fg);
+    box-shadow: 0 0 6px var(--hl-color, var(--uf-color-info));
   }
 </style>
 </head>
@@ -979,21 +980,21 @@
 <div id="drag-bar"></div>
 
 <!-- Gyro toggle button (appears when gyro-capable controller connected) -->
-<button id="gyro-toggle" title="Gyro: click to toggle"><span class="gyro-controller">&#x1F3AE;</span><span class="gyro-indicator">&#x274C;</span></button>
+<uf-button size="xs" id="gyro-toggle" title="Gyro: click to toggle"><span class="gyro-controller">&#x1F3AE;</span><span class="gyro-indicator">&#x274C;</span></uf-button>
 
 <!-- Settings gear button -->
-<button id="settings-toggle" title="Settings">
+<uf-button size="xs" id="settings-toggle" title="Settings">
   <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.26.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
-</button>
+</uf-button>
 
 <!-- Settings panel -->
 <div id="settings-panel">
-  <button id="settings-close" title="Close">&times;</button>
+  <uf-button size="xs" variant="ghost" id="settings-close" title="Close">&times;</uf-button>
   <h3>Controller Overlay</h3>
 
   <div class="setting-row">
     <label>Controllers</label>
-    <button id="ovl-ctrl-popout" title="Open a movable window listing every connected controller with live activity">⧉ Show list…</button>
+    <uf-button size="sm" id="ovl-ctrl-popout" title="Open a movable window listing every connected controller with live activity">⧉ Show list…</uf-button>
   </div>
 
   <div class="setting-row">
@@ -1012,7 +1013,7 @@
 
   <div class="setting-row">
     <label>Gyro (WebHID)</label>
-    <button id="connect-gyro-btn">Connect</button>
+    <uf-button size="sm" id="connect-gyro-btn">Connect</uf-button>
   </div>
 
   <div class="setting-row">
@@ -1035,12 +1036,12 @@
 
   <div class="setting-row">
     <label title="Fixes where it's pointing NOW: snaps 'forward' to your current heading. Instant — keeps your calibration and true tilt. Use when the view sits a bit off-center.">Recenter heading</label>
-    <button id="recenter-btn">Recenter</button>
+    <uf-button size="sm" id="recenter-btn">Recenter</uf-button>
   </div>
 
   <div class="setting-row">
     <label>Opacity</label>
-    <input type="range" id="opacity-slider" min="10" max="100" value="98" style="width:90px;accent-color:#3388ff;">
+    <input type="range" id="opacity-slider" min="10" max="100" value="98" style="width:90px;accent-color:var(--uf-color-info);">
     <span id="opacity-value" style="min-width:28px;text-align:right;font-size:11px;">98%</span>
   </div>
 
@@ -1056,7 +1057,7 @@
 
   <div class="setting-row">
     <label title="Glossy reflective sheen on the controller. 0 = matte.">Shine</label>
-    <input type="range" id="shine-slider" min="0" max="100" value="35" style="width:90px;accent-color:#3388ff;">
+    <input type="range" id="shine-slider" min="0" max="100" value="35" style="width:90px;accent-color:var(--uf-color-info);">
   </div>
 
   <!-- Single shared highlight-color picker. Drives the 2D HUD .pressed states
@@ -1071,14 +1072,14 @@
     <label>Camera</label>
   </div>
   <div class="camera-presets" data-row="0">
-    <button data-preset="front">Front</button>
-    <button data-preset="back">Back</button>
-    <button data-preset="left">Left</button>
-    <button data-preset="right">Right</button>
+    <uf-button size="sm" data-preset="front">Front</uf-button>
+    <uf-button size="sm" data-preset="back">Back</uf-button>
+    <uf-button size="sm" data-preset="left">Left</uf-button>
+    <uf-button size="sm" data-preset="right">Right</uf-button>
   </div>
   <div class="camera-presets" data-row="1">
-    <button data-preset="player">Player</button>
-    <button data-preset="top">Top</button>
+    <uf-button size="sm" data-preset="player">Player</uf-button>
+    <uf-button size="sm" data-preset="top">Top</uf-button>
   </div>
 
   <div class="setting-row">
@@ -1130,14 +1131,14 @@
   <div class="setting-row color-row-stacked">
     <label title="Roll HUD needle/label colors by lean band (near-center / mid / high lean).">Roll Colors (Normal / Mid / High)</label>
     <span class="color-group">
-      <input type="color" id="lean-color-normal" value="#ffffff" title="Normal (near center)">
+      <input type="color" id="lean-color-normal" value="var(--uf-color-fg)" title="Normal (near center)">
       <input type="color" id="lean-color-mid" value="#ffaa22" title="Mid lean">
       <input type="color" id="lean-color-high" value="#ff4444" title="High lean">
     </span>
   </div>
   <div class="setting-row">
     <label title="Brightness of the Roll HUD's band, tick marks, and degree labels (uses the Normal color).">Roll Labels Brightness</label>
-    <input type="range" id="roll-label-brightness" min="0" max="100" value="100" style="width:90px;accent-color:#3388ff;">
+    <input type="range" id="roll-label-brightness" min="0" max="100" value="100" style="width:90px;accent-color:var(--uf-color-info);">
   </div>
   <div class="setting-row">
     <label>Show Axis HUD</label>
@@ -1146,9 +1147,9 @@
   <div class="setting-row color-row-stacked">
     <label title="Per-axis colors for the Pitch / Roll / Yaw readout.">Axis Colors (Pitch / Roll / Yaw)</label>
     <span class="color-group">
-      <input type="color" id="axis-color-pitch" value="#44dd66" title="Pitch">
-      <input type="color" id="axis-color-roll" value="#ee4455" title="Roll">
-      <input type="color" id="axis-color-yaw" value="#4488ff" title="Yaw">
+      <input type="color" id="axis-color-pitch" value="var(--uf-color-accent)" title="Pitch">
+      <input type="color" id="axis-color-roll" value="var(--uf-color-danger)" title="Roll">
+      <input type="color" id="axis-color-yaw" value="var(--uf-color-info)" title="Yaw">
     </span>
   </div>
   <div class="setting-row">
@@ -1198,19 +1199,19 @@
   </div>
   <div class="setting-row">
     <label>Button HUD window</label>
-    <button id="detach-button-hud" title="Open the Button HUD in its own draggable window">Detach</button>
+    <uf-button size="sm" id="detach-button-hud" title="Open the Button HUD in its own draggable window">Detach</uf-button>
   </div>
   <div class="setting-row">
     <label title="Open the Gyro HUD (3D gyro) in its own transparent, always-on-top window">Gyro HUD window</label>
-    <button id="detach-gyro-hud" title="Open the 3D Gyro in its own draggable window">Detach</button>
+    <uf-button size="sm" id="detach-gyro-hud" title="Open the 3D Gyro in its own draggable window">Detach</uf-button>
   </div>
   <div class="setting-row">
     <label title="Open the Axis HUD (pitch/roll/yaw readout) in its own transparent window">Axis HUD window</label>
-    <button id="detach-axis-hud" title="Open the Axis Values in its own draggable window">Detach</button>
+    <uf-button size="sm" id="detach-axis-hud" title="Open the Axis Values in its own draggable window">Detach</uf-button>
   </div>
   <div class="setting-row">
     <label title="Open the Roll HUD in its own transparent window">Roll HUD window</label>
-    <button id="detach-roll-hud" title="Open the Roll HUD in its own draggable window">Detach</button>
+    <uf-button size="sm" id="detach-roll-hud" title="Open the Roll HUD in its own draggable window">Detach</uf-button>
   </div>
   <div class="setting-row">
     <label title="Paint a solid keyable color behind the overlay for chroma-key compositing">Green-Screen Background</label>
@@ -1230,22 +1231,22 @@
   <div class="setting-row">
     <label>Settings</label>
     <span class="combo-display" id="combo-label-settings">Select + Start</span>
-    <button data-remap="settings" id="combo-remap-settings">Remap</button>
+    <uf-button size="sm" data-remap="settings" id="combo-remap-settings">Remap</uf-button>
   </div>
   <div class="setting-row">
     <label>Gyro On/Off</label>
     <span class="combo-display" id="combo-label-gyroToggle">Select + R3</span>
-    <button data-remap="gyroToggle" id="combo-remap-gyroToggle">Remap</button>
+    <uf-button size="sm" data-remap="gyroToggle" id="combo-remap-gyroToggle">Remap</uf-button>
   </div>
   <div class="setting-row">
     <label title="Fixes ONGOING drift: re-measures the gyro's zero so the model stops slowly turning on its own. Hold the controller still for ~1.5s.">Calibrate</label>
     <span class="combo-display" id="combo-label-calibrate">L3 + R3</span>
-    <button data-remap="calibrate" id="combo-remap-calibrate">Remap</button>
+    <uf-button size="sm" data-remap="calibrate" id="combo-remap-calibrate">Remap</uf-button>
   </div>
   <div class="setting-row">
     <label title="Fixes where it's pointing NOW: snaps 'forward' to your current heading. Instant — keeps your calibration and true tilt.">Recenter</label>
     <span class="combo-display" id="combo-label-recenter">Select + L3</span>
-    <button data-remap="recenter" id="combo-remap-recenter">Remap</button>
+    <uf-button size="sm" data-remap="recenter" id="combo-remap-recenter">Remap</uf-button>
   </div>
 
   <hr class="settings-divider">
@@ -1265,26 +1266,26 @@
     Click a part to select — a numeric editor pops up. Drag to move, or type exact values. Rotate with arrows (pitch/yaw), Q/E (roll); Shift = fine, R = reset rotation, Esc = deselect.
   </div>
   <div class="setting-row">
-    <button class="settings-action-btn" id="reset-layout">RESET LAYOUT</button>
+    <uf-button size="sm" class="settings-action-btn" id="reset-layout">RESET LAYOUT</uf-button>
   </div>
 
   <hr class="settings-divider">
   <h3>Diagnostics</h3>
   <div class="setting-row">
-    <button class="settings-action-btn capture" id="btn-capture-report">CAPTURE HID REPORT</button>
+    <uf-button size="sm" variant="accent" class="settings-action-btn capture" id="btn-capture-report">CAPTURE HID REPORT</uf-button>
   </div>
 
   <hr class="settings-divider">
   <div class="setting-row">
-    <button class="settings-action-btn" id="btn-reset-defaults" title="Clear all saved overlay settings and reload with defaults">RESET TO ALL DEFAULTS</button>
+    <uf-button size="sm" class="settings-action-btn" id="btn-reset-defaults" title="Clear all saved overlay settings and reload with defaults">RESET TO ALL DEFAULTS</uf-button>
   </div>
 
   <hr class="settings-divider">
   <div class="setting-row">
-    <button class="settings-action-btn close" id="btn-close-settings">CLOSE SETTINGS</button>
+    <uf-button size="sm" variant="ghost" class="settings-action-btn close" id="btn-close-settings">CLOSE SETTINGS</uf-button>
   </div>
   <div class="setting-row">
-    <button class="settings-action-btn exit" id="btn-exit-app">EXIT APPLICATION</button>
+    <uf-button size="sm" variant="danger" class="settings-action-btn exit" id="btn-exit-app">EXIT APPLICATION</uf-button>
   </div>
 
   <hr class="settings-divider">
@@ -1299,7 +1300,7 @@
 <div id="layout-editor-popup">
   <div class="lep-header" id="lep-drag">
     <span class="lep-title" id="edit-layout-selected">none</span>
-    <button class="lep-close" id="lep-close" title="Deselect (Esc)">×</button>
+    <uf-button size="xs" variant="ghost" class="lep-close" id="lep-close" title="Deselect (Esc)">×</uf-button>
   </div>
   <div class="lep-section">
     <div class="lep-section-title" title="Position offset in model units. X mirrors left (−)/right (+), Y is up (+), Z is front (+)/back (−).">Position</div>
@@ -1317,7 +1318,7 @@
       <label class="lep-axis" title="Roll — Z"><span class="lep-ax">Z</span><input type="number" id="layout-rot-z" step="1" autocomplete="off"></label>
     </div>
   </div>
-  <button class="lep-reset" id="lep-reset-part" title="Reset just this part to its default position">Reset this part</button>
+  <uf-button size="sm" variant="ghost" class="lep-reset" id="lep-reset-part" title="Reset just this part to its default position">Reset this part</uf-button>
   <div class="lep-hint">In a field, ↑/↓ nudges; hold <b>Shift</b> for fine steps (Position 0.001, Rotation 0.1°). Drag the header to move this editor. Tip: mirror left/right by negating X.</div>
 </div>
 
@@ -1331,15 +1332,15 @@
     <div class="device-line" id="tr-device-line"></div>
     <div id="tr-alias-row" style="display:none; margin: 10px 0 4px;">
       <label for="tr-alias" style="display:block; color:#9ad; font-size:11px; margin-bottom:4px;">Controller name (used in filename and embedded in the JSON)</label>
-      <input type="text" id="tr-alias" maxlength="60" style="width:100%; box-sizing:border-box; padding:6px 8px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:5px; color:#eee; font-size:12px;">
+      <input type="text" id="tr-alias" maxlength="60" style="width:100%; box-sizing:border-box; padding:6px 8px; background:var(--uf-color-surface-3); border:1px solid var(--uf-color-line-soft); border-radius:5px; color:var(--uf-color-fg); font-size:12px;">
       <label for="tr-note" style="display:block; color:#9ad; font-size:11px; margin:8px 0 4px;">Optional note (e.g. "back paddles clicked twice during step 9")</label>
-      <input type="text" id="tr-note" maxlength="200" style="width:100%; box-sizing:border-box; padding:6px 8px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:5px; color:#eee; font-size:12px;">
+      <input type="text" id="tr-note" maxlength="200" style="width:100%; box-sizing:border-box; padding:6px 8px; background:var(--uf-color-surface-3); border:1px solid var(--uf-color-line-soft); border-radius:5px; color:var(--uf-color-fg); font-size:12px;">
     </div>
     <div class="status" id="tr-status"></div>
     <div class="actions">
-      <button id="tr-cancel">Cancel</button>
-      <button id="tr-skip" style="display:none;">Skip</button>
-      <button id="tr-primary" class="primary">Start</button>
+      <uf-button size="sm" variant="ghost" id="tr-cancel">Cancel</uf-button>
+      <uf-button size="sm" variant="ghost" id="tr-skip" style="display:none;">Skip</uf-button>
+      <uf-button size="sm" variant="accent" id="tr-primary" class="primary">Start</uf-button>
     </div>
   </div>
 </div>
@@ -1349,8 +1350,8 @@
   <div class="dialog">
     <p>Are you sure you want to exit the application?</p>
     <div class="dialog-buttons">
-      <button class="btn-cancel" id="exit-cancel">Cancel</button>
-      <button class="btn-exit-yes" id="exit-yes">Exit</button>
+      <uf-button size="sm" variant="ghost" class="btn-cancel" id="exit-cancel">Cancel</uf-button>
+      <uf-button size="sm" variant="danger" class="btn-exit-yes" id="exit-yes">Exit</uf-button>
     </div>
   </div>
 </div>
@@ -1379,13 +1380,13 @@
 <div id="gyro-hud">
   <svg id="arc-svg" viewBox="-120 -105 240 115">
     <!-- Arc band background -->
-    <path id="arc-band" d="" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+    <path id="arc-band" d="" fill="var(--uf-color-surface-3)" stroke="var(--uf-color-line-soft)" stroke-width="0.5"/>
     <!-- Tick marks -->
     <g id="arc-ticks" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"></g>
     <!-- Degree labels (0 / ±20 / ±40) -->
     <g id="arc-labels"></g>
     <!-- Needle -->
-    <line id="arc-needle" x1="0" y1="-4" x2="0" y2="-22" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+    <line id="arc-needle" x1="0" y1="-4" x2="0" y2="-22" stroke="var(--uf-color-fg)" stroke-width="2.5" stroke-linecap="round"/>
     <!-- Center dot -->
     <circle cx="0" cy="0" r="2" fill="rgba(255,255,255,0.4)"/>
   </svg>
@@ -1505,5 +1506,6 @@
 })();
 </script>
 <script type="module" src="js/app.js"></script>
+<script type="module" src="./lib/ui/index.js"></script>
 </body>
 </html>

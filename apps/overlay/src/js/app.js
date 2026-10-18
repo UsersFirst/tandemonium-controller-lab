@@ -1796,7 +1796,7 @@ function navigateSettings(gamepad) {
   if (row) {
     // Camera presets row — left/right highlights, A confirms selection
     if (row.classList.contains('camera-presets')) {
-      const btns = Array.from(row.querySelectorAll('button'));
+      const btns = Array.from(row.querySelectorAll('button, uf-button'));
       // Track a hover/focus index within this row
       let hoverIdx = btns.findIndex(b => b.classList.contains('nav-hover'));
       if (hoverIdx === -1) hoverIdx = btns.findIndex(b => b.classList.contains('selected'));
@@ -1817,7 +1817,7 @@ function navigateSettings(gamepad) {
       const select = row.querySelector('select');
       const checkbox = row.querySelector('input[type="checkbox"]');
       const slider = row.querySelector('input[type="range"]');
-      const button = row.querySelector('button');
+      const button = row.querySelector('button, uf-button');
 
       if (leftFire) {
         if (select) { select.selectedIndex = Math.max(0, select.selectedIndex - 1); select.dispatchEvent(new Event('change')); }
@@ -3118,15 +3118,15 @@ if (window.electronAPI) {
     for (const e of entries) {
       const spoofNote = e.spoofs ? ` <span style="color:#fa6;">(clone of ${e.spoofs.of})</span>` : '';
       const noteLine = e.notes ? `<div style="color:#888;font-size:11px;margin-top:2px;">${e.notes}</div>` : '';
-      html += `<button class="tr-picker-btn" data-entry-name="${e.name.replace(/"/g, '&quot;')}" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#eee;cursor:pointer;font-size:12px;">
+      html += `<uf-button size="sm" class="tr-picker-btn" data-entry-name="${e.name.replace(/"/g, '&quot;')}" style="display:block;width:100%;text-align:left;margin-bottom:6px;">
         <strong>${e.name}</strong>${spoofNote}
         ${noteLine}
-      </button>`;
+      </uf-button>`;
     }
-    html += `<button class="tr-picker-btn" data-entry-name="__unknown__" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:10px;background:rgba(255,255,255,0.04);border:1px dashed rgba(255,255,255,0.18);border-radius:6px;color:#bbb;cursor:pointer;font-size:12px;font-style:italic;">
+    html += `<uf-button size="sm" variant="ghost" class="tr-picker-btn" data-entry-name="__unknown__" style="display:block;width:100%;text-align:left;margin-bottom:6px;border:1px dashed var(--uf-color-line-soft);font-style:italic;">
       <strong>Unknown / something else</strong>
       <div style="color:#888;font-size:11px;margin-top:2px;font-style:normal;">Use this if you don't recognize any of the above — runs the full step list and labels the report as unknown.</div>
-    </button>`;
+    </uf-button>`;
     promptEl.innerHTML = html;
     progressEl.style.width = '0%';
     aliasRow.style.display = 'none';
@@ -3168,7 +3168,7 @@ if (window.electronAPI) {
         <span>${AREA_LABELS[a] || a} <span style="color:#888;">(${n} step${n > 1 ? 's' : ''})</span></span>
       </label>`;
     }
-    html += '<div style="margin-top:8px;font-size:11px;"><button id="tr-area-all" style="background:none;border:none;color:#9ad;cursor:pointer;text-decoration:underline;">select all</button> · <button id="tr-area-none" style="background:none;border:none;color:#9ad;cursor:pointer;text-decoration:underline;">select none</button></div>';
+    html += '<div style="margin-top:8px;font-size:11px;"><uf-button size="xs" variant="ghost" id="tr-area-all" style="text-decoration:underline;">select all</uf-button> · <uf-button size="xs" variant="ghost" id="tr-area-none" style="text-decoration:underline;">select none</uf-button></div>';
     promptEl.innerHTML = html;
     progressEl.style.width = '0%';
     aliasRow.style.display = 'none';
