@@ -4,14 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Multi-Controller Overlay (Prototype)</title>
+<link rel="stylesheet" href="./lib/ui/tokens.css">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     width: 100%; height: 100%;
     overflow: hidden;
-    background: #0b0d12;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    color: #eee;
+    background: var(--uf-color-bg);
+    font-family: var(--uf-font-ui);
+    color: var(--uf-color-fg);
     user-select: none;
   }
 
@@ -28,7 +29,7 @@
     top: 10px; left: 16px;
     font-size: 12px;
     letter-spacing: 1.2px;
-    color: #6a7184;
+    color: var(--uf-color-fg-muted);
     text-transform: uppercase;
     z-index: 101;
     -webkit-app-region: no-drag;
@@ -50,7 +51,7 @@
   .slot {
     position: relative;
     background: linear-gradient(180deg, rgba(30,34,44,0.65) 0%, rgba(18,21,28,0.65) 100%);
-    border: 1px solid rgba(255,255,255,0.06);
+    border: 1px solid var(--uf-color-surface-3);
     border-radius: 14px;
     overflow: hidden;
     display: flex;
@@ -77,7 +78,7 @@
   .slot.empty { opacity: 0.75; }
 
   /* Title-color accents mirror the border/lightbar per player */
-  .slot.claimed.p1 .slot-title { color: #6ea8ff; }
+  .slot.claimed.p1 .slot-title { color: var(--uf-color-info); }
   .slot.claimed.p2 .slot-title { color: #ff7a7a; }
   .slot.claimed.p3 .slot-title { color: #7ae09a; }
   .slot.claimed.p4 .slot-title { color: #c79dff; }
@@ -98,7 +99,7 @@
   .slot-sub {
     font-size: 9px;
     color: #4e5564;
-    font-family: monospace;
+    font-family: var(--uf-font-mono);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -143,7 +144,7 @@
   .slot.claimed .slot-prompt { color: #e4ebf7; }
   .slot-hint {
     font-size: 10px;
-    color: #5b6374;
+    color: var(--uf-color-fg-muted);
     margin-top: 3px;
     letter-spacing: 0.5px;
   }
@@ -164,7 +165,7 @@
     width: 96px; height: 96px;
     margin: -48px 0 0 -48px;
     border-radius: 50%;
-    background: conic-gradient(rgba(255,90,90,0.85) calc(var(--p, 0) * 1%), rgba(255,255,255,0.08) 0);
+    background: conic-gradient(rgba(255,90,90,0.85) calc(var(--p, 0) * 1%), var(--uf-color-surface-2) 0);
     mask: radial-gradient(closest-side, transparent 72%, #000 74%);
     -webkit-mask: radial-gradient(closest-side, transparent 72%, #000 74%);
     pointer-events: none;
@@ -193,9 +194,9 @@
     margin-top: 8px;
   }
   .slot-btn {
-    background: rgba(255,255,255,0.06);
+    background: var(--uf-color-surface-3);
     color: #cfd5e2;
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid var(--uf-color-line-soft);
     border-radius: 6px;
     padding: 5px 12px;
     font-size: 11px;
@@ -203,15 +204,15 @@
     cursor: pointer;
     -webkit-app-region: no-drag;
   }
-  .slot-btn:hover { background: rgba(255,255,255,0.12); }
+  .slot-btn:hover { background: var(--uf-color-line-soft); }
   /* When a slot-btn is marked .status, it's read-only and styled as a badge
-     rather than a clickable button. Used when gyro/HID is already bound. */
+     rather than a clickable uf-button. Used when gyro/HID is already bound. */
   .slot-btn.status {
     cursor: default;
     pointer-events: none;
     background: transparent;
     border: 1px solid rgba(120,210,160,0.35);
-    color: #8be0a8;
+    color: var(--uf-color-accent);
     font-size: 10px;
     padding: 3px 9px;
     letter-spacing: 0.6px;
@@ -223,7 +224,7 @@
     width: 6px; height: 6px;
     margin-right: 6px;
     border-radius: 50%;
-    background: #5fd184;
+    background: var(--uf-color-accent);
     box-shadow: 0 0 6px rgba(95,209,132,0.7);
     vertical-align: middle;
   }
@@ -233,7 +234,7 @@
     padding: 1px 6px;
     border-radius: 8px;
     font-size: 9px;
-    font-family: monospace;
+    font-family: var(--uf-font-mono);
     background: rgba(100,200,140,0.2);
     color: #8ae0a8;
   }
@@ -244,7 +245,7 @@
     background: rgba(0,0,0,0.45);
     border: 1px solid rgba(120,180,255,0.18);
     border-radius: 6px;
-    font: 10px/1.45 ui-monospace, 'Cascadia Mono', Menlo, monospace;
+    font: 10px/1.45 ui-var(--uf-font-mono), 'Cascadia Mono', Menlo, monospace;
     color: #9fb4d6;
     text-align: left;
     white-space: pre-wrap;
@@ -255,7 +256,7 @@
   .slot-diag .k { color: #6b7a93; }
   .slot-diag .v { color: #d7e3f7; }
   .slot-diag .warn { color: #ffb257; }
-  .slot-diag .ok { color: #8be0a8; }
+  .slot-diag .ok { color: var(--uf-color-accent); }
 
   #status-line {
     position: fixed;
@@ -285,7 +286,7 @@
     font-size: 15px; font-weight: 700; letter-spacing: 1.5px;
     text-transform: uppercase; color: #8a93a7;
   }
-  #empty-state .es-sub { font-size: 12px; color: #5b6374; margin-top: 8px; line-height: 1.6; }
+  #empty-state .es-sub { font-size: 12px; color: var(--uf-color-fg-muted); margin-top: 8px; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -317,9 +318,9 @@
         <div class="slot-prompt" data-role="prompt"><span class="pulse">Press any button to join</span></div>
         <div class="slot-hint" data-role="hint"></div>
         <div class="slot-actions">
-          <button class="slot-btn" data-role="connect-hid">Connect Gyro (WebHID)</button>
-          <button class="slot-btn" data-role="calibrate" style="display:none;">Recalibrate Gyro</button>
-          <button class="slot-btn" data-role="diag-toggle">Diagnostics</button>
+          <uf-button size="sm" class="slot-btn" data-role="connect-hid">Connect Gyro (WebHID)</uf-button>
+          <uf-button size="sm" class="slot-btn" data-role="calibrate" style="display:none;">Recalibrate Gyro</uf-button>
+          <uf-button size="sm" class="slot-btn" data-role="diag-toggle">Diagnostics</uf-button>
         </div>
         <div class="slot-diag" data-role="diag" hidden></div>
       </div>
@@ -329,9 +330,9 @@
 
 <div id="status-line">Press any button on a connected controller to join · Hold PS/Home 2s to leave · Open List to see all controllers</div>
 
-<button id="list-toggle" title="Toggle controller list">&#x25BE; List</button>
-<button id="debug-toggle" title="Toggle debug readout">&#x25BE; Debug</button>
-<button id="close-app" title="Close application">&times;</button>
+<uf-button size="sm" id="list-toggle" title="Toggle controller list">&#x25BE; List</uf-button>
+<uf-button size="sm" id="debug-toggle" title="Toggle debug readout">&#x25BE; Debug</uf-button>
+<uf-button size="xs" variant="ghost" id="close-app" title="Close application">&times;</uf-button>
 <div id="debug-readout" class="hidden"></div>
 
 <style>
@@ -342,24 +343,24 @@
     z-index: 211;
     width: 26px; height: 22px;
     display: flex; align-items: center; justify-content: center;
-    background: rgba(255,255,255,0.06);
+    background: var(--uf-color-surface-3);
     color: #9aa3b4;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid var(--uf-color-surface-2);
     border-radius: 6px;
     font-size: 15px; line-height: 1;
     cursor: pointer;
     -webkit-app-region: no-drag;
     font-family: inherit;
   }
-  #close-app:hover { background: rgba(230,70,70,0.85); color: #fff; border-color: rgba(230,70,70,0.9); }
+  #close-app:hover { background: rgba(230,70,70,0.85); color: var(--uf-color-fg); border-color: rgba(230,70,70,0.9); }
   #list-toggle {
     position: fixed;
     top: 6px;
     right: 122px;
     z-index: 210;
-    background: rgba(255,255,255,0.06);
+    background: var(--uf-color-surface-3);
     color: #9aa3b4;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid var(--uf-color-surface-2);
     border-radius: 6px;
     padding: 3px 10px;
     font-size: 10px;
@@ -368,16 +369,16 @@
     -webkit-app-region: no-drag;
     font-family: inherit;
   }
-  #list-toggle:hover { background: rgba(255,255,255,0.12); color: #e0e6f0; }
+  #list-toggle:hover { background: var(--uf-color-line-soft); color: var(--uf-color-fg); }
   #list-toggle.open { background: rgba(80,150,255,0.2); color: #cfe0ff; border-color: rgba(80,150,255,0.4); }
   #debug-toggle {
     position: fixed;
     top: 6px;
     right: 46px;
     z-index: 210;
-    background: rgba(255,255,255,0.06);
+    background: var(--uf-color-surface-3);
     color: #9aa3b4;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid var(--uf-color-surface-2);
     border-radius: 6px;
     padding: 3px 10px;
     font-size: 10px;
@@ -386,7 +387,7 @@
     -webkit-app-region: no-drag;
     font-family: inherit;
   }
-  #debug-toggle:hover { background: rgba(255,255,255,0.12); color: #e0e6f0; }
+  #debug-toggle:hover { background: var(--uf-color-line-soft); color: var(--uf-color-fg); }
   #debug-toggle.open { background: rgba(80,150,255,0.2); color: #cfe0ff; border-color: rgba(80,150,255,0.4); }
   #debug-readout {
     position: fixed;
@@ -395,7 +396,7 @@
     max-width: min(640px, 70vw);
     max-height: 60vh;
     overflow: auto;
-    font: 10px/1.4 ui-monospace, 'Cascadia Mono', Menlo, monospace;
+    font: 10px/1.4 ui-var(--uf-font-mono), 'Cascadia Mono', Menlo, monospace;
     color: #8af;
     background: rgba(6,9,16,0.92);
     border: 1px solid rgba(80,150,255,0.25);
@@ -448,5 +449,6 @@
 })();
 </script>
 <script type="module" src="js/multi-app.js"></script>
+<script type="module" src="./lib/ui/index.js"></script>
 </body>
 </html>

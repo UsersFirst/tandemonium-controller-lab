@@ -1,6 +1,6 @@
-# Design system inventory — @usersfirst/ui 0.0.1
+# Design system inventory — @usersfirst/ui 0.2.0
 
-_Generated 2026-10-18T19:14:21.069Z. Re-run: `npm run ui:inventory`. Report page: [index.html](index.html)._
+_Generated 2026-10-18T20:09:56.921Z. Re-run: `npm run ui:inventory`. Report page: [index.html](index.html)._
 
 ## Tokens (53)
 
@@ -58,7 +58,7 @@ _Generated 2026-10-18T19:14:21.069Z. Re-run: `npm run ui:inventory`. Report page
 |---|---|---:|---|
 | `--uf-font-ui` | `'Helvetica Neue', Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif` | 3 |  |
 | `--uf-font-mono` | `ui-monospace, 'Cascadia Mono', SFMono-Regular, Menlo, monospace` | 2 |  |
-| `--uf-size-xs` | `10px` | 2 | 24 uses |
+| `--uf-size-xs` | `10px` | 3 | 24 uses |
 | `--uf-size-sm` | `12px` | 3 | 11px+12px+13px = 100 uses in the game: collapse to one |
 | `--uf-size-md` | `16px` | 1 | game .lobby-btn |
 | `--uf-size-lg` | `18px` | 1 |  |
@@ -118,21 +118,21 @@ _Generated 2026-10-18T19:14:21.069Z. Re-run: `npm run ui:inventory`. Report page
 
 ### `<uf-button>` — the one button: every CTA, menu entry and option in both repos.
 
-_UfButton · packages/ui/src/elements/uf-button.js · 128 lines · owns its DOM · 11 gallery states_
+_UfButton · packages/ui/src/elements/uf-button.js · 139 lines · owns its DOM · 12 gallery states_
 
 | prop | attribute | type | default |
 |---|---|---|---|
 | `label` | `label` | string | `""` |
 | `variant` | `variant` | `primary` \| `accent` \| `ghost` \| `danger` \| `versus` | `primary` |
-| `size` | `size` | `sm` \| `md` \| `lg` | `md` |
+| `size` | `size` | `xs` \| `sm` \| `md` \| `lg` | `md` |
 | `disabled` | `disabled` | boolean | `false` |
 | `selected` | `selected` | boolean | `false` |
 
 - events: —
 - methods: `click()`
 - data attributes: —
-- tokens used: 27 · literal colours in styles: none
-- usage: game 45 in HTML + 4 in JS · lab 27 in HTML + 13 in JS
+- tokens used: 28 · literal colours in styles: none
+- usage: game 45 in HTML + 4 in JS · lab 74 in HTML + 18 in JS
 
 ### `<uf-chip>` — a small status tag (READY, ASSIGNED, AVAILABLE, P1).
 
@@ -151,17 +151,17 @@ _UfChip · packages/ui/src/elements/uf-chip.js · 45 lines · owns its DOM · 5 
 
 ### `<uf-flow>` — hosts uf-steps; exactly one is active; go()/back() with history.
 
-_UfFlow · packages/ui/src/elements/uf-flow.js · 118 lines · keeps authored children · 1 gallery states_
+_UfFlow · packages/ui/src/elements/uf-flow.js · 164 lines · keeps authored children · 1 gallery states_
 
 | prop | attribute | type | default |
 |---|---|---|---|
 | `current` | `current` | string | `""` |
 
 - events: `uf-flow:change`
-- methods: `steps()`, `step(id)`, `go(id, opts = {})`, `back()`, `reset()`
+- methods: `steps()`, `step(id)`, `go(id, opts = {})`, `back()`, `reset()`, `attachFocus(controller)`, `refreshFocus()`
 - data attributes: `data-flow-back`, `data-flow-go`
 - tokens used: 0 · literal colours in styles: none
-- usage: game 0 in HTML + 0 in JS · lab 2 in HTML + 10 in JS
+- usage: game 0 in HTML + 0 in JS · lab 2 in HTML + 12 in JS
 
 ### `<uf-seat>` — a seat in the lobby: who sits here, on what controller, and whether they are ready.
 
@@ -184,7 +184,7 @@ _UfSeat · packages/ui/src/elements/uf-seat.js · 86 lines · owns its DOM · 5 
 
 ### `<uf-step>` — one screen of a flow: optional prompt above and hint below the authored content.
 
-_UfStep · packages/ui/src/elements/uf-step.js · 74 lines · keeps authored children · 3 gallery states_
+_UfStep · packages/ui/src/elements/uf-step.js · 90 lines · keeps authored children · 3 gallery states_
 
 | prop | attribute | type | default |
 |---|---|---|---|
@@ -193,10 +193,10 @@ _UfStep · packages/ui/src/elements/uf-step.js · 74 lines · keeps authored chi
 | `active` | `active` | boolean | `false` |
 
 - events: —
-- methods: —
-- data attributes: —
+- methods: `focusables()`
+- data attributes: `data-focusable`
 - tokens used: 9 · literal colours in styles: none
-- usage: game 0 in HTML + 0 in JS · lab 7 in HTML + 8 in JS
+- usage: game 0 in HTML + 0 in JS · lab 7 in HTML + 9 in JS
 
 ## Adoption
 
@@ -204,13 +204,13 @@ _UfStep · packages/ui/src/elements/uf-step.js · 74 lines · keeps authored chi
 |---|---|---|
 | tokens.css linked | ✓ | ✓ |
 | kit loaded | ✓ | ✓ |
-| uf-* elements in HTML | 45 | 51 |
-| uf-* created in JS | 4 | 53 |
-| raw <button> in HTML | 87 | 46 |
+| uf-* elements in HTML | 45 | 98 |
+| uf-* created in JS | 4 | 61 |
+| raw <button> in HTML | 87 | 0 |
 | raw buttons created in JS | 8 | 0 |
-| var(--uf-*) references in page CSS | 99 | 75 |
-| literal hex colours in page CSS (distinct / total) | 50 / 146 | 108 / 262 |
-| literal font stacks in page CSS | `ui-monospace, SFMono-Regular, Menlo, monospace`<br>`Georgia, 'Times New Roman', serif`<br>`system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`<br>`'Noteworthy', 'Bradley Hand', fantasy` | `monospace`<br>`-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`<br>`var(--mono)`<br>`ui-monospace, SFMono-Regular, Menlo, monospace` |
+| var(--uf-*) references in page CSS | 99 | 318 |
+| literal hex colours in page CSS (distinct / total) | 50 / 146 | 74 / 121 |
+| literal font stacks in page CSS | `ui-monospace, SFMono-Regular, Menlo, monospace`<br>`Georgia, 'Times New Roman', serif`<br>`system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`<br>`'Noteworthy', 'Bradley Hand', fantasy` | `var(--mono)`<br>`-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`<br>`ui-monospace, SFMono-Regular, Menlo, monospace` |
 
 ## Unused tokens (12)
 
