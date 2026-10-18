@@ -231,8 +231,8 @@ function enterMode(mode) {
   const lobbyStep = /** @type {import('@usersfirst/ui').UfStep} */ ($('lobby'));
   lobbyStep.prompt = mode === 'versus' ? 'Build your teams' : mode === 'solo' ? 'Solo ride' : 'Crew your tandem';
   lobbyStep.hint = mode === 'versus'
-    ? 'Press a button = active · <strong>A</strong> take seat → ready · <strong>◀ ▶</strong> team · <strong>▲ ▼</strong> swap · <strong>B</strong> back (ready→seat→active) · hold <strong>PS</strong> to release · all ready? <strong>A</strong> → level'
-    : 'Press a button = active · <strong>A</strong> take a seat → ready · <strong>B</strong> back (ready→seat→active) · hold <strong>PS/Home</strong> to release · all ready? <strong>A</strong> → level';
+    ? 'Press a button = joined · <strong>A</strong> take a seat → ready · <strong>◀ ▶</strong> team · <strong>▲ ▼</strong> swap · <strong>B</strong> back (ready→seated→joined) · hold <strong>PS</strong> to release · all ready? <strong>A</strong> → level'
+    : 'Press a button = joined · <strong>A</strong> take a seat → ready · <strong>B</strong> back (ready→seated→joined) · hold <strong>PS/Home</strong> to release · all ready? <strong>A</strong> → level';
   showScreen('lobby'); syncSeats(); render();
 }
 function goLevel() {
@@ -262,15 +262,17 @@ function cardHTML(s) {
   }
   return `<uf-seat seat="${s.role}" tone="${tone}" who="OPEN" dev="press a button" state="open" data-seat="${s.id}"></uf-seat>`;
 }
-// Recognized-but-seatless controllers waiting to pick a seat.
+// Joined-but-seatless controllers waiting to pick a seat.
 function loungeHTML() {
   const active = [...state.bySlot.keys()].filter((id) => state.bySlot.get(id).seatId == null);
   if (!active.length) return '';
+  const open = !!nextOpen();   // solo has one seat: say so instead of promising A will seat them
+  const hint = open ? 'press A to take a seat' : (state.mode === 'solo' ? 'no open seat in solo' : 'seats full · B on a seated player frees one');
   const chips = active.map((id) => {
     const L = state.bySlot.get(id);
-    return `<div class="lounge-chip"><uf-chip tone="warn">P${L.player}</uf-chip><span class="lc-name">${esc(devName(id))}</span><span class="lc-hint">press A to take a seat</span></div>`;
+    return `<div class="lounge-chip"><uf-chip tone="warn">P${L.player}</uf-chip><span class="lc-name">${esc(devName(id))}</span><span class="lc-hint">${hint}</span></div>`;
   }).join('');
-  return `<div class="lounge"><div class="lounge-title">RECOGNIZED · pick a seat</div><div class="lounge-chips">${chips}</div></div>`;
+  return `<div class="lounge"><div class="lounge-title">JOINED · ${open ? 'pick a seat' : 'waiting'}</div><div class="lounge-chips">${chips}</div></div>`;
 }
 function render() {
   const area = $('seat-area');
@@ -297,7 +299,7 @@ function updateDebug() {
     return `${s.id}:${devName(s.id).split(' ')[0]}${L ? '·' + L.phase : ''}[${d ? (d.connectionType || 'hid') : 'no-hid'}]`;
   });
   const perf = `[${_frameMs.toFixed(1)}ms/f · ${_workMs.toFixed(1)}ms work · pool ${manager._hidPool.size}] `;
-  el.textContent = perf + (parts.join('   ') || 'no controllers — press a button to join') + (allReady() ? '   ✓ ALL READY' : '');
+  el.textContent = perf + (parts.join('   ') || 'no controllers — press a button to join') + (allReady() ? '   ✓ ALL READY' : '');   // debug bar: manager names
 }
 let pairMsg = '', pairMsgUntil = 0;
 function flashPairMsg(m) { pairMsg = m; pairMsgUntil = performance.now() + 2600; }
@@ -420,7 +422,7 @@ function ctrlEntries(pads) {
       key: 's:' + s.id, name: esc(devName(s.id)),
       // controller layer: a claimed slot is ACTIVE. game layer: ASSIGNED/READY only when seated.
       cstate: 'ACTIVE', gstate: seated ? (L.phase === 'ready' ? 'READY' : 'ASSIGNED') : null,
-      sub: seated ? `P${L.player} · ${role}` : (L ? `P${L.player} · recognized` : 'recognized'),
+      sub: seated ? `P${L.player} · ${role}` : (L ? `P${L.player} · joined` : 'joined'),
       hw: esc((s.hidDevice && s.hidDevice.productName) || ''),   // real HID string — the ONLY way to tell apart two same-vid:pid pads
       vp: vpOfSlot(s), device: s.hidDevice || null,
       conn: hid ? (s.driver && s.driver.connectionType ? s.driver.connectionType : 'hid') : 'gamepad',
@@ -461,6 +463,10 @@ function ctrlEntries(pads) {
 }
 // Controller-layer vs game-layer states, as chip tones (legend in lobby.html).
 const CHIP_TONE = { AVAILABLE: 'info', ACTIVE: 'warn', ASSIGNED: 'neutral', READY: 'accent' };
+// The words a player sees for those states — the same four in the lab and the
+// game: CONNECTED (paired, idle) → JOINED (pressed a button, in the lounge) →
+// SEATED (Captain/Stoker on a team) → READY. Code keeps the manager's names.
+const STATE_LABEL = { AVAILABLE: 'CONNECTED', ACTIVE: 'JOINED', ASSIGNED: 'SEATED', READY: 'READY' };
 function buildCtrlRows(items) {
   const list = $('cp-list'); if (!list) return;
   if (!items.length) { list.innerHTML = '<div class="cp-empty">No controllers detected.<br>Press a button, or “🎮 Pair controller”.</div>'; return; }
@@ -469,8 +475,8 @@ function buildCtrlRows(items) {
     `<div class="cp-main"><div class="cp-name">${it.name}</div><div class="cp-sub">${it.sub} · ${it.conn} · ${vpStr(it.vp)}</div>` +
     `${it.hw ? `<div class="cp-hw">▪ ${it.hw}</div>` : ''}` +
     `${it.id ? `<div class="cp-id${it.id[0] === '⚠' ? ' warn' : ''}">${it.id}</div>` : ''}</div>` +
-    `<div class="cp-tags"><uf-chip tone="${CHIP_TONE[it.cstate]}">${it.cstate}</uf-chip>` +
-    `${it.gstate ? `<uf-chip tone="${CHIP_TONE[it.gstate]}">${it.gstate}</uf-chip>` : ''}</div></div>`
+    `<div class="cp-tags"><uf-chip tone="${CHIP_TONE[it.cstate]}">${STATE_LABEL[it.cstate]}</uf-chip>` +
+    `${it.gstate ? `<uf-chip tone="${CHIP_TONE[it.gstate]}">${STATE_LABEL[it.gstate]}</uf-chip>` : ''}</div></div>`
   ).join('');
 }
 let ctrlSig = '';
@@ -483,7 +489,7 @@ function renderCtrlPanel(pads) {
   for (const it of items) { const d = list.querySelector(`[data-dot="${it.key}"]`); if (d) d.classList.toggle('on', it.active); }
   const act = items.filter((i) => i.cstate === 'ACTIVE').length, av = items.filter((i) => i.cstate === 'AVAILABLE').length;
   const asg = items.filter((i) => i.gstate === 'ASSIGNED').length, rdy = items.filter((i) => i.gstate === 'READY').length;
-  const note = $('cp-note'); if (note) note.textContent = `${act} active · ${av} available · ${asg} assigned · ${rdy} ready`;
+  const note = $('cp-note'); if (note) note.textContent = `${act} joined · ${av} connected · ${asg} seated · ${rdy} ready`;
 }
 function openCtrlPanel(open) {
   const panel = $('ctrl-panel'); if (!panel) return;
