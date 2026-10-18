@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>3D Gyro</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: transparent;
+    user-select: none;
+  }
+  /* The gimbal renders on this canvas; the transparent drag layer sits on top
+     so the whole (frameless) window can be repositioned on any monitor. */
+  #gyro-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
+  /* Dragging is JS-based (hud-window-chrome.js), so mouse events still reach the
+     DOM — the close × is revealed by hovering ANYWHERE in the window. */
+  #close-btn {
+    position: fixed; top: 6px; right: 6px;
+    width: 20px; height: 20px;
+    background: rgba(255,255,255,0.12); border: none; border-radius: 50%;
+    color: #ccc; font-size: 12px; line-height: 1; cursor: pointer; z-index: 51;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  body:hover #close-btn { opacity: 1; }
+  #close-btn:hover { background: rgba(255,255,255,0.25); color: #fff; }
+</style>
+<script>
+// Dynamic importmap (mirrors index.html): local vendor files in Electron, CDN
+// on the web. The workspace packages are copied into ./lib/ by copy-workspace.js.
+(function() {
+  const isElectron = navigator.userAgent.includes('Electron');
+  const threeMap = isElectron
+    ? { "three": "./lib/three.module.js", "three/addons/": "./lib/addons/" }
+    : { "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/" };
+  const map = {
+    ...threeMap,
+    "@usersfirst/controller-core": "./lib/controller-core/index.js",
+    "@usersfirst/controller-core/manager": "./lib/controller-core/manager.js",
+    "@usersfirst/controller-core/sensor-fusion": "./lib/controller-core/sensor-fusion.js",
+    "@usersfirst/controller-core/drivers/": "./lib/controller-core/drivers/",
+    "@usersfirst/controller-visualizer": "./lib/controller-visualizer/index.js",
+  };
+  const el = document.createElement('script');
+  el.type = 'importmap';
+  el.textContent = JSON.stringify({ imports: map });
+  document.currentScript.after(el);
+})();
+</script>
+</head>
+<body>
+  <canvas id="gyro-canvas"></canvas>
+  <button id="close-btn" title="Close">&times;</button>
+  <script src="js/hud-window-chrome.js"></script>
+  <script type="module" src="js/gyro-window.js"></script>
+</body>
+</html>
