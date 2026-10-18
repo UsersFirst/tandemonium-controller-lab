@@ -1,0 +1,837 @@
+{
+  "package": "@usersfirst/ui",
+  "version": "0.0.1",
+  "generated": "2026-10-18T19:14:21.069Z",
+  "tokens": [
+    {
+      "name": "--uf-color-bg",
+      "value": "#0b0d12",
+      "note": "lab: page gradient base",
+      "group": "color",
+      "section": "colour · surfaces"
+    },
+    {
+      "name": "--uf-color-surface",
+      "value": "#1a1a2e",
+      "note": "game: panels / cards",
+      "group": "color",
+      "section": "colour · surfaces"
+    },
+    {
+      "name": "--uf-color-surface-2",
+      "value": "rgba(255,255,255,.10)",
+      "note": "game .lobby-btn fill",
+      "group": "color",
+      "section": "colour · surfaces"
+    },
+    {
+      "name": "--uf-color-surface-3",
+      "value": "rgba(255,255,255,.04)",
+      "note": "",
+      "group": "color",
+      "section": "colour · surfaces"
+    },
+    {
+      "name": "--uf-color-line",
+      "value": "rgba(255,255,255,.40)",
+      "note": "game .lobby-btn border",
+      "group": "color",
+      "section": "colour · surfaces"
+    },
+    {
+      "name": "--uf-color-line-soft",
+      "value": "rgba(255,255,255,.16)",
+      "note": "",
+      "group": "color",
+      "section": "colour · surfaces"
+    },
+    {
+      "name": "--uf-color-scrim",
+      "value": "rgba(0,0,0,.60)",
+      "note": "",
+      "group": "color",
+      "section": "colour · surfaces"
+    },
+    {
+      "name": "--uf-color-fg",
+      "value": "#ffffff",
+      "note": "game: 61 uses of #fff",
+      "group": "color",
+      "section": "colour · text"
+    },
+    {
+      "name": "--uf-color-fg-muted",
+      "value": "#8a93a6",
+      "note": "",
+      "group": "color",
+      "section": "colour · text"
+    },
+    {
+      "name": "--uf-color-fg-on-accent",
+      "value": "#06140c",
+      "note": "",
+      "group": "color",
+      "section": "colour · text"
+    },
+    {
+      "name": "--uf-color-accent",
+      "value": "#44ff66",
+      "note": "",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-accent-soft",
+      "value": "rgba(60,200,80,.25)",
+      "note": "game .lobby-btn-accent fill",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-accent-line",
+      "value": "rgba(60,200,80,.60)",
+      "note": "",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-accent-2",
+      "value": "#ffd23f",
+      "note": "game gold, 26 uses",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-warn",
+      "value": "var(--uf-color-accent-2)",
+      "note": "",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-danger",
+      "value": "#ff4444",
+      "note": "",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-danger-soft",
+      "value": "rgba(255,68,68,.18)",
+      "note": "",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-info",
+      "value": "#4488ff",
+      "note": "shared by game + lab",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-info-soft",
+      "value": "rgba(103,193,245,.16)",
+      "note": "game .cta-btn fill",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-info-line",
+      "value": "rgba(103,193,245,.50)",
+      "note": "",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-info-fg",
+      "value": "#bfe6ff",
+      "note": "",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-versus",
+      "value": "#c898ff",
+      "note": "game .lobby-btn-versus",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-versus-soft",
+      "value": "rgba(160,64,255,.18)",
+      "note": "",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-versus-line",
+      "value": "rgba(160,64,255,.65)",
+      "note": "",
+      "group": "color",
+      "section": "colour · semantic (game accent = the 37-use #44ff66 green)"
+    },
+    {
+      "name": "--uf-color-captain",
+      "value": "#7ae09a",
+      "note": "",
+      "group": "color",
+      "section": "colour · seats & teams (game values; the lab's lobby adopts them)"
+    },
+    {
+      "name": "--uf-color-stoker",
+      "value": "#ff9e6b",
+      "note": "",
+      "group": "color",
+      "section": "colour · seats & teams (game values; the lab's lobby adopts them)"
+    },
+    {
+      "name": "--uf-color-team-a",
+      "value": "#4c7dff",
+      "note": "game --versus-team-a · P1/P3 lightbar blue",
+      "group": "color",
+      "section": "colour · seats & teams (game values; the lab's lobby adopts them)"
+    },
+    {
+      "name": "--uf-color-team-b",
+      "value": "#ff4560",
+      "note": "game --versus-team-b · --tandem-player2",
+      "group": "color",
+      "section": "colour · seats & teams (game values; the lab's lobby adopts them)"
+    },
+    {
+      "name": "--uf-font-ui",
+      "value": "'Helvetica Neue', Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      "note": "",
+      "group": "font",
+      "section": "type"
+    },
+    {
+      "name": "--uf-font-mono",
+      "value": "ui-monospace, 'Cascadia Mono', SFMono-Regular, Menlo, monospace",
+      "note": "",
+      "group": "font",
+      "section": "type"
+    },
+    {
+      "name": "--uf-size-xs",
+      "value": "10px",
+      "note": "24 uses",
+      "group": "size",
+      "section": "type"
+    },
+    {
+      "name": "--uf-size-sm",
+      "value": "12px",
+      "note": "11px+12px+13px = 100 uses in the game: collapse to one",
+      "group": "size",
+      "section": "type"
+    },
+    {
+      "name": "--uf-size-md",
+      "value": "16px",
+      "note": "game .lobby-btn",
+      "group": "size",
+      "section": "type"
+    },
+    {
+      "name": "--uf-size-lg",
+      "value": "18px",
+      "note": "",
+      "group": "size",
+      "section": "type"
+    },
+    {
+      "name": "--uf-size-xl",
+      "value": "22px",
+      "note": "",
+      "group": "size",
+      "section": "type"
+    },
+    {
+      "name": "--uf-size-2xl",
+      "value": "28px",
+      "note": "",
+      "group": "size",
+      "section": "type"
+    },
+    {
+      "name": "--uf-size-hero",
+      "value": "64px",
+      "note": "",
+      "group": "size",
+      "section": "type"
+    },
+    {
+      "name": "--uf-space-1",
+      "value": "4px",
+      "note": "",
+      "group": "space",
+      "section": "spacing (4px grid)"
+    },
+    {
+      "name": "--uf-space-5",
+      "value": "24px",
+      "note": "",
+      "group": "space",
+      "section": "spacing (4px grid)"
+    },
+    {
+      "name": "--uf-radius-sm",
+      "value": "6px",
+      "note": "",
+      "group": "radius",
+      "section": "radius (game today: 50%, 10px, 999px, 8px, 3px, 6px, 2px, 12px … 29 distinct)"
+    },
+    {
+      "name": "--uf-radius-md",
+      "value": "10px",
+      "note": "",
+      "group": "radius",
+      "section": "radius (game today: 50%, 10px, 999px, 8px, 3px, 6px, 2px, 12px … 29 distinct)"
+    },
+    {
+      "name": "--uf-radius-lg",
+      "value": "14px",
+      "note": "game .lobby-btn",
+      "group": "radius",
+      "section": "radius (game today: 50%, 10px, 999px, 8px, 3px, 6px, 2px, 12px … 29 distinct)"
+    },
+    {
+      "name": "--uf-radius-pill",
+      "value": "999px",
+      "note": "",
+      "group": "radius",
+      "section": "radius (game today: 50%, 10px, 999px, 8px, 3px, 6px, 2px, 12px … 29 distinct)"
+    },
+    {
+      "name": "--uf-shadow-card",
+      "value": "0 12px 34px -14px rgba(0,0,0,.8)",
+      "note": "",
+      "group": "shadow",
+      "section": "elevation / focus"
+    },
+    {
+      "name": "--uf-focus-ring",
+      "value": "0 0 0 3px var(--uf-color-accent)",
+      "note": "",
+      "group": "focus",
+      "section": "elevation / focus"
+    },
+    {
+      "name": "--uf-glow-accent",
+      "value": "0 0 18px -4px var(--uf-color-accent)",
+      "note": "",
+      "group": "glow",
+      "section": "elevation / focus"
+    },
+    {
+      "name": "--uf-motion-fast",
+      "value": "120ms",
+      "note": "",
+      "group": "motion",
+      "section": "motion"
+    },
+    {
+      "name": "--uf-motion-base",
+      "value": "180ms",
+      "note": "",
+      "group": "motion",
+      "section": "motion"
+    },
+    {
+      "name": "--uf-ease",
+      "value": "cubic-bezier(.2,.8,.2,1)",
+      "note": "",
+      "group": "ease",
+      "section": "motion"
+    },
+    {
+      "name": "--uf-z-hud",
+      "value": "10",
+      "note": "",
+      "group": "z",
+      "section": "layering (game today: ad-hoc 11 / 56 / 100 …)"
+    },
+    {
+      "name": "--uf-z-sheet",
+      "value": "50",
+      "note": "",
+      "group": "z",
+      "section": "layering (game today: ad-hoc 11 / 56 / 100 …)"
+    },
+    {
+      "name": "--uf-z-modal",
+      "value": "60",
+      "note": "",
+      "group": "z",
+      "section": "layering (game today: ad-hoc 11 / 56 / 100 …)"
+    },
+    {
+      "name": "--uf-z-toast",
+      "value": "90",
+      "note": "",
+      "group": "z",
+      "section": "layering (game today: ad-hoc 11 / 56 / 100 …)"
+    }
+  ],
+  "overrides": [
+    {
+      "name": "--uf-size-sm",
+      "value": "14px",
+      "media": "@media (min-width: 1600px)"
+    },
+    {
+      "name": "--uf-motion-fast",
+      "value": "0ms",
+      "media": "@media (prefers-reduced-motion: reduce)"
+    }
+  ],
+  "elements": [
+    {
+      "tag": "uf-button",
+      "className": "UfButton",
+      "file": "packages/ui/src/elements/uf-button.js",
+      "desc": "the one button: every CTA, menu entry and option in both repos.",
+      "props": [
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "variant",
+          "attribute": "variant",
+          "type": "enum",
+          "values": [
+            "primary",
+            "accent",
+            "ghost",
+            "danger",
+            "versus"
+          ],
+          "default": "primary"
+        },
+        {
+          "name": "size",
+          "attribute": "size",
+          "type": "enum",
+          "values": [
+            "sm",
+            "md",
+            "lg"
+          ],
+          "default": "md"
+        },
+        {
+          "name": "disabled",
+          "attribute": "disabled",
+          "type": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "selected",
+          "attribute": "selected",
+          "type": "boolean",
+          "default": "false"
+        }
+      ],
+      "events": [],
+      "methods": [
+        "click()"
+      ],
+      "dataAttrs": [],
+      "tokensUsed": [
+        "--uf-color-accent",
+        "--uf-color-accent-line",
+        "--uf-color-accent-soft",
+        "--uf-color-danger",
+        "--uf-color-danger-soft",
+        "--uf-color-fg",
+        "--uf-color-fg-muted",
+        "--uf-color-fg-on-accent",
+        "--uf-color-line",
+        "--uf-color-surface-2",
+        "--uf-color-versus",
+        "--uf-color-versus-line",
+        "--uf-color-versus-soft",
+        "--uf-ease",
+        "--uf-focus-ring",
+        "--uf-font-ui",
+        "--uf-motion-fast",
+        "--uf-radius-lg",
+        "--uf-radius-sm",
+        "--uf-shadow-card",
+        "--uf-size-lg",
+        "--uf-size-md",
+        "--uf-size-sm",
+        "--uf-space-1",
+        "--uf-space-3",
+        "--uf-space-4",
+        "--uf-space-5"
+      ],
+      "literalColours": [],
+      "styleLines": 30,
+      "ownsDom": true,
+      "lines": 128,
+      "galleryStates": 11
+    },
+    {
+      "tag": "uf-chip",
+      "className": "UfChip",
+      "file": "packages/ui/src/elements/uf-chip.js",
+      "desc": "a small status tag (READY, ASSIGNED, AVAILABLE, P1).",
+      "props": [
+        {
+          "name": "label",
+          "attribute": "label",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "tone",
+          "attribute": "tone",
+          "type": "enum",
+          "values": [
+            "neutral",
+            "accent",
+            "info",
+            "warn",
+            "danger"
+          ],
+          "default": "neutral"
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "dataAttrs": [],
+      "tokensUsed": [
+        "--uf-color-accent",
+        "--uf-color-danger",
+        "--uf-color-danger-soft",
+        "--uf-color-fg",
+        "--uf-color-fg-on-accent",
+        "--uf-color-info-fg",
+        "--uf-color-info-line",
+        "--uf-color-info-soft",
+        "--uf-color-line-soft",
+        "--uf-color-surface-2",
+        "--uf-color-warn",
+        "--uf-font-mono",
+        "--uf-radius-sm",
+        "--uf-size-xs"
+      ],
+      "literalColours": [],
+      "styleLines": 6,
+      "ownsDom": true,
+      "lines": 45,
+      "galleryStates": 5
+    },
+    {
+      "tag": "uf-flow",
+      "className": "UfFlow",
+      "file": "packages/ui/src/elements/uf-flow.js",
+      "desc": "hosts uf-steps; exactly one is active; go()/back() with history.",
+      "props": [
+        {
+          "name": "current",
+          "attribute": "current",
+          "type": "string",
+          "default": "\"\""
+        }
+      ],
+      "events": [
+        "uf-flow:change"
+      ],
+      "methods": [
+        "steps()",
+        "step(id)",
+        "go(id, opts = {})",
+        "back()",
+        "reset()"
+      ],
+      "dataAttrs": [
+        "data-flow-back",
+        "data-flow-go"
+      ],
+      "tokensUsed": [],
+      "literalColours": [],
+      "styleLines": 1,
+      "ownsDom": false,
+      "lines": 118,
+      "galleryStates": 1
+    },
+    {
+      "tag": "uf-seat",
+      "className": "UfSeat",
+      "file": "packages/ui/src/elements/uf-seat.js",
+      "desc": "a seat in the lobby: who sits here, on what controller, and whether they are ready.",
+      "props": [
+        {
+          "name": "seat",
+          "attribute": "seat",
+          "type": "string",
+          "default": "Captain"
+        },
+        {
+          "name": "who",
+          "attribute": "who",
+          "type": "string",
+          "default": "OPEN"
+        },
+        {
+          "name": "dev",
+          "attribute": "dev",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "state",
+          "attribute": "state",
+          "type": "enum",
+          "values": [
+            "open",
+            "joined",
+            "ready",
+            "locked"
+          ],
+          "default": "open"
+        },
+        {
+          "name": "tone",
+          "attribute": "tone",
+          "type": "enum",
+          "values": [
+            "captain",
+            "stoker",
+            "team-a",
+            "team-b"
+          ],
+          "default": "captain"
+        },
+        {
+          "name": "badge",
+          "attribute": "badge",
+          "type": "string",
+          "default": "\"\""
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "dataAttrs": [],
+      "tokensUsed": [
+        "--uf-color-accent",
+        "--uf-color-captain",
+        "--uf-color-fg",
+        "--uf-color-fg-muted",
+        "--uf-color-line-soft",
+        "--uf-color-scrim",
+        "--uf-color-stoker",
+        "--uf-color-surface-3",
+        "--uf-color-team-a",
+        "--uf-color-team-b",
+        "--uf-font-mono",
+        "--uf-font-ui",
+        "--uf-motion-base",
+        "--uf-radius-md",
+        "--uf-radius-sm",
+        "--uf-size-sm",
+        "--uf-size-xs",
+        "--uf-space-2",
+        "--uf-space-3"
+      ],
+      "literalColours": [],
+      "styleLines": 24,
+      "ownsDom": true,
+      "lines": 86,
+      "galleryStates": 5
+    },
+    {
+      "tag": "uf-step",
+      "className": "UfStep",
+      "file": "packages/ui/src/elements/uf-step.js",
+      "desc": "one screen of a flow: optional prompt above and hint below the authored content.",
+      "props": [
+        {
+          "name": "prompt",
+          "attribute": "prompt",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "hint",
+          "attribute": "hint",
+          "type": "string",
+          "default": "\"\""
+        },
+        {
+          "name": "active",
+          "attribute": "active",
+          "type": "boolean",
+          "default": "false"
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "dataAttrs": [],
+      "tokensUsed": [
+        "--uf-color-fg",
+        "--uf-color-fg-muted",
+        "--uf-ease",
+        "--uf-font-ui",
+        "--uf-motion-base",
+        "--uf-size-sm",
+        "--uf-size-xl",
+        "--uf-space-1",
+        "--uf-space-3"
+      ],
+      "literalColours": [],
+      "styleLines": 8,
+      "ownsDom": false,
+      "lines": 74,
+      "galleryStates": 3
+    }
+  ],
+  "usage": {
+    "game": {
+      "root": "C:\\Users\\pete\\SoftwareDev\\tandemonium-ui",
+      "htmlFiles": 1,
+      "jsFiles": 76,
+      "per": {
+        "uf-button": {
+          "html": 45,
+          "js": 4,
+          "files": [
+            "index.html",
+            "js/economy-mode.js",
+            "js/slingshot-ui.js",
+            "js/versus/versus-hud.js"
+          ]
+        },
+        "uf-chip": {
+          "html": 0,
+          "js": 0,
+          "files": []
+        },
+        "uf-flow": {
+          "html": 0,
+          "js": 0,
+          "files": []
+        },
+        "uf-seat": {
+          "html": 0,
+          "js": 0,
+          "files": []
+        },
+        "uf-step": {
+          "html": 0,
+          "js": 0,
+          "files": []
+        }
+      },
+      "rawButtons": 87,
+      "rawButtonsJs": 8,
+      "fontsLiteral": [
+        "ui-monospace, SFMono-Regular, Menlo, monospace",
+        "Georgia, 'Times New Roman', serif",
+        "system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+        "'Noteworthy', 'Bradley Hand', fantasy"
+      ],
+      "hexDistinct": 50,
+      "hexTotal": 146,
+      "tokenRefs": 99,
+      "tokensLinked": true,
+      "kitLoaded": true
+    },
+    "lab": {
+      "root": "C:\\Users\\pete\\SoftwareDev\\tandemonium-controller-lab",
+      "htmlFiles": 12,
+      "jsFiles": 19,
+      "per": {
+        "uf-button": {
+          "html": 27,
+          "js": 13,
+          "files": [
+            "apps/overlay/src/lobby.html",
+            "packages/ui/gallery.html",
+            "apps/overlay/src/js/lobby-app.js",
+            "packages/ui/src/elements/uf-button.js",
+            "packages/ui/src/elements/uf-flow.js",
+            "packages/ui/src/elements/uf-step.js",
+            "packages/ui/src/uf-element.js"
+          ]
+        },
+        "uf-chip": {
+          "html": 9,
+          "js": 7,
+          "files": [
+            "apps/overlay/src/lobby.html",
+            "packages/ui/gallery.html",
+            "apps/overlay/src/js/lobby-app.js",
+            "packages/ui/src/elements/uf-chip.js"
+          ]
+        },
+        "uf-flow": {
+          "html": 2,
+          "js": 10,
+          "files": [
+            "apps/overlay/src/lobby.html",
+            "packages/ui/gallery.html",
+            "apps/overlay/src/js/lobby-app.js",
+            "packages/ui/src/elements/uf-flow.js",
+            "packages/ui/src/elements/uf-step.js"
+          ]
+        },
+        "uf-seat": {
+          "html": 6,
+          "js": 15,
+          "files": [
+            "apps/overlay/src/lobby.html",
+            "packages/ui/gallery.html",
+            "apps/overlay/src/js/lobby-app.js",
+            "packages/ui/src/elements/uf-seat.js"
+          ]
+        },
+        "uf-step": {
+          "html": 7,
+          "js": 8,
+          "files": [
+            "apps/overlay/src/lobby.html",
+            "packages/ui/gallery.html",
+            "apps/overlay/src/js/lobby-app.js",
+            "packages/ui/src/elements/uf-flow.js",
+            "packages/ui/src/elements/uf-step.js"
+          ]
+        }
+      },
+      "rawButtons": 46,
+      "rawButtonsJs": 0,
+      "fontsLiteral": [
+        "monospace",
+        "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        "var(--mono)",
+        "ui-monospace, SFMono-Regular, Menlo, monospace"
+      ],
+      "hexDistinct": 108,
+      "hexTotal": 262,
+      "tokenRefs": 75,
+      "tokensLinked": true,
+      "kitLoaded": true
+    }
+  },
+  "unusedTokens": [
+    "--uf-color-bg",
+    "--uf-color-surface",
+    "--uf-color-accent-2",
+    "--uf-color-info",
+    "--uf-size-2xl",
+    "--uf-size-hero",
+    "--uf-radius-pill",
+    "--uf-glow-accent",
+    "--uf-z-hud",
+    "--uf-z-sheet",
+    "--uf-z-modal",
+    "--uf-z-toast"
+  ]
+}
