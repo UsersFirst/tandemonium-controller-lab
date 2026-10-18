@@ -73,6 +73,13 @@ Why not Lit / Preact / React: all want a build or a CDN import. Lit is the only 
 - Tooling: `npm run ui:audit` (the scoreboard), `npm run ui:screenboard -- --manifest tandemonium|lab-overlay|ui-gallery [--root …] [--screens …] [--debug]` (visual regression captures).
 - Not migrated yet: `index.html`, `multi.html` and the detached HUD windows in the overlay app (screen by screen, same recipe as `lobby.html`).
 
+### Shipped — lab kit 0.2 (`feat/ui-kit-0.2`, UsersFirst/tandemonium-controller-lab#117)
+- **FocusController in the kit** (`packages/ui/src/focus-controller.js`, lifted from the game's `js/nav/focus-controller.js` with types, behaviour unchanged) plus `inputs.js` (`GamepadInput`, `ManualInput`). `uf-step.focusables()` lists a screen's navigable items; `uf-flow.attachFocus(controller)` makes the active step the controller's spatial scope on every change, and `refreshFocus()` re-reads it. One controller-navigation engine for both repos.
+- **Browser tests** (`packages/ui/test/browser.test.mjs`): headless Chrome over `gallery.html` — reflection, enum fallback, disabled/keyboard/click suppression, flow go/back/history/events/data-flow wiring, focusables + FocusController driving a flow. Found two real bugs on first run (a11y attributes lagging the property; attribute-driven navigation not applying). Skips when no puppeteer; CI installs it.
+- **Published style guide**: `scripts/build-web.js` copies the kit to `/ui/` (gallery at `/ui/gallery.html`) and the inventory to `/design-system/` on lab.usersfirst.games; linked from the landing page.
+- **Audit ratchet**: `npm run ui:audit -- --check` fails when a metric exceeds `design/audit/thresholds.json`; CI runs it for the lab target. Lower the numbers as they fall.
+- Kit version 0.2.0 → tag `ui-v0.2.0` on merge.
+
 ### Shipped — game PR (`feat/ui-design-system`)
 - `shared/ui/` vendored (`npm run sync-ui`, `npm run check:ui`, `UI_VERSION.json`), loaded from `index.html` before the page CSS (`tokens.css`) and before `js/game.js` (`index.js`).
 - All 45 static `<button class="lobby-btn …">` are `<uf-button>` (accent/versus modifiers became `variant`); the JS-built lobby buttons in `slingshot-ui.js` and `versus-hud.js` too. The `.lobby-btn` / `-accent` / `-versus` CSS is gone; remaining modifier classes (`.cta-btn`, `.lobby-btn-p2-*`, `.role-locked`) stay on the hosts and read tokens.
@@ -100,7 +107,8 @@ Why not Lit / Preact / React: all want a build or a CDN import. Lit is the only 
 | `npm run ui:screenboard -- --manifest <name>` | headless capture of every registered screen at phone / desktop / TV; `--root` captures another checkout, `--debug` logs the page console | `design/screenboard/<name>/` |
 | `npm run ui:inventory` | inventories the design system itself: every token (with live swatches), every control with typed props / events / methods / tokens used / gallery states, usage per repo, and what is still outside the system | `design/inventory/{index.html,README.md,inventory.json}` |
 | `npm run ui:new-element -- uf-x --props "…"` | scaffolds a typed element end to end | `packages/ui/src/elements/uf-x.js` + 4 edits |
-| `npm run typecheck` · `npm test` | tsc over the kit · node:test (all workspaces) | — |
+| `npm run typecheck` · `npm test` | tsc over the kit · node:test (all workspaces; the kit's browser suite runs when puppeteer is reachable) | — |
+| `npm run ui:audit -- --check` | the ratchet: fails if a metric exceeds `design/audit/thresholds.json` | — |
 | `npm run ui:gallery` | serves the repo; open `/packages/ui/gallery.html` | — |
 
 | command (game root) | what it does |

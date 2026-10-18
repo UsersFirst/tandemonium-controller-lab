@@ -6,6 +6,8 @@
 // Layout produced in _site/:
 //   _site/index.html   ← web/index.html (landing page)
 //   _site/overlay/     ← apps/overlay/src (the overlay app, served at /overlay)
+//   _site/ui/          ← packages/ui (the UI kit + gallery.html: the living style guide)
+//   _site/design-system/ ← design/inventory (tokens / controls / adoption report)
 //   _site/CNAME        ← custom domain
 //   _site/.nojekyll    ← serve files verbatim (no Jekyll _underscore munging)
 //
@@ -43,7 +45,12 @@ fs.mkdirSync(site, { recursive: true });
 
 fs.copyFileSync(path.join(root, 'web', 'index.html'), path.join(site, 'index.html'));
 copyDir(overlaySrc, path.join(site, 'overlay'));
+// The living style guide: the UI kit gallery (packages/ui, served at /ui/ so
+// gallery.html's ./src/… imports resolve) and the design-system inventory
+// report (design/inventory, at /design-system/).
+copyDir(path.join(root, 'packages', 'ui'), path.join(site, 'ui'));
+if (fs.existsSync(path.join(root, 'design', 'inventory'))) copyDir(path.join(root, 'design', 'inventory'), path.join(site, 'design-system'));
 fs.writeFileSync(path.join(site, 'CNAME'), DOMAIN + '\n');
 fs.writeFileSync(path.join(site, '.nojekyll'), '');
 
-console.log(`Built _site/ for ${DOMAIN} (landing at /, overlay at /overlay/).`);
+console.log(`Built _site/ for ${DOMAIN} (landing at /, overlay at /overlay/, gallery at /ui/gallery.html, inventory at /design-system/).`);

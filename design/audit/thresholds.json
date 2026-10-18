@@ -1,0 +1,5 @@
+{
+  "//": "High-water marks for `npm run ui:audit -- --check` (never up). Lower them as the numbers fall.",
+  "lab":  { "hexColours": 108, "fontSizes": 22, "important": 4, "showHide": 22, "innerHTML": 21, "inlineStyle": 23 },
+  "game": { "hexColours": 50,  "fontSizes": 37, "important": 54, "showHide": 239, "innerHTML": 82, "inlineStyle": 103 }
+}
