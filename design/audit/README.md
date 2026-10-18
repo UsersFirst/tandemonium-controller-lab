@@ -1,6 +1,6 @@
 # UI audit summary
 
-_Generated 2026-10-18T20:04:52.434Z. Re-run with `npm run ui:audit`. Per-target detail: [lab](lab.md)_
+_Generated 2026-10-18T20:10:39.724Z. Re-run with `npm run ui:audit`. Per-target detail: [lab](lab.md)_
 
 | metric | lab |
 |---|---:|

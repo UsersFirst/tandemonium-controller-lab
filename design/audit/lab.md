@@ -1,6 +1,6 @@
 # UI audit — lab
 
-_Generated 2026-10-18T20:04:52.432Z from `C:\Users\pete\SoftwareDev\tandemonium-controller-lab`_
+_Generated 2026-10-18T20:10:39.721Z from `C:\Users\pete\SoftwareDev\tandemonium-controller-lab`_
 
 ## Totals
 
@@ -40,7 +40,7 @@ _Generated 2026-10-18T20:04:52.432Z from `C:\Users\pete\SoftwareDev\tandemonium-
 | apps/overlay/src/multi-controllers-window.html | 60 | 1 | 42 | 1 | 1 | 0 | 0 |
 | apps/overlay/src/multi.html | 453 | 2 | 357 | 0 | 6 | 1 | 0 |
 | apps/overlay/src/roll-window.html | 66 | 1 | 40 | 0 | 1 | 0 | 0 |
-| packages/ui/gallery.html | 112 | 1 | 13 | 1 | 0 | 5 | 5 |
+| packages/ui/gallery.html | 113 | 1 | 13 | 1 | 0 | 5 | 5 |
 | web/index.html | 71 | 1 | 37 | 0 | 0 | 0 | 0 |
 
 | js file | lines | getElementById ids | innerHTML= | createElement | style.display= | class toggles | custom elements | @ts-check | jsdoc tags |
@@ -57,7 +57,7 @@ _Generated 2026-10-18T20:04:52.432Z from `C:\Users\pete\SoftwareDev\tandemonium-
 | apps/overlay/src/js/multi-controllers-window.js | 55 | 2 | 1 | 0 | 0 | 0 | 0 |  | 0 |
 | apps/overlay/src/js/roll-window.js | 109 | 6 | 2 | 0 | 0 | 0 | 0 |  | 0 |
 | apps/overlay/src/js/test-report.js | 410 | 0 | 0 | 1 | 0 | 0 | 0 |  | 11 |
-| packages/ui/src/elements/uf-button.js | 137 | 0 | 1 | 1 | 0 | 0 | 0 | ✓ | 17 |
+| packages/ui/src/elements/uf-button.js | 139 | 0 | 1 | 1 | 0 | 0 | 0 | ✓ | 17 |
 | packages/ui/src/elements/uf-chip.js | 45 | 0 | 0 | 0 | 0 | 0 | 0 | ✓ | 6 |
 | packages/ui/src/elements/uf-flow.js | 164 | 0 | 0 | 0 | 0 | 0 | 0 | ✓ | 14 |
 | packages/ui/src/elements/uf-seat.js | 86 | 0 | 0 | 0 | 0 | 0 | 0 | ✓ | 14 |

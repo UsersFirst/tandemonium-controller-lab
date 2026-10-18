@@ -21,3 +21,6 @@ design/screenboard/*.log
 
 # Audit JSON is regenerable detail (npm run ui:audit); the markdown is the record.
 design/audit/*.json
+
+# …except the ratchet thresholds, which are the agreed high-water marks.
+!design/audit/thresholds.json
