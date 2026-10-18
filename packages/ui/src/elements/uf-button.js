@@ -77,11 +77,20 @@ export class UfButton extends UfElement {
   /** @returns {'sm' | 'md' | 'lg'} */ get size() { return this.get('size'); }
   /** @param {'sm' | 'md' | 'lg'} v */ set size(v) { this.set('size', v); }
 
+  // disabled / selected sync their ARIA + tabindex synchronously (not on the
+  // batched DOM pass): a focus engine reading aria-disabled right after
+  // `btn.disabled = true` must see it.
   /** @returns {boolean} */ get disabled() { return this.get('disabled'); }
-  /** @param {boolean} v */ set disabled(v) { this.set('disabled', v); }
+  /** @param {boolean} v */ set disabled(v) { this.set('disabled', v); this.#syncA11y(); }
 
   /** @returns {boolean} */ get selected() { return this.get('selected'); }
-  /** @param {boolean} v */ set selected(v) { this.set('selected', v); }
+  /** @param {boolean} v */ set selected(v) { this.set('selected', v); this.#syncA11y(); }
+
+  /** @override @param {string} attr @param {string|null} old @param {string|null} val */
+  attributeChangedCallback(attr, old, val) {
+    super.attributeChangedCallback(attr, old, val);
+    if (attr === 'disabled' || attr === 'selected') this.#syncA11y();
+  }
 
   #wired = false;
 

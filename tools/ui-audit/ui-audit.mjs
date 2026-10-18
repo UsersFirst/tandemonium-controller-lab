@@ -13,6 +13,7 @@
 //   node tools/ui-audit/ui-audit.mjs                 # both default targets
 //   node tools/ui-audit/ui-audit.mjs --target game   # one target
 //   node tools/ui-audit/ui-audit.mjs --json          # also print JSON to stdout
+//   node tools/ui-audit/ui-audit.mjs --check         # fail if a metric exceeds design/audit/thresholds.json
 //   node tools/ui-audit/ui-audit.mjs --root game=../tandemonium-ui   # audit a worktree instead
 //
 // Writes design/audit/<target>.md + .json and design/audit/README.md.
@@ -217,6 +218,17 @@ if (results.length) {
   }
   md += `\n## How to read this\n\n- **hexColours / fontSizes / radii** — distinct literal values. A design system with tokens should drive each toward ≤ 12 / ≤ 8 / ≤ 5.\n- **varsDefined** — CSS custom properties. Tokens live here; this number should grow as the literals shrink.\n- **showHide / classToggle / innerHTML** — imperative DOM sites. Each one is a place a screen's state lives in JS rather than in a component. Should fall as screens become elements.\n- **customElements / tsCheckFiles** — adoption of the typed Web Component pattern (packages/ui). Should rise.\n`;
   fs.writeFileSync(path.join(OUT, 'README.md'), md);
+  // --check: the ratchet. Each target's "never up" metrics must stay at or below
+  // design/audit/thresholds.json. Lower the thresholds as the numbers fall; the
+  // file is the agreed high-water mark, not a target.
+  if (flag('check')) {
+    const tp = path.join(OUT, 'thresholds.json');
+    const th = fs.existsSync(tp) ? JSON.parse(fs.readFileSync(tp, 'utf8')) : {};
+    const bad = [];
+    for (const r of results) for (const [k, max] of Object.entries(th[r.name] || {})) if (typeof max === 'number' && r.totals[k] > max) bad.push(`${r.name}.${k} = ${r.totals[k]} > ${max}`);
+    if (bad.length) { console.error('[ui-audit] ratchet FAILED (a metric went up):\n  ' + bad.join('\n  ')); process.exit(1); }
+    console.log(`[ui-audit] ratchet ok (${results.map((r) => r.name).join(', ')})`);
+  }
   if (flag('json')) console.log(JSON.stringify(results.map((r) => ({ name: r.name, totals: r.totals })), null, 2));
   console.log(`[ui-audit] wrote ${path.relative(LAB, OUT)}/README.md`);
 }

@@ -1,6 +1,6 @@
 {
   "name": "@usersfirst/ui",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "description": "Typed, build-free Web Components + design tokens shared by Tandemonium and the controller lab.",
@@ -11,6 +11,8 @@
   "exports": {
     ".": "./src/index.js",
     "./uf-element": "./src/uf-element.js",
+    "./focus-controller": "./src/focus-controller.js",
+    "./inputs": "./src/inputs.js",
     "./tokens.css": "./src/tokens.css",
     "./elements/*": "./src/elements/*.js"
   },

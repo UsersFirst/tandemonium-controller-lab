@@ -59,6 +59,15 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Typecheck @usersfirst/ui
         run: npm run typecheck
-      - name: Test @usersfirst/ui
+      # Browser tests load gallery.html in headless Chrome. Puppeteer is not a
+      # dependency of the repo (locally it is borrowed from the sibling game
+      # checkout); install it just for this job.
+      - name: Install puppeteer for the browser tests
+        run: npm i --no-save --no-audit --no-fund puppeteer && npx puppeteer browsers install chrome
+      - name: Test @usersfirst/ui (node + browser)
         run: node --test
         working-directory: packages/ui
+      # The ratchet: design/audit/thresholds.json are high-water marks that only
+      # go down. Only the lab target exists on a CI runner; the game checks itself.
+      - name: UI audit ratchet
+        run: npm run ui:audit -- --target lab --check
