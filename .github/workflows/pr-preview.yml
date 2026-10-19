@@ -5,7 +5,7 @@ name: PR preview (web + desktop)
 # the desktop installers:
 #
 #   • Web preview  — the browser overlay deployed to the gh-pages `pr-preview/`
-#                    umbrella at  https://lab.usersfirst.games/pr-preview/pr-<N>/
+#                    umbrella at  https://lab.housetandem.com/pr-preview/pr-<N>/
 #                    (overlay at  …/pr-preview/pr-<N>/overlay/). Torn down on close.
 #   • Desktop      — Windows .exe + macOS .dmg/zip published as a per-PR
 #                    *prerelease* tagged `pr-<N>`, deleted when the PR closes.
@@ -179,8 +179,8 @@ jobs:
           message: |
             ### 🔎 PR #${{ github.event.number }} preview — test it in isolation
 
-            **🌐 Web overlay:** https://lab.usersfirst.games/pr-preview/pr-${{ github.event.number }}/overlay/
-            _(landing page: https://lab.usersfirst.games/pr-preview/pr-${{ github.event.number }}/)_
+            **🌐 Web overlay:** https://lab.housetandem.com/pr-preview/pr-${{ github.event.number }}/overlay/
+            _(landing page: https://lab.housetandem.com/pr-preview/pr-${{ github.event.number }}/)_
 
             **💻 Desktop installers (prerelease):** https://github.com/${{ github.repository }}/releases/tag/pr-${{ github.event.number }}
             - **Windows** — `…-Setup.exe` (installer) or `.zip` (portable)

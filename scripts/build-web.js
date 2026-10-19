@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-// build-web.js — assemble the GitHub Pages site for lab.usersfirst.games
+// build-web.js — assemble the GitHub Pages site for lab.housetandem.com
 // ============================================================
 //
 // Layout produced in _site/:
@@ -22,7 +22,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const site = path.join(root, '_site');
 const overlaySrc = path.join(root, 'apps', 'overlay', 'src');
-const DOMAIN = 'lab.usersfirst.games';
+const DOMAIN = 'lab.housetandem.com';
 
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
