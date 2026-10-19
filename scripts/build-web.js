@@ -5,6 +5,7 @@
 //
 // Layout produced in _site/:
 //   _site/index.html   ← web/index.html (landing page)
+//   _site/brand/       ← web/brand (House Tandem controller icon, favicons)
 //   _site/overlay/     ← apps/overlay/src (the overlay app, served at /overlay)
 //   _site/ui/          ← packages/ui (the UI kit + gallery.html: the living style guide)
 //   _site/design-system/ ← design/inventory (tokens / controls / adoption report)
@@ -44,6 +45,7 @@ fs.rmSync(site, { recursive: true, force: true });
 fs.mkdirSync(site, { recursive: true });
 
 fs.copyFileSync(path.join(root, 'web', 'index.html'), path.join(site, 'index.html'));
+copyDir(path.join(root, 'web', 'brand'), path.join(site, 'brand')); // House Tandem controller icon + favicons
 copyDir(overlaySrc, path.join(site, 'overlay'));
 // The living style guide: the UI kit gallery (packages/ui, served at /ui/ so
 // gallery.html's ./src/… imports resolve) and the design-system inventory

@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WebHID Controller Overlay</title>
+  <link rel="icon" href="brand/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="brand/favicon-64.png" sizes="64x64" type="image/png">
+  <link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -19,6 +22,7 @@
       border: 1px solid rgba(255,255,255,0.08);
       border-radius: 16px; padding: 40px 36px;
     }
+    .mark { display: block; width: 128px; height: auto; margin: 0 auto 18px; }
     h1 { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
     .sub { color: #9aa3b2; font-size: 14px; line-height: 1.5; margin-bottom: 28px; }
     .btn {
@@ -44,7 +48,8 @@
 </head>
 <body>
   <div class="card">
-    <h1>🎮 WebHID Controller Overlay</h1>
+    <img class="mark" src="brand/housetandem-controller.svg" alt="House Tandem controller" width="800" height="520">
+    <h1>WebHID Controller Overlay</h1>
     <p class="sub">A real-time 3D controller visualizer that runs right in your browser
       via WebHID — live gyro, touchpad, and per-button animation for DualSense,
       DualShock 4, Switch Pro, Xbox, GameSir, and the Steam Controller 2026.</p>
@@ -61,7 +66,7 @@
       The web overlay needs Chrome or Edge (WebHID). Connect a controller, open the gear,
       and enable gyro.<br>
       Design system · <a href="ui/gallery.html">gallery</a> · <a href="design-system/">inventory</a><br>
-      Open source · <a href="https://github.com/UsersFirst/tandemonium-controller-lab">github.com/UsersFirst/tandemonium-controller-lab</a>
+      A <a href="https://housetandem.com">House Tandem</a> tool · open source · <a href="https://github.com/UsersFirst/tandemonium-controller-lab">github.com/UsersFirst/tandemonium-controller-lab</a>
     </p>
 
     <div class="build-stamp">Latest build: <span id="build-version">dev build</span></div>
