@@ -1,4 +1,4 @@
-name: Deploy web overlay (lab.usersfirst.games)
+name: Deploy web overlay (lab.housetandem.com)
 
 # Publishes the production site to the ROOT of the `gh-pages` branch. We use a
 # branch-based Pages source (rather than the GitHub-Actions Pages source) so
@@ -9,7 +9,7 @@ name: Deploy web overlay (lab.usersfirst.games)
 #
 # ⚠️ One-time repo setting required: Settings → Pages → "Build and deployment"
 #    → Source = "Deploy from a branch" → Branch = `gh-pages` / `(root)`.
-#    The custom domain (lab.usersfirst.games) is preserved via the CNAME file
+#    The custom domain (lab.housetandem.com) is preserved via the CNAME file
 #    that build-web.js writes into _site (and the `cname:` below).
 on:
   push:
@@ -60,4 +60,4 @@ jobs:
           # Preserve the pr-preview/ umbrella (and anything else) on gh-pages.
           keep_files: true
           # Re-assert the custom domain on every deploy so it survives keep_files.
-          cname: lab.usersfirst.games
+          cname: lab.housetandem.com
