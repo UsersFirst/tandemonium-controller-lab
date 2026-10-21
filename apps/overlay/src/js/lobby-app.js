@@ -238,7 +238,8 @@ function enterMode(mode) {
   state.mode = mode; const m = makeSeats(mode); state.seats = m.seats; state.fill = m.fill;
   state.occ.clear(); state.bySlot.clear(); state.nextP = 1;
   const lobbyStep = /** @type {import('@usersfirst/ui').UfStep} */ ($('lobby'));
-  lobbyStep.prompt = mode === 'versus' ? 'Build your teams' : mode === 'solo' ? 'Solo ride' : 'Crew your tandem';
+  // Plain titles that say where you are (House Tandem voice lives in the team box and hints).
+  lobbyStep.prompt = mode === 'versus' ? 'Local versus' : mode === 'solo' ? 'Solo ride' : 'Local multiplayer';
   lobbyStep.hint = mode === 'versus'
     ? 'Press a button = joined · <uf-controller-glyph button="confirm" size="sm"></uf-controller-glyph> take a seat → ready · <uf-controller-glyph button="dpad-h" size="sm"></uf-controller-glyph> team · <uf-controller-glyph button="dpad-v" size="sm"></uf-controller-glyph> swap · <uf-controller-glyph button="back" size="sm"></uf-controller-glyph> back · hold <uf-controller-glyph button="home" size="sm"></uf-controller-glyph> to release · all ready? <uf-controller-glyph button="confirm" size="sm"></uf-controller-glyph> → level'
     : 'Press a button = joined · <uf-controller-glyph button="confirm" size="sm"></uf-controller-glyph> take a seat → ready · <uf-controller-glyph button="back" size="sm"></uf-controller-glyph> back · hold <uf-controller-glyph button="home" size="sm"></uf-controller-glyph> to release · all ready? <uf-controller-glyph button="confirm" size="sm"></uf-controller-glyph> → level';
