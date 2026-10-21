@@ -411,9 +411,9 @@ test('uf-system-bar: Back follows the flow; the flow focus scope includes the ba
 test('uf-stat + uf-ledger: values render; ledger totals items unless total is set; balance line', skip, async () => {
   const r = await ev(async () => {
     const l = document.createElement('uf-ledger'); l.heading = 'Coins'; l.unit = 'c'; document.body.appendChild(l);
-    l.items = [{ label: 'A', amount: 8 }, { label: 'B', amount: 5 }]; l.balance = 13;
+    l.items = [{ label: 'A', amount: 8 }, { label: 'B', amount: 5 }, { label: 'Multiplier', display: '×1.25' }]; l.balance = 13;
     await new Promise((res) => setTimeout(res, 0));
-    const out = { head: l.querySelector('.ul-head').textContent, total: l.querySelector('.ul-total b').textContent, bal: l.querySelector('.ul-balance').textContent };
+    const out = { head: l.querySelector('.ul-head').textContent, total: l.querySelector('.ul-total b').textContent, bal: l.querySelector('.ul-balance').textContent, mult: l.querySelectorAll('.ul-row b')[2].textContent };
     l.total = 20; await new Promise((res) => setTimeout(res, 0)); out.head2 = l.querySelector('.ul-head').textContent;
     const s = document.createElement('uf-stat'); s.value = '18s'; s.label = 'Time'; document.body.appendChild(s);
     await new Promise((res) => setTimeout(res, 0));
@@ -423,6 +423,7 @@ test('uf-stat + uf-ledger: values render; ledger totals items unless total is se
   assert.equal(r.head, '+13 c Coins');
   assert.equal(r.total, '13 c');
   assert.equal(r.bal, 'Wallet: 13 c');
+  assert.equal(r.mult, '×1.25', 'a display row shows its text and is not summed');
   assert.equal(r.head2, '+20 c Coins');
   assert.equal(r.stat, '18s');
   assert.equal(r.aria, 'Time: 18s');
