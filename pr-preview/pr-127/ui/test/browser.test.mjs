@@ -485,3 +485,18 @@ test('uf-sheet headline + tone: title in the tone, centred headline', skip, asyn
   assert.equal(r.upper, 'uppercase');
   assert.equal(r.color, 'rgb(68, 255, 102)', 'accent tone (#44ff66)');
 });
+
+test('uf-sheet: a tall body scrolls inside the card; the card never runs off the screen', skip, async () => {
+  const r = await ev(async () => {
+    const host = document.createElement('div');
+    host.innerHTML = '<uf-sheet id="t-tall" heading="Tall" open dismissible="false"><div style="height:3000px">x</div><div slot="actions"><uf-button id="t-tall-ok">OK</uf-button></div></uf-sheet>';
+    document.body.appendChild(host);
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    const card = document.querySelector('#t-tall .uf-sheet__card').getBoundingClientRect();
+    const ok = document.getElementById('t-tall-ok').getBoundingClientRect();
+    const out = { cardBottom: card.bottom, okBottom: ok.bottom, vh: innerHeight };
+    host.remove(); return out;
+  });
+  assert.ok(r.cardBottom <= r.vh, `card bottom ${r.cardBottom} within ${r.vh}`);
+  assert.ok(r.okBottom <= r.vh, 'the action row stays on screen');
+});
