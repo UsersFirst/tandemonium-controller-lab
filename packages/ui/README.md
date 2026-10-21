@@ -26,7 +26,7 @@ Typed, build-free Web Components and design tokens shared by Tandemonium and the
 | `uf-setting` | a setting row (toggle or value) with an optional detail row |
 | `uf-card` | a selectable content card (levels, garage) |
 | `uf-join-code` + `uf-keypad` | show / type a join code with an on-screen keyboard |
-| `uf-qr` | couch-sized QR (vendored `qrcode-generator`, MIT — `src/vendor/`) |
+| `uf-qr` | couch-sized QR (vendored `qrcode-generator`, MIT — `src/third_party/`) |
 
 Text sizes ramp automatically from 1024px to TV sizes at 1920px (`tokens.css`); `--uf-stage-inset` reserves room for an art panel. Seat words (captain, team names…) always come from the app. Plan: [`docs/UI-KIT-TV-COMPONENTS.md`](../../docs/UI-KIT-TV-COMPONENTS.md).
 
