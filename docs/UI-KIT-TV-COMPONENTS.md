@@ -89,8 +89,8 @@ Every new element goes through `npm run ui:new-element`: typed props, a gallery 
 
 ### 6. `uf-team`: the team box
 ```html
-<uf-team tone="team-a" title="TEAM BLUE" capacity="2"> <uf-seat …></uf-seat><uf-seat …></uf-seat> </uf-team>
-<uf-team tone="coop"   title="YOUR TANDEM" capacity="2"> <uf-seat seat="Captain" tone="captain" …> <uf-seat seat="Stoker" tone="stoker" …> </uf-team>
+<uf-team tone="team-a" heading="TEAM BLUE"> <uf-seat …></uf-seat><uf-seat …></uf-seat> </uf-team>
+<uf-team tone="coop"   heading="YOUR TANDEM"> <uf-seat seat="Captain" tone="captain" …> <uf-seat seat="Stoker" tone="stoker" …> </uf-team>
 ```
 - A titled, tinted frame that lays out its `uf-seat` children in a row (TV) or a column (narrow).
 - **Props:** `tone` (`team-a | team-b | coop`), `title`, `capacity`, `layout` (`row | column | auto`).
@@ -108,7 +108,7 @@ One element, two densities, fed by core's `controllerRoster()`.
 ### 8. `uf-sheet`: one shell for panels and dialogs
 - The game has about 15 hand-made overlays with different backdrops, close rules and focus handling. Several don't close on ◯ / B (finding: Garage), and the phone sheet re-implements its own pad polling to close.
 ```html
-<uf-sheet id="controls" title="Controls" placement="center" open> …content… <div slot="actions">…</div> </uf-sheet>
+<uf-sheet id="controls" heading="Controls" placement="center" open> …content… <div slot="actions">…</div> </uf-sheet>
 ```
 - **Props:** `title`, `open`, `placement` (`center | side | bottom`), `size` (`sm | md | lg`), `dismissible` (default true).
 - **Behaviour:** a scrim plus a card. It covers only the stage (`inset-inline-end: var(--uf-stage-inset)`), so a lobby painting stays visible. Back (◯ / B / Esc) closes it. It's its own FocusController scope while open, with focus restored on close.
@@ -183,9 +183,16 @@ One element, two densities, fed by core's `controllerRoster()`.
 ## Stays in Tandemonium
 - The art panel, the wordmark placement and the mode-button copy.
 - Level content and level rules.
-- Room / relay / phone-remote logic: the components only display it.
+- The game's seat vocabulary (captain / stoker, team colours). Core and the kit take seat words from the app: core's roster passes the app's `seat` object through untouched, and the roster UI shows the `label` / `tone` the app supplies.
 - End-of-ride content: only the sheet and action bar are shared.
 - The bike preview (also fix: it sizes its renderer once at startup and never on resize).
+
+## Moves to the lab after the UI step: rooms, join codes, phone remote
+**Decided (Pete, 2026-10-20):** the room / join-code logic and the phone-as-controller remote move into the lab as shared packages. They are controller and multiplayer plumbing, not game rules, and the lab is where controllers are already proven.
+- **Phone remote:** the game's `js/remote/` (`pad-protocol.js`, `phone-pad.js`, `phone-pad-host.js`, `phone-pad-ui.js`), the `remote/` phone page and the relay client become a lab package (working name `@usersfirst/controller-remote`). A phone then shows up as one more controller in `controllerRoster()` (connection `'phone'`), seated like any pad, and the lab overlay can pair phones too. The game keeps only where its "Use your phone instead" entry sits.
+- **Rooms and join codes:** creating a room, the `TNDM-XXXX` code format, joining by code or link, and partner presence become a lab package (working name `@usersfirst/rooms`). The game supplies its prefix and what a room carries (bike, level). `uf-join-code`, `uf-keypad` and `uf-qr` are its UI.
+- **Order:** after the UI kit (steps 1–5) lands in the lab and the game. Each move is its own lab PR plus a game PR that deletes the game-side copy, same as the controller drivers before it (`sync-controller-core`).
+- **Until then:** the game keeps running its own room and remote code. The kit components only display what it hands them, so nothing is blocked.
 
 ## Bugs found by the review that these components must not hide
 These are filed under #428. They're behaviour, not layout, and the new components should surface them correctly rather than draw over them.
@@ -225,4 +232,6 @@ Core field names (`shortName`, `glyphFamily`, `connection`) stay short, because 
 2. **TV text size is automatic** on larger screens, ramping with the viewport. No opt-in (Tokens).
 3. **No button jumps to the system bar.** You reach it with ↓ on the d-pad or the left stick, and ↑ returns where you were (§9).
 4. **Lab first, then the game.** Each component is built in `packages/ui` and proven in the lab's apps (the lobby for seats, teams and the controller list; the overlay pages for the sheet, settings and glyphs). Then it's vendored into Tandemonium with `npm run sync-ui` and adopted there (Order of work).
-5. **Naming** as in the section above (proposed; confirm or change).
+5. **Naming** as in the section above, with Pete's "controller roster" (`uf-controller-roster` + core `controllerRoster()`).
+6. **No game vocabulary in shared packages.** Core's roster types a seat's `team` / `role` as the app's own strings (passed through, with optional `label` / `tone` for display), not Tandemonium's captain / stoker. Fixed in #125.
+7. **Rooms, join codes and the phone remote move into the lab** after the UI step (section above). Supersedes the earlier "stays in Tandemonium" line.
