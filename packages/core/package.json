@@ -1,6 +1,6 @@
 {
   "name": "@usersfirst/controller-core",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -12,7 +12,8 @@
     "./controller-inventory": "./src/controller-inventory.js",
     "./sensor-fusion": "./src/sensor-fusion.js",
     "./imu-analysis": "./src/imu-analysis.js",
-    "./drivers/*": "./src/drivers/*.js"
+    "./drivers/*": "./src/drivers/*.js",
+    "./device-identity": "./src/device-identity.js"
   },
   "files": [
     "src",

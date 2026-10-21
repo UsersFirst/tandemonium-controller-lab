@@ -195,17 +195,26 @@ function edges(slotId, gp) {
 }
 
 // ── device naming ──
-// Prefer the bound HID driver's real identity: a GameSir Super Nova claims via
-// the Gamepad API as DualSense (054c:0ce6) but its bound HID handle knows it's
-// a DualShock 4 — so once bound we name it by the driver, not the pad label.
-function devName(slotId) {
-  const s = manager.getSlot(slotId);
-  if (s && s.driver && s.driver.entry && s.driver.entry.name) return s.driver.entry.name;
-  const byLabel = ControllerRegistry.identifyFromGamepadId((s && s.controllerLabel) || '');
-  if (byLabel && byLabel.driverName) return byLabel.driverName;
-  const raw = (s && s.hidDevice && s.hidDevice.productName) || '';
-  const byName = ControllerRegistry.identifyFromGamepadId(raw);
-  return (byName && byName.driverName) ? byName.driverName : (raw || 'Controller');
+// core's slotIdentity: the bound HID driver's entry first (a GameSir Super Nova
+// claims over the Gamepad API as a Sony pad, but its bound HID handle knows what
+// it is), then the pad label, then the HID product string. Seats and the lounge
+// show the short name ("DualSense"); the Controllers panel shows the full one.
+function devName(slotId) { return manager.slotIdentity(slotId).shortName; }
+
+// What controllerRoster needs from the lobby: player number, seat, ready. The
+// seat is in this app's words (Tandemonium's captain / stoker, teams a / b);
+// core passes it through, and label / tone tell the roster UI what to show.
+function seatOf(slotId) {
+  const L = state.bySlot.get(slotId);
+  if (!L) return null;
+  const s = L.seatId != null ? seat(L.seatId) : null;
+  if (!s) return { player: L.player, ready: L.phase === 'ready' };
+  const tone = s.team ? (s.team === 'a' ? 'team-a' : 'team-b') : (s.role === 'Stoker' ? 'stoker' : 'captain');
+  return {
+    player: L.player,
+    seat: { team: s.team || 'coop', role: s.role.toLowerCase(), label: s.team ? `P${L.player}` : s.role, tone },
+    ready: L.phase === 'ready',
+  };
 }
 
 // ── screens ──
@@ -364,13 +373,6 @@ async function pairController() {
 
 // ── controllers panel (paired vs active vs open, + live "in use" dot) ──
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function padActive(gp) {
-  if (!gp) return false;
-  for (const b of (gp.buttons || [])) if (b && (b.pressed || (b.value || 0) > 0.5)) return true;
-  for (const a of (gp.axes || [])) if (Math.abs(a) > 0.5) return true;
-  return false;
-}
-function stickMag(gp) { const ax = (gp && gp.axes) || []; return Math.max(Math.abs(ax[0] || 0), Math.abs(ax[1] || 0), Math.abs(ax[2] || 0), Math.abs(ax[3] || 0)); }
 // vid:pid string — the definitive identity, so a row that reads "DualSense" over
 // the Gamepad API vs its true WebHID handle is unambiguous.
 function vpStr(vp) { return vp ? ((vp.vendorId || 0).toString(16).padStart(4, '0') + ':' + (vp.productId || 0).toString(16).padStart(4, '0')) : '—'; }
@@ -387,10 +389,6 @@ function unitsForVp(vp) {
   if (!vp) return [];
   return hidInventory.filter((u) => u.vendorId === vp.vendorId && u.productId === vp.productId);
 }
-function vpOfSlot(s) {
-  if (s.hidDevice) return { vendorId: s.hidDevice.vendorId, productId: s.hidDevice.productId };
-  return ControllerRegistry.parseGamepadVendorProduct(s.controllerLabel) || null;
-}
 // One line of per-unit identity for a panel row. Unique vid:pid → the serial.
 // Electron's main HIDDevice has no `collections`, so a descriptor fingerprint is
 // impossible; instead we disambiguate two identical-vid:pid units by connection
@@ -404,62 +402,30 @@ function identityLine(vp, connType) {
   if (connType === 'usb' && units.some((u) => !u.serialNumber)) return '# no serial (USB)';
   return '⚠ ' + units.length + ' units — ' + units.map((u) => u.serialNumber || 'no-serial').join(' · ');
 }
-// Enumerate every controller the manager can see, in three buckets:
-//   ACTIVE — a claimed slot (someone took a seat); may be HID-bound or Gamepad-API-only
-//   PAIRED — a HID entry idling in the pool (WebHID approved, gyro/lightbar ready, no seat yet)
-//   OPEN   — a live Gamepad-API pad that's neither claimed nor pooled (press to join)
+// Every controller the manager can see — core's controllerRoster (claimed slots,
+// pooled WebHID entries with idle Puck siblings hidden, unclaimed pads minus BT
+// ghosts) — mapped onto the panel's two chip layers:
+//   controller layer: CONNECTED (no slot) · JOINED (claimed a slot)
+//   game layer:       SEATED / READY, only once the lobby has seated it
+const ROSTER_CSTATE = { connected: 'AVAILABLE', joined: 'ACTIVE', seated: 'ACTIVE', ready: 'ACTIVE' };
+const ROSTER_GSTATE = { seated: 'ASSIGNED', ready: 'READY' };
+function rosterSub(r) {
+  if (r.seat) return `P${r.player ?? '?'} · ${r.seat.role === 'stoker' ? 'Stoker' : 'Captain'}${r.seat.team && r.seat.team !== 'coop' ? ` · team ${r.seat.team === 'a' ? 'blue' : 'red'}` : ''}`;
+  if (r.kind === 'slot') return r.player != null ? `P${r.player} · joined` : 'joined';
+  return r.kind === 'pool' ? 'WebHID · idle' : 'Gamepad · press a button';
+}
 function ctrlEntries(pads) {
-  const items = [];
-  const claimedIdx = new Set();
-  for (const s of manager.slots) {
-    if (s.state !== 'claimed') continue;
-    if (s.gamepadIndex != null) claimedIdx.add(s.gamepadIndex);
-    const L = state.bySlot.get(s.id);
-    const seated = !!(L && L.seatId != null);
-    const role = seated && seat(L.seatId) ? seat(L.seatId).role : '';
-    const hid = !!s._hidEntry;
-    items.push({
-      key: 's:' + s.id, name: esc(devName(s.id)),
-      // controller layer: a claimed slot is ACTIVE. game layer: ASSIGNED/READY only when seated.
-      cstate: 'ACTIVE', gstate: seated ? (L.phase === 'ready' ? 'READY' : 'ASSIGNED') : null,
-      sub: seated ? `P${L.player} · ${role}` : (L ? `P${L.player} · joined` : 'joined'),
-      hw: esc((s.hidDevice && s.hidDevice.productName) || ''),   // real HID string — the ONLY way to tell apart two same-vid:pid pads
-      vp: vpOfSlot(s), device: s.hidDevice || null,
-      conn: hid ? (s.driver && s.driver.connectionType ? s.driver.connectionType : 'hid') : 'gamepad',
-      active: padActive(s.effectiveGamepad(pads)),
-    });
-  }
-  let hi = 0;
-  // presentablePoolEntries hides idle Steam Puck receiver interfaces (kept pooled
-  // for power-on, but not usable controllers) — shared core filter.
-  for (const entry of manager.presentablePoolEntries()) {
-    const nm = (entry.driver && entry.driver.entry && entry.driver.entry.name) || (entry.device && entry.device.productName) || 'Controller';
-    items.push({
-      // index in the key: two identical-vid:pid devices (real DS4 + GameSir spoof)
-      // would otherwise collide to one row and share one activity dot.
-      key: 'h:' + (hi++) + ':' + ((entry.device && entry.device.vendorId) || 0) + ':' + ((entry.device && entry.device.productId) || 0),
-      name: esc(nm), cstate: 'AVAILABLE', gstate: null, sub: 'WebHID · idle',
-      hw: esc((entry.device && entry.device.productName) || ''),
-      vp: entry.device ? { vendorId: entry.device.vendorId, productId: entry.device.productId } : null,
-      device: entry.device || null,
-      conn: (entry.driver && entry.driver.connectionType) || 'hid',
-      active: padActive(entry.synthetic),
-    });
-  }
-  for (const gp of pads) {
-    if (!gp) continue;
-    if (claimedIdx.has(gp.index)) continue;
-    if (stickMag(gp) > 0.5) continue;   // stuck-stick pad = likely a Chrome BT-reconnect ghost; skip
-    const vp = ControllerRegistry.parseGamepadVendorProduct(gp.id);
-    if (vp && manager._findPoolEntryByVidPid(vp.vendorId, vp.productId)) continue;   // already shown as PAIRED
-    const info = ControllerRegistry.identifyFromGamepadId(gp.id);
-    items.push({
-      key: 'g:' + gp.index, name: esc((info && info.driverName) || 'Controller'), cstate: 'AVAILABLE', gstate: null,
-      sub: 'Gamepad · press a button', hw: '', vp: vp || null, conn: 'gamepad', active: padActive(gp),
-    });
-  }
-  for (const it of items) it.id = esc(identityLine(it.vp, it.conn));
-  return items;
+  return manager.controllerRoster(pads, { seatOf }).map((r) => {
+    const vp = r.vendorId != null ? { vendorId: r.vendorId, productId: r.productId } : null;
+    return {
+      key: r.key, name: esc(r.name),
+      cstate: ROSTER_CSTATE[r.state], gstate: ROSTER_GSTATE[r.state] || null,
+      sub: rosterSub(r),
+      hw: esc(r.hwName),   // real HID string — the ONLY way to tell apart two same-vid:pid pads
+      vp, device: r.device, conn: r.connection, active: r.active,
+      id: esc(identityLine(vp, r.connection)),
+    };
+  });
 }
 // Controller-layer vs game-layer states, as chip tones (legend in lobby.html).
 const CHIP_TONE = { AVAILABLE: 'info', ACTIVE: 'warn', ASSIGNED: 'neutral', READY: 'accent' };

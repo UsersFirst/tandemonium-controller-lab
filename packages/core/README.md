@@ -9,6 +9,7 @@ Vendor-agnostic gamepad drivers, WebHID sensor fusion, and the slot/claim `Contr
 | `@usersfirst/controller-core`                              | Barrel: `ControllerManager`, `SensorFusion`, all drivers + registry, `DEVICES`, `PROTOCOLS`, helpers     |
 | `@usersfirst/controller-core/manager`                      | Slot/claim manager + synthetic-gamepad helpers (the headless P1/P2/... lifecycle)                        |
 | `@usersfirst/controller-core/sensor-fusion`                | `SensorFusion` (gyro orientation + bias calibration + drift correction)                                  |
+| `@usersfirst/controller-core/device-identity`              | What a UI shows for a controller: `identifyGamepadId`, `identifyHidDevice`, `identityOf`, `connectionOf`, `glyphFamilyOf` |
 | `@usersfirst/controller-core/drivers/controller-registry`  | Registry lookup (`getEntry`, `getDriver`, `identifyFromGamepadId`, `getGamepadQuirks`, ...)              |
 | `@usersfirst/controller-core/drivers/base-driver`          | Abstract `ControllerDriver` (protocol interface)                                                         |
 | `@usersfirst/controller-core/drivers/playstation-driver`   | PlayStation (DualSense + DualShock 4) protocol — gyro, accel, touchpad, lightbar. Registered under the `'dualsense'` protocol key. |
@@ -23,6 +24,36 @@ Vendor-agnostic gamepad drivers, WebHID sensor fusion, and the slot/claim `Contr
 `SensorFusion` keeps orientation, gravity, stillness detection, and bias-calibration state internal — replacing ~250 lines of duplicated gyro math that used to live inside each consumer. Its algorithms are derived from [JibbSmart/GamepadMotionHelpers](https://github.com/JibbSmart/GamepadMotionHelpers) by Julian "Jibb" Smart (MIT) and the [GyroWiki](http://gyrowiki.jibbsmart.com/) write-ups; see [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) for the upstream license.
 
 No bundler is required — this is plain ESM. Designed for direct use in Electron + browser contexts via importmap, as well as bundlers (Vite, webpack, esbuild) for web apps.
+
+## Showing controllers in a UI: identity and roster
+
+Seat screens, controller lists and button prompts all need the same three things about a controller. Core answers them once, so the lab lobby and Tandemonium stop naming controllers per screen (see [`docs/UI-KIT-TV-COMPONENTS.md`](../../docs/UI-KIT-TV-COMPONENTS.md) §1–2).
+
+```js
+import { identifyGamepadId } from '@usersfirst/controller-core/device-identity';
+identifyGamepadId(gp.id);
+// → { name: 'Sony DualSense', shortName: 'DualSense', glyphFamily: 'playstation', swapAB: false, entry }
+
+manager.slotIdentity('P1');   // same shape; prefers the bound HID driver's entry (a GameSir
+                              // Super Nova reads as a Sony pad until its HID handle is bound)
+
+manager.controllerRoster(navigator.getGamepads(), {
+  // The app's own words: core passes `seat` through and never reads its names.
+  seatOf: (slotId) => ({ player: 2, seat: { team: 'red', role: 'player', label: 'P2', tone: 'team-b' }, ready: false }),
+  keyboard: true,
+});
+// → one row per controller the page can see:
+//   { key, kind: 'slot'|'pool'|'pad'|'keyboard', slotId, gamepadIndex,
+//     state: 'connected'|'joined'|'seated'|'ready', player, seat,
+//     name, shortName, glyphFamily, swapAB,
+//     connection: 'usb'|'bluetooth'|'puck'|'webhid'|'gamepad'|'keyboard',
+//     vendorId, productId, hwName, active, device }
+```
+
+- **`shortName`** is what a seat or chip shows. **`glyphFamily`** (`playstation` · `xbox` · `nintendo` · `steam` · `generic` · `keyboard`) picks the button prompts. It comes from the entry's protocol unless the entry sets `glyphFamily`.
+- **States:** a claimed slot is `joined`. The app's `seatOf` makes it `seated` or `ready`. Pooled WebHID devices and unclaimed pads are `connected`.
+- **What the roster filters:** idle Steam Puck receiver interfaces, stuck-stick Bluetooth ghost pads, and pads the host's `padFilter` rejects. A pad whose vid:pid is already a pooled entry isn't listed twice.
+- **Seats belong to the app.** Core only reports what the app tells it through `seatOf`, and it has no vocabulary for seats: `team` and `role` are whatever the game calls them, and `label` / `tone` tell a UI what to print on the seat badge and how to colour it. Tandemonium passes captain and stoker; another game would pass its own.
 
 ## Pairing a second controller (host HID picker)
 
@@ -67,7 +98,10 @@ All controller identity lives in [`src/devices.js`](./src/devices.js). Driver cl
 
 ```js
 {
-  name:             'Sony DualSense',           // display name (UI / logs)
+  name:             'Sony DualSense',           // full display name (logs, pickers)
+  shortName:        'DualSense',                // what a seat / chip / roster row shows
+  glyphFamily:      'playstation',              // optional — button prompts, when they differ
+                                                //   from the protocol default
   vendorId:         0x054c,
   productId:        0x0ce6,
   protocol:         'dualsense',                // key in PROTOCOLS map
@@ -90,11 +124,11 @@ The `controllerProfile` field decouples the 3D visualizer model from the protoco
 One line in [`src/devices.js`](./src/devices.js):
 
 ```js
-{ name: 'Whatever Controller', vendorId: 0xabcd, productId: 0x1234,
+{ name: 'Whatever Controller', shortName: 'Whatever', vendorId: 0xabcd, productId: 0x1234,
   protocol: 'dualsense', capabilities: PS_CAPS, gamepadIdPattern: /whatever/i },
 ```
 
-That's the whole change — registry lookups, HID filters, and capability checks all read from `DEVICES`.
+That's the whole change: registry lookups, HID filters, capability checks, seat names and button prompts all read from `DEVICES`. Give every entry a `shortName` (16 characters at most; `test/device-identity.test.js` checks it), and set `glyphFamily` only if the controller's printed buttons don't match its protocol's.
 
 ### Adding a new protocol
 
