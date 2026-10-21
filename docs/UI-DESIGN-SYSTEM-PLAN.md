@@ -101,7 +101,7 @@ Why not Lit / Preact / React: all want a build or a CDN import. Lit is the only 
 2. **Captain → stoker step sync** sends the flow's current id (#167 §2) once a two-device playtest of #413 is in.
 3. **`@ts-check` on `lobby.js` / `game.js`**: 293 / 755 errors today, nearly all DOM narrowing (`getElementById` → `.disabled`/`.value`); a pass that types the element lookups.
 4. **Game-side ratchet**: run `ui:audit --check` for the game target in its CI (clone the lab's tools next to the kit sparse checkout).
-5. **Remaining game screens** on the kit as they are touched: victory / game-over / options / quick menu; `uf-card` / `uf-sheet` when the second use appears.
+5. **Remaining game screens** on the kit as they are touched: victory / game-over / options / quick menu; `uf-card` / `uf-sheet` when the second use appears. The TV lobby review (Tandemonium #428) found those second uses and more: see [UI-KIT-TV-COMPONENTS.md](UI-KIT-TV-COMPONENTS.md) for the full list (`uf-glyph`, `uf-team`, `uf-roster`, `uf-sheet`, `uf-bar`, `uf-switch`, `uf-card`, `uf-keypad`/`uf-code`, core `roster()`) and its order of work.
 6. **Palette** (Q1): a `tokens.css` edit whenever decided.
 
 ## 5. Open questions for Pete
