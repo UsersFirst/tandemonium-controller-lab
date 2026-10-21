@@ -388,6 +388,8 @@ test('uf-system-bar: Back follows the flow; the flow focus scope includes the ba
     const out = { backHidden0: back.hidden };
     flow.go('b'); await new Promise((r) => setTimeout(r, 0));
     out.backHidden1 = back.hidden;
+    await new Promise((r) => setTimeout(r, 0));
+    out.backText = back.querySelector(':scope > span').textContent; out.glyphIntact = !!back.querySelector('uf-controller-glyph .ufg');
     const fc = new FocusController({ input: new ManualInput() });
     flow.attachFocus(fc);
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -398,6 +400,8 @@ test('uf-system-bar: Back follows the flow; the flow focus scope includes the ba
   });
   assert.equal(r.backHidden0, true, 'no history, no Back');
   assert.equal(r.backHidden1, false);
+  assert.equal(r.backText, 'Back');
+  assert.equal(r.glyphIntact, true, 'the label never overwrites the glyph');
   assert.deepEqual(r.scope, ['bb', 'p-help', 'p-music']);
   assert.equal(r.afterBack, 'a');
 });
