@@ -170,6 +170,15 @@ One element, two densities, fed by core's `controllerRoster()`.
 - **`--uf-stage-inset`:** the width reserved for an art panel (Tandemonium: 535px). Sheets, the bar and the stage all respect it.
 - Existing tones cover the seats: `--uf-color-captain`, `-stoker`, `-team-a`, `-team-b`. `uf-team tone="coop"` uses captain's colour for its frame.
 
+## Kit 0.4 (added 2026-10-20): room, Garage, end of ride
+
+The review's remaining screens, built in the lab (#127) and then adopted in the game:
+- `uf-player-card`: who a player is (avatar or initials, name, seat line, stats, extra content). Replaces the room's video seats; video sharing has been off since Tandemonium #400 D7.
+- `uf-achievement`: earned · new · locked · progress. Used in the room, the end-of-ride "unlocked this ride" list and the toast.
+- `uf-stat`, `uf-ledger`: figures and earnings. Used for victory stats, versus team results and every coin breakdown.
+- `uf-pips`, plus `uf-card layout=row` with `meta` and levels: Garage upgrades.
+- `uf-sheet tone` + `headline`: every result screen (game over, victory, demo end, versus, slingshot) with one action row.
+
 ## Compositions (documented, not new elements)
 
 | Composition | Built from | Where |
