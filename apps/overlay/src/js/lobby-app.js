@@ -201,14 +201,18 @@ function edges(slotId, gp) {
 // show the short name ("DualSense"); the Controllers panel shows the full one.
 function devName(slotId) { return manager.slotIdentity(slotId).shortName; }
 
-// What controllerRoster needs from the lobby: player number, seat, ready.
+// What controllerRoster needs from the lobby: player number, seat, ready. The
+// seat is in this app's words (Tandemonium's captain / stoker, teams a / b);
+// core passes it through, and label / tone tell the roster UI what to show.
 function seatOf(slotId) {
   const L = state.bySlot.get(slotId);
   if (!L) return null;
   const s = L.seatId != null ? seat(L.seatId) : null;
+  if (!s) return { player: L.player, ready: L.phase === 'ready' };
+  const tone = s.team ? (s.team === 'a' ? 'team-a' : 'team-b') : (s.role === 'Stoker' ? 'stoker' : 'captain');
   return {
     player: L.player,
-    seat: s ? { team: s.team || 'coop', role: s.role === 'Stoker' ? 'stoker' : 'captain' } : undefined,
+    seat: { team: s.team || 'coop', role: s.role.toLowerCase(), label: s.team ? `P${L.player}` : s.role, tone },
     ready: L.phase === 'ready',
   };
 }
@@ -406,7 +410,7 @@ function identityLine(vp, connType) {
 const ROSTER_CSTATE = { connected: 'AVAILABLE', joined: 'ACTIVE', seated: 'ACTIVE', ready: 'ACTIVE' };
 const ROSTER_GSTATE = { seated: 'ASSIGNED', ready: 'READY' };
 function rosterSub(r) {
-  if (r.seat) return `P${r.player ?? '?'} · ${r.seat.role === 'stoker' ? 'Stoker' : 'Captain'}`;
+  if (r.seat) return `P${r.player ?? '?'} · ${r.seat.role === 'stoker' ? 'Stoker' : 'Captain'}${r.seat.team && r.seat.team !== 'coop' ? ` · team ${r.seat.team === 'a' ? 'blue' : 'red'}` : ''}`;
   if (r.kind === 'slot') return r.player != null ? `P${r.player} · joined` : 'joined';
   return r.kind === 'pool' ? 'WebHID · idle' : 'Gamepad · press a button';
 }

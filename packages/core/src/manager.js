@@ -1480,7 +1480,10 @@ export class ControllerManager {
     const withSeat = (row, info) => {
       if (info && info.player != null) row.player = info.player;
       if (info && info.seat) {
-        row.seat = { team: info.seat.team ?? null, role: info.seat.role ?? null };
+        // The app's own seat description, passed through: core knows nothing
+        // about a game's roles or teams (team / role / label / tone are the
+        // app's words — e.g. { team: 'red', role: 'player', label: 'P2' }).
+        row.seat = { team: null, role: null, ...info.seat };
         row.state = info.ready ? 'ready' : 'seated';
       }
       return row;
@@ -1558,10 +1561,18 @@ export class ControllerManager {
 }
 
 /**
+ * A seat, in the app's own words. Core passes it through untouched; it never
+ * interprets team or role names (a game might use teams 'red' / 'blue' and
+ * roles 'player', 'driver', 'gunner' …). `label` and `tone` are hints for a UI
+ * (uf-controller-roster shows `label` on the seat badge and colours it by
+ * `tone`); any other fields are carried along too.
+ * @typedef {{ team?: string|null, role?: string|null, label?: string, tone?: string, [key: string]: any }} RosterSeat
+ */
+/**
  * What the app tells controllerRoster about a slot it has seated.
  * @typedef {object} RosterSeatInfo
  * @property {number} [player]  1-based player number, if the app numbers players
- * @property {{ team?: 'a' | 'b' | 'coop' | null, role?: 'captain' | 'stoker' | null }} [seat]  present only when seated
+ * @property {RosterSeat} [seat]  present only when seated
  * @property {boolean} [ready]
  */
 /**
@@ -1572,7 +1583,7 @@ export class ControllerManager {
  * @property {number|null} gamepadIndex
  * @property {'connected' | 'joined' | 'seated' | 'ready'} state
  * @property {number|null} player
- * @property {{ team: string|null, role: string|null }|null} seat
+ * @property {RosterSeat|null} seat
  * @property {string} name
  * @property {string} shortName
  * @property {import('./device-identity.js').GlyphFamily} glyphFamily

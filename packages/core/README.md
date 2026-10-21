@@ -38,7 +38,8 @@ manager.slotIdentity('P1');   // same shape; prefers the bound HID driver's entr
                               // Super Nova reads as a Sony pad until its HID handle is bound)
 
 manager.controllerRoster(navigator.getGamepads(), {
-  seatOf: (slotId) => ({ player: 1, seat: { team: 'coop', role: 'captain' }, ready: false }),
+  // The app's own words: core passes `seat` through and never reads its names.
+  seatOf: (slotId) => ({ player: 2, seat: { team: 'red', role: 'player', label: 'P2', tone: 'team-b' }, ready: false }),
   keyboard: true,
 });
 // → one row per controller the page can see:
@@ -52,7 +53,7 @@ manager.controllerRoster(navigator.getGamepads(), {
 - **`shortName`** is what a seat or chip shows. **`glyphFamily`** (`playstation` · `xbox` · `nintendo` · `steam` · `generic` · `keyboard`) picks the button prompts. It comes from the entry's protocol unless the entry sets `glyphFamily`.
 - **States:** a claimed slot is `joined`. The app's `seatOf` makes it `seated` or `ready`. Pooled WebHID devices and unclaimed pads are `connected`.
 - **What the roster filters:** idle Steam Puck receiver interfaces, stuck-stick Bluetooth ghost pads, and pads the host's `padFilter` rejects. A pad whose vid:pid is already a pooled entry isn't listed twice.
-- **Seats belong to the app.** Core only reports what the app tells it through `seatOf`.
+- **Seats belong to the app.** Core only reports what the app tells it through `seatOf`, and it has no vocabulary for seats: `team` and `role` are whatever the game calls them, and `label` / `tone` tell a UI what to print on the seat badge and how to colour it. Tandemonium passes captain and stoker; another game would pass its own.
 
 ## Pairing a second controller (host HID picker)
 

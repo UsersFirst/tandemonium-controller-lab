@@ -51,9 +51,9 @@ test('seatOf turns a joined slot into SEATED or READY, with player and seat', ()
   let rows = m.controllerRoster(pads, { seatOf: () => ({ player: 1 }) });
   assert.deepEqual([rows[0].state, rows[0].player, rows[0].seat], ['joined', 1, null], 'a player number without a seat stays joined');
 
-  rows = m.controllerRoster(pads, { seatOf: () => ({ player: 1, seat: { team: 'coop', role: 'captain' } }) });
+  rows = m.controllerRoster(pads, { seatOf: () => ({ player: 1, seat: { team: 'red', role: 'player', label: 'P1', tone: 'team-b' } }) });
   assert.equal(rows[0].state, 'seated');
-  assert.deepEqual(rows[0].seat, { team: 'coop', role: 'captain' });
+  assert.deepEqual(rows[0].seat, { team: 'red', role: 'player', label: 'P1', tone: 'team-b' }, "the app's seat words pass through untouched");
 
   rows = m.controllerRoster(pads, { seatOf: () => ({ player: 1, seat: { team: 'a' }, ready: true }) });
   assert.equal(rows[0].state, 'ready');
@@ -98,8 +98,8 @@ test('keyboard row: connected by default, seated through its own seat info', () 
   const m = new ControllerManager({ slotIds: ['P1'] });
   let [k] = m.controllerRoster([], { keyboard: true });
   assert.deepEqual([k.kind, k.key, k.state, k.glyphFamily, k.connection], ['keyboard', 'k', 'connected', 'keyboard', 'keyboard']);
-  [k] = m.controllerRoster([], { keyboard: { player: 2, seat: { team: 'coop', role: 'stoker' } } });
-  assert.deepEqual([k.state, k.player, k.seat.role], ['seated', 2, 'stoker']);
+  [k] = m.controllerRoster([], { keyboard: { player: 2, seat: { team: 'blue', role: 'navigator' } } });
+  assert.deepEqual([k.state, k.player, k.seat.role], ['seated', 2, 'navigator']);
   assert.equal(m.controllerRoster([]).length, 0, 'no keyboard row unless asked');
 });
 
