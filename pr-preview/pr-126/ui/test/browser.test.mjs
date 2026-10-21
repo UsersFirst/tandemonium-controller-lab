@@ -276,6 +276,7 @@ test('uf-sheet: children move into the card; Esc closes with a reason; attachFoc
     sheet.show();
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     out.scope = fc.items.map((e) => e.id || e.className);
+    out.first = fc.focused && fc.focused.id;
     fc.poll(); input.press('b'); fc.poll(); input.release('b'); fc.poll();
     await new Promise((r) => setTimeout(r, 0));
     out.openAfterB = sheet.open; out.restored = fc.items.map((e) => e.id);
@@ -288,6 +289,7 @@ test('uf-sheet: children move into the card; Esc closes with a reason; attachFoc
   assert.equal(r.inBody, true);
   assert.equal(r.inActions, true);
   assert.ok(r.scope.includes('t-in') && r.scope.includes('t-done'), 'the open sheet is the focus scope: ' + r.scope.join(','));
+  assert.equal(r.first, 't-in', 'focus starts in the body, not on Close');
   assert.equal(r.openAfterB, false, 'B closes it');
   assert.deepEqual(r.restored, ['outside'], 'the previous scope returns');
   assert.deepEqual(r.events, ['open', 'close:back', 'open', 'close:escape']);
@@ -303,13 +305,14 @@ test('uf-setting: click toggles and emits change; a click in the detail row does
     const changes = []; s.addEventListener('change', (e) => changes.push(e.detail.checked));
     document.getElementById('t-recal').click();
     s.click(); await new Promise((r) => setTimeout(r, 0));
-    const out = { changes, checked: s.checked, aria: s.getAttribute('aria-checked'), focusable: s.hasAttribute('data-focusable') };
+    const out = { changes, checked: s.checked, aria: s.getAttribute('aria-checked'), focusable: s.hasAttribute('data-focusable'), detailHidden: getComputedStyle(s.querySelector('.uf-setting__detail')).display === 'none' };
     host.remove(); return out;
   });
   assert.deepEqual(r.changes, [false]);
   assert.equal(r.checked, false);
   assert.equal(r.aria, 'false');
   assert.equal(r.focusable, true);
+  assert.equal(r.detailHidden, true, 'an unchecked toggle hides its detail row (no kind attribute needed)');
 });
 
 test('uf-card: locked swallows clicks; selected sets aria-pressed', skip, async () => {
