@@ -35,31 +35,15 @@
   /* mode buttons: full-width two-line uf-buttons */
   #mode > uf-button { width: 100%; }
 
-  /* seat grid (layout only — the seats themselves are <uf-seat>) */
+  /* seats: <uf-team> boxes of <uf-seat>s, then a <uf-controller-roster> strip of every controller (layout only here) */
   .teams { display: flex; align-items: stretch; justify-content: center; gap: 14px; width: 100%; margin: 4px 0; }
-  .team { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px; border-radius: var(--uf-radius-md); border: 2px solid transparent; }
-  .team.a { border-color: color-mix(in srgb, var(--team-a) 40%, transparent); background: color-mix(in srgb, var(--team-a) 7%, transparent); }
-  .team.b { border-color: color-mix(in srgb, var(--team-b) 40%, transparent); background: color-mix(in srgb, var(--team-b) 7%, transparent); }
-  .team-title { font: 700 var(--uf-size-sm)/1 var(--mono); letter-spacing: 2px; }
-  .team.a .team-title { color: var(--team-a); } .team.b .team-title { color: var(--team-b); }
+  .teams > uf-team { flex: 1 1 0; }
   .vs { align-self: center; font: 800 var(--uf-size-lg)/1 inherit; opacity: .5; letter-spacing: 1px; }
-  .team-slots { display: flex; flex-direction: column; gap: 8px; width: 100%; }
-  .tandem { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  .tandem-title { font: 700 var(--uf-size-sm)/1 var(--mono); letter-spacing: 2px; color: var(--uf-color-captain); }
-  .tandem-seats { display: flex; gap: 10px; width: 100%; }
-  .tandem-seats > uf-seat { flex: 1 1 0; }
-
-  /* recognized-but-seatless lounge */
-  .lounge { margin-top: 12px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-  .lounge-title { font: 700 var(--uf-size-xs)/1 var(--mono); letter-spacing: 2px; color: var(--uf-color-warn); }
-  .lounge-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-  .lounge-chip { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 14px; border-radius: var(--uf-radius-md); background: color-mix(in srgb, var(--uf-color-warn) 8%, transparent); border: 1.5px solid color-mix(in srgb, var(--uf-color-warn) 50%, transparent); animation: idle 1.8s ease-in-out infinite; }
-  .lounge-chip .lc-name { font: 700 var(--uf-size-sm)/1.25 inherit; letter-spacing: .3px; }
-  .lounge-chip .lc-hint { font: var(--uf-size-xs)/1.2 var(--mono); color: var(--muted); }
-  @keyframes idle { 0%,100% { border-color: var(--uf-color-line-soft); } 50% { border-color: color-mix(in srgb, var(--uf-color-warn) 60%, transparent); } }
+  #seat-area { display: grid; gap: 14px; }
 
   #btn-choose-level { margin-top: 4px; }
   .summary { text-align: center; font-size: var(--uf-size-md); line-height: 1.6; }
+  .summary .level-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(14em, 1fr)); gap: 10px; margin-top: 14px; text-align: left; }
   .summary .big { font-size: var(--uf-size-xl); color: var(--accent); display: block; margin-bottom: 4px; }
 
   #pairbar { position: fixed; top: 7px; right: 12px; z-index: 101; display: flex; align-items: center; gap: 10px; -webkit-app-region: no-drag; }
@@ -69,26 +53,15 @@
   @media (hover: hover) { #btn-close-app:hover { background: var(--uf-color-danger); border-color: var(--uf-color-danger); filter: none; } }
 
   /* controllers panel */
-  #ctrl-panel { position: fixed; top: 44px; right: 12px; z-index: 101; width: 380px; max-width: 88vw; background: rgba(9,13,11,0.97); border: 1px solid var(--uf-color-line-soft); border-radius: var(--uf-radius-md); padding: 11px 12px; box-shadow: var(--uf-shadow-card); -webkit-app-region: no-drag; }
+  #ctrl-panel { position: fixed; top: 44px; right: 12px; z-index: 101; width: 480px; max-width: 88vw; background: rgba(9,13,11,0.97); border: 1px solid var(--uf-color-line-soft); border-radius: var(--uf-radius-md); padding: 11px 12px; box-shadow: var(--uf-shadow-card); -webkit-app-region: no-drag; }
   #ctrl-panel[hidden] { display: none; }
   .cp-head { font: 700 var(--uf-size-xs)/1 var(--mono); letter-spacing: 1.5px; color: var(--muted); margin-bottom: 9px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
   #cp-note { font-weight: 400; letter-spacing: .3px; }
-  #cp-list { display: flex; flex-direction: column; gap: 6px; }
-  .cp-row { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: var(--uf-radius-sm); background: var(--uf-color-surface-3); border: 1px solid var(--uf-color-line-soft); }
-  .cp-dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: #39404e; transition: background .08s, box-shadow .08s; }
-  .cp-dot.on { background: var(--accent); box-shadow: 0 0 8px 1px var(--accent); }
-  .cp-main { flex: 1 1 auto; min-width: 0; }
-  .cp-name { font: 700 var(--uf-size-sm)/1.2 inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cp-sub { font: var(--uf-size-xs)/1.3 var(--mono); color: var(--muted); }
-  .cp-hw, .cp-id { font: var(--uf-size-xs)/1.3 var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cp-id.warn { color: var(--uf-color-warn); }
-  .cp-tags { flex: 0 0 auto; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+  #cp-list { display: block; }
   .cp-legend { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--uf-color-line-soft); font: var(--uf-size-xs)/1.8 var(--mono); color: var(--muted); }
   .cp-legend b { color: var(--uf-color-fg); }
-  .cp-legend .cp-dot { display: inline-block; vertical-align: middle; }
-  .cp-empty { font: var(--uf-size-sm)/1.5 var(--mono); color: var(--muted); text-align: center; padding: 10px 6px; }
+  .cp-legend .cp-live { color: var(--uf-color-accent); }
   #debug { position: fixed; left: 10px; bottom: 6px; right: 10px; font: var(--uf-size-xs)/1.4 var(--mono); color: var(--muted); white-space: pre; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
-  @media (prefers-reduced-motion: reduce) { .lounge-chip { animation: none; } }
 </style>
 </head>
 <body>
@@ -103,7 +76,7 @@
 <div id="ctrl-panel" hidden>
   <div class="cp-head">CONTROLLERS <span id="cp-note"></span></div>
   <div id="cp-list"></div>
-  <div class="cp-legend"><uf-chip tone="info">CONNECTED</uf-chip> paired, idle · <uf-chip tone="warn">JOINED</uf-chip> pressed a button · <uf-chip>SEATED</uf-chip> Captain / Stoker · <uf-chip tone="accent">READY</uf-chip> locked in · <span class="cp-dot on"></span> being used now</div>
+  <div class="cp-legend"><uf-chip tone="info">CONNECTED</uf-chip> paired, idle · <uf-chip tone="warn">JOINED</uf-chip> pressed a button · <uf-chip>SEATED</uf-chip> Captain / Stoker · <uf-chip tone="accent">READY</uf-chip> locked in · <b class="cp-live">●</b> being used now</div>
 </div>
 
 <div class="stage">
@@ -118,7 +91,7 @@
       </uf-step>
 
       <!-- STEP 2: unified seat lobby (prompt + hint are set per mode by lobby-app.js) -->
-      <uf-step id="lobby" prompt="Crew your tandem" hint="Press a button to join a seat · <b>A</b> ready · <b>B</b> leave">
+      <uf-step id="lobby" prompt="Local multiplayer" hint="Press a button to join a seat · <b>A</b> ready · <b>B</b> leave">
         <div id="seat-area" style="width:100%"></div>
         <uf-button size="sm" id="btn-pair">Pair a controller for gyro + lightbar (WebHID)…</uf-button>
         <uf-button size="lg" variant="accent" id="btn-choose-level" disabled>CHOOSE LEVEL</uf-button>

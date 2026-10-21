@@ -19,7 +19,7 @@ import { ControllerManager, ControllerRegistry, MAX_CONTROLLERS, playerSlotIds }
 // The UI kit (uf-flow / uf-step / uf-button / uf-seat / uf-chip). Importing
 // registers the elements; lobby.html links tokens.css. Screen state now lives
 // in <uf-flow>, seats are <uf-seat> driven from `state`, buttons are <uf-button>.
-import '@usersfirst/ui';
+import { UfControllerGlyph } from '@usersfirst/ui';
 
 // Pre-allocate a generous slot pool (shared core constant) so MORE controllers
 // than there are seats can be RECOGNIZED (ACTIVE) and wait in the lounge for a
@@ -195,17 +195,26 @@ function edges(slotId, gp) {
 }
 
 // ── device naming ──
-// Prefer the bound HID driver's real identity: a GameSir Super Nova claims via
-// the Gamepad API as DualSense (054c:0ce6) but its bound HID handle knows it's
-// a DualShock 4 — so once bound we name it by the driver, not the pad label.
-function devName(slotId) {
-  const s = manager.getSlot(slotId);
-  if (s && s.driver && s.driver.entry && s.driver.entry.name) return s.driver.entry.name;
-  const byLabel = ControllerRegistry.identifyFromGamepadId((s && s.controllerLabel) || '');
-  if (byLabel && byLabel.driverName) return byLabel.driverName;
-  const raw = (s && s.hidDevice && s.hidDevice.productName) || '';
-  const byName = ControllerRegistry.identifyFromGamepadId(raw);
-  return (byName && byName.driverName) ? byName.driverName : (raw || 'Controller');
+// core's slotIdentity: the bound HID driver's entry first (a GameSir Super Nova
+// claims over the Gamepad API as a Sony pad, but its bound HID handle knows what
+// it is), then the pad label, then the HID product string. Seats and the lounge
+// show the short name ("DualSense"); the Controllers panel shows the full one.
+function devName(slotId) { return manager.slotIdentity(slotId).shortName; }
+
+// What controllerRoster needs from the lobby: player number, seat, ready. The
+// seat is in this app's words (Tandemonium's captain / stoker, teams a / b);
+// core passes it through, and label / tone tell the roster UI what to show.
+function seatOf(slotId) {
+  const L = state.bySlot.get(slotId);
+  if (!L) return null;
+  const s = L.seatId != null ? seat(L.seatId) : null;
+  if (!s) return { player: L.player, ready: L.phase === 'ready' };
+  const tone = s.team ? (s.team === 'a' ? 'team-a' : 'team-b') : (s.role === 'Stoker' ? 'stoker' : 'captain');
+  return {
+    player: L.player,
+    seat: { team: s.team || 'coop', role: s.role.toLowerCase(), label: s.team ? `P${L.player}` : s.role, tone },
+    ready: L.phase === 'ready',
+  };
 }
 
 // ── screens ──
@@ -229,10 +238,11 @@ function enterMode(mode) {
   state.mode = mode; const m = makeSeats(mode); state.seats = m.seats; state.fill = m.fill;
   state.occ.clear(); state.bySlot.clear(); state.nextP = 1;
   const lobbyStep = /** @type {import('@usersfirst/ui').UfStep} */ ($('lobby'));
-  lobbyStep.prompt = mode === 'versus' ? 'Build your teams' : mode === 'solo' ? 'Solo ride' : 'Crew your tandem';
+  // Plain titles that say where you are (House Tandem voice lives in the team box and hints).
+  lobbyStep.prompt = mode === 'versus' ? 'Local versus' : mode === 'solo' ? 'Solo ride' : 'Local multiplayer';
   lobbyStep.hint = mode === 'versus'
-    ? 'Press a button = joined · <strong>A</strong> take a seat → ready · <strong>◀ ▶</strong> team · <strong>▲ ▼</strong> swap · <strong>B</strong> back (ready→seated→joined) · hold <strong>PS</strong> to release · all ready? <strong>A</strong> → level'
-    : 'Press a button = joined · <strong>A</strong> take a seat → ready · <strong>B</strong> back (ready→seated→joined) · hold <strong>PS/Home</strong> to release · all ready? <strong>A</strong> → level';
+    ? 'Press a button = joined · <uf-controller-glyph button="confirm" size="sm"></uf-controller-glyph> take a seat → ready · <uf-controller-glyph button="dpad-h" size="sm"></uf-controller-glyph> team · <uf-controller-glyph button="dpad-v" size="sm"></uf-controller-glyph> swap · <uf-controller-glyph button="back" size="sm"></uf-controller-glyph> back · hold <uf-controller-glyph button="home" size="sm"></uf-controller-glyph> to release · all ready? <uf-controller-glyph button="confirm" size="sm"></uf-controller-glyph> → level'
+    : 'Press a button = joined · <uf-controller-glyph button="confirm" size="sm"></uf-controller-glyph> take a seat → ready · <uf-controller-glyph button="back" size="sm"></uf-controller-glyph> back · hold <uf-controller-glyph button="home" size="sm"></uf-controller-glyph> to release · all ready? <uf-controller-glyph button="confirm" size="sm"></uf-controller-glyph> → level';
   showScreen('lobby'); syncSeats(); render();
 }
 function goLevel() {
@@ -241,50 +251,58 @@ function goLevel() {
   if (state.mode === 'versus') parts.push(`<span class="big">${teamCount('a')} v ${teamCount('b')}</span>Team Blue vs Team Red`);
   else if (state.mode === 'solo') parts.push(`<span class="big">Solo</span>`);
   else parts.push(`<span class="big">Co-op</span>Captain + Stoker`);
-  const roster = state.seats.filter((s) => state.occ.has(s.id)).map((s) => {
+  // Who's riding: one <uf-player-card> per seated player (kit 0.4) — the same
+  // card Tandemonium's room uses. Seat words are this app's.
+  const cards = state.seats.filter((s) => state.occ.has(s.id)).map((s) => {
     const slotId = state.occ.get(s.id); const L = state.bySlot.get(slotId);
-    return `${s.role}: P${L ? L.player : '?'} <span style="opacity:.6">(${devName(slotId)})</span>`;
-  }).join('<br>');
-  $('level-summary').innerHTML = parts.join('') + '<br><br>' + roster;
+    const tone = s.team ? (s.team === 'a' ? 'team-a' : 'team-b') : (s.kind === 'sto' ? 'stoker' : 'captain');
+    return `<uf-player-card name="${esc(devName(slotId))}" subtitle="${s.role}${s.team ? ' · team ' + (s.team === 'a' ? 'blue' : 'red') : ''}" tone="${tone}" badge="P${L ? L.player : '?'}"></uf-player-card>`;
+  }).join('');
+  $('level-summary').innerHTML = parts.join('') + `<div class="level-cards">${cards}</div>`;
   for (const id of state.bySlot.keys()) clearFb(id);
   showScreen('level');
 }
 
 // ── render ──
 // One <uf-seat> per seat, a pure function of state (the element owns its look).
+// The confirm glyph for the controller in a slot (its own family, not P1's).
+function glyphFor(slotId, button = 'confirm') {
+  const id = manager.slotIdentity(slotId);
+  return `<uf-controller-glyph size="sm" button="${button}" family="${id.glyphFamily}"${id.swapAB ? ' swap' : ''}></uf-controller-glyph>`;
+}
 function cardHTML(s) {
   const tone = s.team ? (s.team === 'a' ? 'team-a' : 'team-b') : (s.kind === 'cap' ? 'captain' : 'stoker');
   if (s.locked) return `<uf-seat seat="${s.role}" tone="${tone}" who="LOCKED" dev="solo" state="locked"></uf-seat>`;
   const slotId = state.occ.get(s.id);
   if (slotId) {
     const L = state.bySlot.get(slotId); const rdy = L && L.phase === 'ready';
-    return `<uf-seat seat="${s.role}" tone="${tone}" who="${esc(devName(slotId))}" dev="${rdy ? 'ready' : 'press A to ready'}" state="${rdy ? 'ready' : 'joined'}" badge="P${L ? L.player : '?'}"></uf-seat>`;
+    const hint = rdy ? 'ready' : `press ${glyphFor(slotId)} to ready`;
+    return `<uf-seat seat="${s.role}" tone="${tone}" who="${esc(devName(slotId))}" hint='${hint}' state="${rdy ? 'ready' : 'joined'}" badge="P${L ? L.player : '?'}"></uf-seat>`;
   }
-  return `<uf-seat seat="${s.role}" tone="${tone}" who="OPEN" dev="press a button" state="open" data-seat="${s.id}"></uf-seat>`;
+  return `<uf-seat seat="${s.role}" tone="${tone}" who="Open" dev="press a button on any controller" state="open" data-seat="${s.id}"></uf-seat>`;
 }
-// Joined-but-seatless controllers waiting to pick a seat.
-function loungeHTML() {
-  const active = [...state.bySlot.keys()].filter((id) => state.bySlot.get(id).seatId == null);
-  if (!active.length) return '';
-  const open = !!nextOpen();   // solo has one seat: say so instead of promising A will seat them
-  const hint = open ? 'press A to take a seat' : (state.mode === 'solo' ? 'no open seat in solo' : 'seats full · B on a seated player frees one');
-  const chips = active.map((id) => {
-    const L = state.bySlot.get(id);
-    return `<div class="lounge-chip"><uf-chip tone="warn">P${L.player}</uf-chip><span class="lc-name">${esc(devName(id))}</span><span class="lc-hint">${hint}</span></div>`;
-  }).join('');
-  return `<div class="lounge"><div class="lounge-title">JOINED · ${open ? 'pick a seat' : 'waiting'}</div><div class="lounge-chips">${chips}</div></div>`;
-}
+// Seats (uf-team + uf-seat) and, under them, every connected controller
+// (uf-controller-roster strip, rows from core's controllerRoster). The strip
+// replaces the old JOINED "lounge": it shows every controller — joined ones
+// waiting for a seat, connected ones that haven't pressed yet, and who sits where.
 function render() {
   const area = $('seat-area');
   let html;
   if (state.mode === 'versus') {
-    const col = (t, title) => `<div class="team ${t}"><div class="team-title">${title}</div><div class="team-slots">${state.seats.filter((s) => s.team === t).map(cardHTML).join('')}</div></div>`;
-    html = `<div class="teams">${col('a', 'TEAM BLUE')}<div class="vs">VS</div>${col('b', 'TEAM RED')}</div>`;
+    const team = (t, title) => `<uf-team tone="${t === 'a' ? 'team-a' : 'team-b'}" heading="${title}" layout="column">${state.seats.filter((s) => s.team === t).map(cardHTML).join('')}</uf-team>`;
+    html = `<div class="teams">${team('a', 'Team blue')}<div class="vs">VS</div>${team('b', 'Team red')}</div>`;
   } else {
-    html = `<div class="tandem"><div class="tandem-title">🚲 YOUR TANDEM</div><div class="tandem-seats">${state.seats.map(cardHTML).join('')}</div></div>`;
+    html = `<uf-team tone="coop" heading="🚲 Your tandem" layout="row">${state.seats.map(cardHTML).join('')}</uf-team>`;
   }
-  area.innerHTML = html + loungeHTML();
+  const seats = state.seats.filter((s) => !s.locked).length;
+  area.innerHTML = html + `<uf-controller-roster id="seat-roster" variant="strip" capacity="${seats}"></uf-controller-roster>`;
+  updateRoster((navigator.getGamepads && navigator.getGamepads()) || []);
   updateCTA(); updateDebug();
+}
+// Cheap to call every frame: the element only re-renders when a row changes.
+function updateRoster(pads) {
+  const el = /** @type {any} */ (document.getElementById('seat-roster'));
+  if (el) el.rows = manager.controllerRoster(pads, { seatOf });
 }
 function updateCTA() {
   const btn = /** @type {import('@usersfirst/ui').UfButton} */ ($('btn-choose-level')); const r = allReady();
@@ -364,13 +382,6 @@ async function pairController() {
 
 // ── controllers panel (paired vs active vs open, + live "in use" dot) ──
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function padActive(gp) {
-  if (!gp) return false;
-  for (const b of (gp.buttons || [])) if (b && (b.pressed || (b.value || 0) > 0.5)) return true;
-  for (const a of (gp.axes || [])) if (Math.abs(a) > 0.5) return true;
-  return false;
-}
-function stickMag(gp) { const ax = (gp && gp.axes) || []; return Math.max(Math.abs(ax[0] || 0), Math.abs(ax[1] || 0), Math.abs(ax[2] || 0), Math.abs(ax[3] || 0)); }
 // vid:pid string — the definitive identity, so a row that reads "DualSense" over
 // the Gamepad API vs its true WebHID handle is unambiguous.
 function vpStr(vp) { return vp ? ((vp.vendorId || 0).toString(16).padStart(4, '0') + ':' + (vp.productId || 0).toString(16).padStart(4, '0')) : '—'; }
@@ -387,10 +398,6 @@ function unitsForVp(vp) {
   if (!vp) return [];
   return hidInventory.filter((u) => u.vendorId === vp.vendorId && u.productId === vp.productId);
 }
-function vpOfSlot(s) {
-  if (s.hidDevice) return { vendorId: s.hidDevice.vendorId, productId: s.hidDevice.productId };
-  return ControllerRegistry.parseGamepadVendorProduct(s.controllerLabel) || null;
-}
 // One line of per-unit identity for a panel row. Unique vid:pid → the serial.
 // Electron's main HIDDevice has no `collections`, so a descriptor fingerprint is
 // impossible; instead we disambiguate two identical-vid:pid units by connection
@@ -404,99 +411,42 @@ function identityLine(vp, connType) {
   if (connType === 'usb' && units.some((u) => !u.serialNumber)) return '# no serial (USB)';
   return '⚠ ' + units.length + ' units — ' + units.map((u) => u.serialNumber || 'no-serial').join(' · ');
 }
-// Enumerate every controller the manager can see, in three buckets:
-//   ACTIVE — a claimed slot (someone took a seat); may be HID-bound or Gamepad-API-only
-//   PAIRED — a HID entry idling in the pool (WebHID approved, gyro/lightbar ready, no seat yet)
-//   OPEN   — a live Gamepad-API pad that's neither claimed nor pooled (press to join)
-function ctrlEntries(pads) {
-  const items = [];
-  const claimedIdx = new Set();
-  for (const s of manager.slots) {
-    if (s.state !== 'claimed') continue;
-    if (s.gamepadIndex != null) claimedIdx.add(s.gamepadIndex);
-    const L = state.bySlot.get(s.id);
-    const seated = !!(L && L.seatId != null);
-    const role = seated && seat(L.seatId) ? seat(L.seatId).role : '';
-    const hid = !!s._hidEntry;
-    items.push({
-      key: 's:' + s.id, name: esc(devName(s.id)),
-      // controller layer: a claimed slot is ACTIVE. game layer: ASSIGNED/READY only when seated.
-      cstate: 'ACTIVE', gstate: seated ? (L.phase === 'ready' ? 'READY' : 'ASSIGNED') : null,
-      sub: seated ? `P${L.player} · ${role}` : (L ? `P${L.player} · joined` : 'joined'),
-      hw: esc((s.hidDevice && s.hidDevice.productName) || ''),   // real HID string — the ONLY way to tell apart two same-vid:pid pads
-      vp: vpOfSlot(s), device: s.hidDevice || null,
-      conn: hid ? (s.driver && s.driver.connectionType ? s.driver.connectionType : 'hid') : 'gamepad',
-      active: padActive(s.effectiveGamepad(pads)),
-    });
-  }
-  let hi = 0;
-  // presentablePoolEntries hides idle Steam Puck receiver interfaces (kept pooled
-  // for power-on, but not usable controllers) — shared core filter.
-  for (const entry of manager.presentablePoolEntries()) {
-    const nm = (entry.driver && entry.driver.entry && entry.driver.entry.name) || (entry.device && entry.device.productName) || 'Controller';
-    items.push({
-      // index in the key: two identical-vid:pid devices (real DS4 + GameSir spoof)
-      // would otherwise collide to one row and share one activity dot.
-      key: 'h:' + (hi++) + ':' + ((entry.device && entry.device.vendorId) || 0) + ':' + ((entry.device && entry.device.productId) || 0),
-      name: esc(nm), cstate: 'AVAILABLE', gstate: null, sub: 'WebHID · idle',
-      hw: esc((entry.device && entry.device.productName) || ''),
-      vp: entry.device ? { vendorId: entry.device.vendorId, productId: entry.device.productId } : null,
-      device: entry.device || null,
-      conn: (entry.driver && entry.driver.connectionType) || 'hid',
-      active: padActive(entry.synthetic),
-    });
-  }
-  for (const gp of pads) {
-    if (!gp) continue;
-    if (claimedIdx.has(gp.index)) continue;
-    if (stickMag(gp) > 0.5) continue;   // stuck-stick pad = likely a Chrome BT-reconnect ghost; skip
-    const vp = ControllerRegistry.parseGamepadVendorProduct(gp.id);
-    if (vp && manager._findPoolEntryByVidPid(vp.vendorId, vp.productId)) continue;   // already shown as PAIRED
-    const info = ControllerRegistry.identifyFromGamepadId(gp.id);
-    items.push({
-      key: 'g:' + gp.index, name: esc((info && info.driverName) || 'Controller'), cstate: 'AVAILABLE', gstate: null,
-      sub: 'Gamepad · press a button', hw: '', vp: vp || null, conn: 'gamepad', active: padActive(gp),
-    });
-  }
-  for (const it of items) it.id = esc(identityLine(it.vp, it.conn));
-  return items;
+// The Controllers panel: core's controllerRoster (claimed slots, pooled WebHID
+// entries with idle Puck siblings hidden, unclaimed pads minus BT ghosts) shown
+// by <uf-controller-roster variant="list">, with this app's diagnostics (seat,
+// vid:pid, the raw HID string, the per-unit serial) on each row's detail line.
+function rosterSub(r) {
+  if (r.seat) return `P${r.player ?? '?'} · ${r.seat.role === 'stoker' ? 'Stoker' : 'Captain'}${r.seat.team && r.seat.team !== 'coop' ? ` · team ${r.seat.team === 'a' ? 'blue' : 'red'}` : ''}`;
+  if (r.kind === 'slot') return r.player != null ? `P${r.player} · joined` : 'joined';
+  return r.kind === 'pool' ? 'WebHID · idle' : 'Gamepad · press a button';
 }
-// Controller-layer vs game-layer states, as chip tones (legend in lobby.html).
-const CHIP_TONE = { AVAILABLE: 'info', ACTIVE: 'warn', ASSIGNED: 'neutral', READY: 'accent' };
-// The words a player sees for those states — the same four in the lab and the
-// game: CONNECTED (paired, idle) → JOINED (pressed a button, in the lounge) →
-// SEATED (Captain/Stoker on a team) → READY. Code keeps the manager's names.
-const STATE_LABEL = { AVAILABLE: 'CONNECTED', ACTIVE: 'JOINED', ASSIGNED: 'SEATED', READY: 'READY' };
-function buildCtrlRows(items) {
-  const list = $('cp-list'); if (!list) return;
-  if (!items.length) { list.innerHTML = '<div class="cp-empty">No controllers detected.<br>Press a button, or “🎮 Pair controller”.</div>'; return; }
-  list.innerHTML = items.map((it) =>
-    `<div class="cp-row"><span class="cp-dot" data-dot="${it.key}"></span>` +
-    `<div class="cp-main"><div class="cp-name">${it.name}</div><div class="cp-sub">${it.sub} · ${it.conn} · ${vpStr(it.vp)}</div>` +
-    `${it.hw ? `<div class="cp-hw">▪ ${it.hw}</div>` : ''}` +
-    `${it.id ? `<div class="cp-id${it.id[0] === '⚠' ? ' warn' : ''}">${it.id}</div>` : ''}</div>` +
-    `<div class="cp-tags"><uf-chip tone="${CHIP_TONE[it.cstate]}">${STATE_LABEL[it.cstate]}</uf-chip>` +
-    `${it.gstate ? `<uf-chip tone="${CHIP_TONE[it.gstate]}">${STATE_LABEL[it.gstate]}</uf-chip>` : ''}</div></div>`
-  ).join('');
+function ctrlRows(pads) {
+  return manager.controllerRoster(pads, { seatOf }).map((r) => {
+    const vp = r.vendorId != null ? { vendorId: r.vendorId, productId: r.productId } : null;
+    // The list prints the seat badge itself; seated rows add only the player and team here.
+    const lead = r.seat ? `P${r.player ?? '?'}${r.seat.team && r.seat.team !== 'coop' ? ` · team ${r.seat.team === 'a' ? 'blue' : 'red'}` : ''}` : rosterSub(r);
+    const parts = [lead, vpStr(vp)];
+    if (r.hwName) parts.push('▪ ' + r.hwName);   // real HID string — the ONLY way to tell apart two same-vid:pid pads
+    const unit = identityLine(vp, r.connection); if (unit) parts.push(unit);
+    return { ...r, detail: parts.join(' · ') };
+  });
 }
-let ctrlSig = '';
 function renderCtrlPanel(pads) {
   const panel = $('ctrl-panel'); if (!panel || panel.hidden) return;
-  const items = ctrlEntries(pads);
-  const sig = items.map((i) => i.key + '|' + i.cstate + '|' + (i.gstate || '') + '|' + i.sub + '|' + i.conn + '|' + i.name + '|' + i.hw + '|' + i.id + '|' + vpStr(i.vp)).join('~');
-  if (sig !== ctrlSig) { ctrlSig = sig; buildCtrlRows(items); }
-  const list = $('cp-list');
-  for (const it of items) { const d = list.querySelector(`[data-dot="${it.key}"]`); if (d) d.classList.toggle('on', it.active); }
-  const act = items.filter((i) => i.cstate === 'ACTIVE').length, av = items.filter((i) => i.cstate === 'AVAILABLE').length;
-  const asg = items.filter((i) => i.gstate === 'ASSIGNED').length, rdy = items.filter((i) => i.gstate === 'READY').length;
-  const note = $('cp-note'); if (note) note.textContent = `${act} joined · ${av} connected · ${asg} seated · ${rdy} ready`;
+  const list = $('cp-list'); if (!list) return;
+  let el = /** @type {any} */ (list.querySelector('uf-controller-roster'));
+  if (!el) { list.innerHTML = '<uf-controller-roster variant="list" heading="All controllers"></uf-controller-roster>'; el = list.firstElementChild; }
+  const rows = ctrlRows(pads);
+  el.rows = rows;
+  const n = (st) => rows.filter((r) => st.includes(r.state)).length;
+  const note = $('cp-note'); if (note) note.textContent = `${n(['joined', 'seated', 'ready'])} joined · ${n(['connected'])} connected · ${n(['seated'])} seated · ${n(['ready'])} ready`;
 }
 function openCtrlPanel(open) {
   const panel = $('ctrl-panel'); if (!panel) return;
   panel.hidden = !open;
   const btn = $('btn-ctrl-list');
   if (btn) { btn.setAttribute('aria-expanded', String(open)); btn.textContent = 'Controllers ' + (open ? '▴' : '▾'); }
-  if (open) { ctrlSig = ''; renderCtrlPanel((navigator.getGamepads && navigator.getGamepads()) || []); }
+  if (open) { renderCtrlPanel((navigator.getGamepads && navigator.getGamepads()) || []); }
 }
 function toggleCtrlPanel() {
   const panel = $('ctrl-panel'); if (!panel) return;
@@ -556,6 +506,17 @@ function driveLobby(pads) {
   if (start && allReady()) goLevel();
 }
 
+// Every family=auto button prompt follows P1's controller (core identity).
+let _glyphKey = '';
+function syncGlyphFamily() {
+  const p1 = manager.slots.find((s) => s.state === 'claimed');
+  const id = p1 ? manager.slotIdentity(p1) : null;
+  const key = id ? id.glyphFamily + (id.swapAB ? '/swap' : '') : 'generic';
+  if (key === _glyphKey) return;
+  _glyphKey = key;
+  UfControllerGlyph.setDefault({ family: id ? id.glyphFamily : 'generic', swap: !!(id && id.swapAB) });
+}
+
 // ── boot + loop ──
 // Perf meters surfaced in the debug bar: _frameMs = wall time between frames
 // (≈16.7 at a healthy 60fps); _workMs = synchronous work per frame. If input
@@ -569,7 +530,8 @@ function loop() {
   try {
     manager.ingestFrame(pads, now);
     if (state.screen === 'mode') driveMode(pads);
-    else if (state.screen === 'lobby') driveLobby(pads);
+    else if (state.screen === 'lobby') { driveLobby(pads); updateRoster(pads); }
+    syncGlyphFamily();
     updateDebug();
     updateControllerCount();
     if (now - _lastPanel > 80) { _lastPanel = now; renderCtrlPanel(pads); }   // ~12Hz, not every frame
