@@ -251,11 +251,14 @@ function goLevel() {
   if (state.mode === 'versus') parts.push(`<span class="big">${teamCount('a')} v ${teamCount('b')}</span>Team Blue vs Team Red`);
   else if (state.mode === 'solo') parts.push(`<span class="big">Solo</span>`);
   else parts.push(`<span class="big">Co-op</span>Captain + Stoker`);
-  const roster = state.seats.filter((s) => state.occ.has(s.id)).map((s) => {
+  // Who's riding: one <uf-player-card> per seated player (kit 0.4) — the same
+  // card Tandemonium's room uses. Seat words are this app's.
+  const cards = state.seats.filter((s) => state.occ.has(s.id)).map((s) => {
     const slotId = state.occ.get(s.id); const L = state.bySlot.get(slotId);
-    return `${s.role}: P${L ? L.player : '?'} <span style="opacity:.6">(${devName(slotId)})</span>`;
-  }).join('<br>');
-  $('level-summary').innerHTML = parts.join('') + '<br><br>' + roster;
+    const tone = s.team ? (s.team === 'a' ? 'team-a' : 'team-b') : (s.kind === 'sto' ? 'stoker' : 'captain');
+    return `<uf-player-card name="${esc(devName(slotId))}" subtitle="${s.role}${s.team ? ' · team ' + (s.team === 'a' ? 'blue' : 'red') : ''}" tone="${tone}" badge="P${L ? L.player : '?'}"></uf-player-card>`;
+  }).join('');
+  $('level-summary').innerHTML = parts.join('') + `<div class="level-cards">${cards}</div>`;
   for (const id of state.bySlot.keys()) clearFb(id);
   showScreen('level');
 }

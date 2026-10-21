@@ -405,3 +405,98 @@ test('uf-system-bar: Back follows the flow; the flow focus scope includes the ba
   assert.deepEqual(r.scope, ['bb', 'p-help', 'p-music']);
   assert.equal(r.afterBack, 'a');
 });
+
+// ── kit 0.4: room, garage and end-of-ride pieces ──
+
+test('uf-stat + uf-ledger: values render; ledger totals items unless total is set; balance line', skip, async () => {
+  const r = await ev(async () => {
+    const l = document.createElement('uf-ledger'); l.heading = 'Coins'; l.unit = 'c'; document.body.appendChild(l);
+    l.items = [{ label: 'A', amount: 8 }, { label: 'B', amount: 5 }, { label: 'Multiplier', display: '×1.25' }]; l.balance = 13;
+    await new Promise((res) => setTimeout(res, 0));
+    const out = { head: l.querySelector('.ul-head').textContent, total: l.querySelector('.ul-total b').textContent, bal: l.querySelector('.ul-balance').textContent, mult: l.querySelectorAll('.ul-row b')[2].textContent };
+    l.total = 20; await new Promise((res) => setTimeout(res, 0)); out.head2 = l.querySelector('.ul-head').textContent;
+    const s = document.createElement('uf-stat'); s.value = '18s'; s.label = 'Time'; document.body.appendChild(s);
+    await new Promise((res) => setTimeout(res, 0));
+    out.stat = s.querySelector('.ust-value').textContent; out.aria = s.getAttribute('aria-label');
+    l.remove(); s.remove(); return out;
+  });
+  assert.equal(r.head, '+13 c Coins');
+  assert.equal(r.total, '13 c');
+  assert.equal(r.bal, 'Wallet: 13 c');
+  assert.equal(r.mult, '×1.25', 'a display row shows its text and is not summed');
+  assert.equal(r.head2, '+20 c Coins');
+  assert.equal(r.stat, '18s');
+  assert.equal(r.aria, 'Time: 18s');
+});
+
+test('uf-achievement: new shows Unlocked!, progress draws a bar, locked is announced', skip, async () => {
+  const r = await ev(async () => {
+    const mk = (state, extra = {}) => { const a = document.createElement('uf-achievement'); Object.assign(a, { name: 'X', description: 'D', state, ...extra }); document.body.appendChild(a); return a; };
+    const n = mk('new'), p = mk('progress', { progress: 0.4 }), l = mk('locked');
+    await new Promise((res) => setTimeout(res, 0));
+    const out = { newText: n.querySelector('.ua-new')?.textContent, bar: p.querySelector('.ua-bar i')?.style.width, locked: l.getAttribute('aria-label') };
+    [n, p, l].forEach((e) => e.remove()); return out;
+  });
+  assert.equal(r.newText, 'Unlocked!');
+  assert.equal(r.bar, '40%');
+  assert.equal(r.locked, 'X (locked)');
+});
+
+test('uf-player-card: initials without avatar, stats, kept children; waiting state', skip, async () => {
+  const r = await ev(async () => {
+    const host = document.createElement('div');
+    host.innerHTML = '<uf-player-card id="t-pc" name="Pete Gordon" subtitle="Captain" badge="P1"><uf-achievement id="t-pc-a" name="A"></uf-achievement></uf-player-card>';
+    document.body.appendChild(host);
+    const c = document.getElementById('t-pc'); c.stats = [{ value: 42, label: 'Rides' }];
+    await new Promise((res) => setTimeout(res, 0));
+    const out = { initials: c.querySelector('.upc-av').textContent, stat: c.querySelector('.upc-stat b').textContent, kept: !!c.querySelector('.upc-extra #t-pc-a'), badge: c.querySelector('.upc-badge').textContent };
+    c.state = 'waiting'; await new Promise((res) => setTimeout(res, 0)); out.waitingAv = c.querySelector('.upc-av').textContent;
+    host.remove(); return out;
+  });
+  assert.equal(r.initials, 'PG');
+  assert.equal(r.stat, '42');
+  assert.equal(r.kept, true, 'authored children survive as extra content');
+  assert.equal(r.badge, 'P1');
+  assert.equal(r.waitingAv, '?');
+});
+
+test('uf-card row + uf-pips: meta and level pips render; pips announce value of max', skip, async () => {
+  const r = await ev(async () => {
+    const c = document.getElementById('demo-upgrade');
+    const pips = c.querySelector('uf-pips');
+    await new Promise((res) => setTimeout(res, 0));
+    return { meta: c.querySelector('.uf-card__meta').textContent, on: pips.querySelectorAll('i.on').length, all: pips.querySelectorAll('i').length, aria: pips.getAttribute('aria-label') };
+  });
+  assert.equal(r.meta, '🪙 40+42 m');
+  assert.equal(r.on, 3);
+  assert.equal(r.all, 10);
+  assert.equal(r.aria, '3 of 10');
+});
+
+test('uf-sheet headline + tone: title in the tone, centred headline', skip, async () => {
+  const r = await ev(async () => {
+    const s = document.getElementById('demo-result'); s.show();
+    await new Promise((res) => setTimeout(res, 50));
+    const t = s.querySelector('.uf-sheet__title');
+    const out = { text: t.textContent, upper: getComputedStyle(t).textTransform, color: getComputedStyle(t).color, accent: getComputedStyle(document.documentElement).getPropertyValue('--uf-color-accent').trim() };
+    s.close(); return out;
+  });
+  assert.equal(r.text, 'You made it!');
+  assert.equal(r.upper, 'uppercase');
+  assert.equal(r.color, 'rgb(68, 255, 102)', 'accent tone (#44ff66)');
+});
+
+test('uf-sheet: a tall body scrolls inside the card; the card never runs off the screen', skip, async () => {
+  const r = await ev(async () => {
+    const host = document.createElement('div');
+    host.innerHTML = '<uf-sheet id="t-tall" heading="Tall" open dismissible="false"><div style="height:3000px">x</div><div slot="actions"><uf-button id="t-tall-ok">OK</uf-button></div></uf-sheet>';
+    document.body.appendChild(host);
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    const card = document.querySelector('#t-tall .uf-sheet__card').getBoundingClientRect();
+    const ok = document.getElementById('t-tall-ok').getBoundingClientRect();
+    const out = { cardBottom: card.bottom, okBottom: ok.bottom, vh: innerHeight };
+    host.remove(); return out;
+  });
+  assert.ok(r.cardBottom <= r.vh, `card bottom ${r.cardBottom} within ${r.vh}`);
+  assert.ok(r.okBottom <= r.vh, 'the action row stays on screen');
+});
