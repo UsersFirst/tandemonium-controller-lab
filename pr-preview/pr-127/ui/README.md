@@ -26,7 +26,7 @@ Typed, build-free Web Components and design tokens shared by Tandemonium and the
 | `uf-setting` | a setting row (toggle or value) with an optional detail row |
 | `uf-card` | a selectable content card (levels, garage) |
 | `uf-join-code` + `uf-keypad` | show / type a join code with an on-screen keyboard |
-| `uf-qr` | couch-sized QR (vendored `qrcode-generator`, MIT — `src/vendor/`) |
+| `uf-qr` | couch-sized QR (vendored `qrcode-generator`, MIT — `src/third_party/`) |
 | `uf-player-card` | who a player is: avatar or initials, name, seat line, stats, extra content (room, level summary) |
 | `uf-achievement` | one achievement: earned · new · locked · progress; sm row or md card |
 | `uf-stat` | one figure (icon, value, label); `variant=card` for team results |
