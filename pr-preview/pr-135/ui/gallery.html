@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>@usersfirst/ui · gallery</title>
+<!--
+  The living style guide. One <section> per element, every state side by
+  side, tokens visible at the top. The screenboard `ui-gallery` manifest
+  captures this page at phone / desktop / TV so a token or element change
+  shows up as a diff in design/screenboard/ui-gallery/ — and so the gallery
+  shows up as a diff in design/screenboard/ui-gallery/.
+  Sections are appended by tools/ui-kit/new-element.mjs at the marker below.
+  Serve from the lab root: `npx -y serve .` → /packages/ui/gallery.html
+-->
+<link rel="stylesheet" href="./src/tokens.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--uf-color-bg); color: var(--uf-color-fg); font: var(--uf-size-md)/1.45 var(--uf-font-ui); padding: var(--uf-space-5) var(--uf-space-4); }
+  h1 { font-size: var(--uf-size-lg); margin: 0 0 var(--uf-space-4); }
+  h2 { font-size: var(--uf-size-sm); letter-spacing: 1.5px; text-transform: uppercase; color: var(--uf-color-fg-muted); margin: var(--uf-space-6) 0 var(--uf-space-3); }
+  section { border: 1px solid var(--uf-color-line); border-radius: var(--uf-radius-lg); padding: var(--uf-space-4); margin-bottom: var(--uf-space-4); }
+  .states { display: flex; flex-wrap: wrap; gap: var(--uf-space-3); align-items: center; }
+  .state { display: flex; flex-direction: column; gap: var(--uf-space-1); align-items: flex-start; }
+  .state small { font: var(--uf-size-xs) var(--uf-font-mono); color: var(--uf-color-fg-muted); }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--uf-space-2); }
+  .sw { height: 56px; border-radius: var(--uf-radius-sm); border: 1px solid var(--uf-color-line); display: flex; align-items: flex-end; padding: var(--uf-space-1) var(--uf-space-2); font: var(--uf-size-xs) var(--uf-font-mono); text-shadow: 0 1px 2px #000; }
+  .w340 { width: 340px; } .w640 { max-width: 640px; } .mt { margin-top: 12px; } .gap { height: 16px; }
+  .grid-300 { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .versus { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: center; }
+  .versus .vs { font-size: var(--uf-size-xl); opacity: .55; }
+  .cards4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .cards2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+  .type-row { display: flex; gap: var(--uf-space-4); align-items: baseline; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<h1>@usersfirst/ui gallery</h1>
+
+<section id="tokens">
+  <h2>Tokens · colour</h2>
+  <div class="swatches" id="swatches"></div>
+  <h2>Tokens · type scale</h2>
+  <div class="type-row" id="typescale"></div>
+</section>
+
+<section id="uf-button">
+  <h2>&lt;uf-button&gt; · the one button (host is the button; children or label)</h2>
+  <div class="states">
+    <div class="state"><uf-button>SOLO RIDE</uf-button><small>default</small></div>
+    <div class="state"><uf-button variant="accent">RIDE TOGETHER</uf-button><small>variant=accent</small></div>
+    <div class="state"><uf-button variant="accent" selected>RIDE TOGETHER</uf-button><small>accent + selected</small></div>
+    <div class="state"><uf-button variant="versus">VERSUS<small>2–4 players</small></uf-button><small>variant=versus (two-line)</small></div>
+    <div class="state"><uf-button variant="danger">LEAVE ROOM</uf-button><small>variant=danger</small></div>
+    <div class="state"><uf-button variant="ghost">← Back</uf-button><small>variant=ghost</small></div>
+    <div class="state"><uf-button size="sm">Controllers ▾</uf-button><small>size=sm</small></div>
+    <div class="state"><uf-button size="xs" variant="ghost" title="Close">&times;</uf-button><small>size=xs (icon)</small></div>
+    <div class="state" style="width:260px"><uf-button size="lg" variant="accent" label="START RIDE"></uf-button><small>size=lg · label prop</small></div>
+    <div class="state"><uf-button disabled>CHOOSE LEVEL</uf-button><small>disabled</small></div>
+    <div class="state"><uf-button class="gamepad-focus">FOCUSED</uf-button><small>.gamepad-focus (controller)</small></div>
+    <div class="state w340"><uf-button id="demo-sub" size="lg" align="start" variant="accent" selected sub="Couch co-op, online or versus">RIDE TOGETHER</uf-button><small>sub + align=start (mode button)</small></div>
+    <div class="state w340"><uf-button size="lg" align="start" sub="Levels, Today’s Road and Slingshot">SOLO RIDE</uf-button><small>sub</small></div>
+    <div class="state"><uf-button size="pill" id="demo-pill"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="8"/><path d="M8 8a2 2 0 1 1 3 1.7c-.7.4-1 .8-1 1.6M10 14v.2"/></svg>Help</uf-button><small>size=pill (icon + label)</small></div>
+    <div class="state"><uf-button size="pill"><uf-controller-glyph button="home" size="sm"></uf-controller-glyph><b>DualSense</b>&nbsp;· stick</uf-button><small>pill · Controls</small></div>
+  </div>
+</section>
+
+<section id="uf-controller-glyph">
+  <h2>&lt;uf-controller-glyph&gt; · button prompts per controller family</h2>
+  <div class="states grid-300" id="glyph-table"></div>
+  <div class="states mt">
+    <div class="state"><span>Press <uf-controller-glyph id="demo-glyph-auto" button="confirm"></uf-controller-glyph> to join</span><small>family=auto (page default)</small></div>
+    <div class="state"><span><uf-controller-glyph button="confirm" family="nintendo" swap></uf-controller-glyph> swap (GameSir Cyclone)</span><small>swap trades confirm/back</small></div>
+    <div class="state"><span><uf-controller-glyph button="dpad" family="xbox"></uf-controller-glyph> <uf-controller-glyph button="dpad-h" family="keyboard"></uf-controller-glyph> <uf-controller-glyph button="lb" family="playstation"></uf-controller-glyph> <uf-controller-glyph button="rt" family="nintendo"></uf-controller-glyph></span><small>d-pad · keys · shoulders</small></div>
+    <div class="state"><uf-controller-glyph button="confirm" family="xbox" size="lg"></uf-controller-glyph><small>size=lg</small></div>
+  </div>
+</section>
+
+<section id="uf-team">
+  <h2>&lt;uf-team&gt; + &lt;uf-seat&gt; · team boxes (co-op and versus)</h2>
+  <div class="stack w640">
+    <uf-team tone="coop" heading="Your tandem" layout="row">
+      <uf-seat seat="Captain · front seat" tone="captain" who="DualSense" dev="ready" state="ready" badge="P1"></uf-seat>
+      <uf-seat seat="Stoker · back seat" tone="stoker" who="Waiting for partner…" state="open" hint="press <uf-controller-glyph button=confirm size=sm></uf-controller-glyph> on any controller"></uf-seat>
+    </uf-team>
+  </div>
+  <div class="versus mt">
+    <uf-team tone="team-a" heading="Team blue" layout="row">
+      <uf-seat seat="Player 1" tone="team-a" who="DualSense" state="joined" badge="P1" dev="press A to ready"></uf-seat>
+      <uf-seat seat="Player 3" tone="team-a" who="Switch Pro" state="candidate" hint="press <uf-controller-glyph button=confirm family=nintendo size=sm></uf-controller-glyph> to join"></uf-seat>
+    </uf-team>
+    <b class="vs">VS</b>
+    <uf-team tone="team-b" heading="Team red" layout="row">
+      <uf-seat seat="Player 2" tone="team-b" who="Steam Controller" state="ready" badge="P2" dev="ready"></uf-seat>
+      <uf-seat seat="Player 4" tone="team-b" state="open" hint="press <uf-controller-glyph button=confirm size=sm></uf-controller-glyph> on any controller"></uf-seat>
+    </uf-team>
+  </div>
+</section>
+
+<section id="uf-controller-roster">
+  <h2>&lt;uf-controller-roster&gt; · every connected controller (strip and list)</h2>
+  <uf-controller-roster id="demo-roster-strip" variant="strip" capacity="4"></uf-controller-roster>
+  <div class="gap"></div>
+  <uf-controller-roster id="demo-roster-full" variant="strip" capacity="2" heading="Full co-op"></uf-controller-roster>
+  <div class="gap"></div>
+  <uf-controller-roster id="demo-roster-list" class="w640" variant="list" selectable></uf-controller-roster>
+</section>
+
+<section id="uf-setting">
+  <h2>&lt;uf-setting&gt; · setting rows</h2>
+  <div class="stack w640">
+    <uf-setting id="demo-setting" label="Stick steering" description="Lean with the left stick" checked></uf-setting>
+    <uf-setting label="Gyro steering" description="Tilt the controller to lean" checked>
+      <div slot="detail">Steering feel <input type="range" min="0" max="100" value="50" aria-label="Steering feel"> <uf-button size="sm">Recalibrate</uf-button></div>
+    </uf-setting>
+    <uf-setting kind="value" label="Button prompts" description="✕ ◯ □ △ · picked from your controller" value="Automatic"></uf-setting>
+    <uf-setting label="Music" disabled></uf-setting>
+  </div>
+</section>
+
+<section id="uf-card">
+  <h2>&lt;uf-card&gt; · selectable cards (one row of levels)</h2>
+  <div class="cards4">
+    <uf-card icon="🚴" heading="Tutorial" description="Master pedaling and steering!" tone="muted"></uf-card>
+    <uf-card id="demo-card" icon="🏠" heading="Grandma's" description="Grandma called — she needs her presents!" footer="No ride yet · 🥇 at 0:58" selected></uf-card>
+    <uf-card icon="📅" heading="Today's Road" description="Same road for everyone today" footer="No ride yet · 🥇 at 1:30" tone="gold"></uf-card>
+    <uf-card icon="🎯" heading="Slingshot" description="Pull back, aim, let go. Earn Chaos Coins and upgrade." locked footer="Unlocks after Grandma's"></uf-card>
+  </div>
+</section>
+
+<section id="uf-join-code">
+  <h2>&lt;uf-join-code&gt; + &lt;uf-keypad&gt; · showing and typing a join code</h2>
+  <div class="states">
+    <div class="state"><uf-join-code mode="display" value="TNDM-K9NE"></uf-join-code><small>display (host)</small></div>
+    <div class="state"><uf-join-code id="demo-code" mode="entry" code-prefix="TNDM–"></uf-join-code><small>entry (joiner) · type with the keypad or a keyboard</small></div>
+  </div>
+  <div class="mt"><uf-keypad id="demo-keypad" for="demo-code"></uf-keypad></div>
+</section>
+
+<section id="uf-qr">
+  <h2>&lt;uf-qr&gt; · couch-sized QR</h2>
+  <div class="states">
+    <div class="state"><uf-qr value="https://tandemonium.jimandi.love?room=TNDM-K9NE" caption="Scan to join online" link="tandemonium.jimandi.love" size="260"></uf-qr><small>room invite</small></div>
+    <div class="state"><uf-qr id="demo-qr" value="https://tandemonium.jimandi.love/remote/?pad=AS64W5&seat=1#k=secret" link="tandemonium.jimandi.love/remote" reveal size="260"></uf-qr><small>phone remote · reveal</small></div>
+  </div>
+</section>
+
+<section id="uf-sheet">
+  <h2>&lt;uf-sheet&gt; + &lt;uf-system-bar&gt; · panels and the bottom bar</h2>
+  <div class="states">
+    <div class="state"><uf-button id="demo-sheet-open">Open the Controls sheet</uf-button><small>sheet.show() · Esc / scrim / Close / B closes</small></div>
+    <div class="state"><uf-button id="demo-bar-toggle" size="sm">Show the system bar</uf-button><small>fixed to the bottom of the page</small></div>
+  </div>
+  <uf-sheet id="demo-sheet" heading="Controls">
+    <uf-seat seat="You" tone="captain" who="DualSense" dev="Player 1 · connected" state="joined" badge="P1"></uf-seat>
+    <uf-setting label="Stick steering" description="Lean with the left stick" checked></uf-setting>
+    <uf-setting label="Gyro steering" description="Tilt the controller to lean"></uf-setting>
+    <div slot="actions"><uf-button variant="accent" id="demo-sheet-done">DONE</uf-button></div>
+  </uf-sheet>
+  <uf-system-bar id="demo-bar" back="show" hidden>
+    <uf-button size="pill" slot="start">Help</uf-button>
+    <uf-button size="pill" slot="start">Leaderboard</uf-button>
+    <uf-button size="pill" slot="end">DualSense · stick</uf-button>
+    <uf-button size="pill" slot="end">Music</uf-button>
+  </uf-system-bar>
+</section>
+
+<section id="uf-step">
+  <h2>&lt;uf-step&gt; · a screen: prompt + authored content + hint</h2>
+  <uf-step active prompt="How do you want to ride?" hint="Press a button on a controller to navigate · <b>A</b> to choose · or click" style="max-width:420px;margin:0 auto">
+    <uf-button variant="accent" selected size="lg">RIDE TOGETHER<small>Co-op · one shared tandem</small></uf-button>
+    <uf-button variant="versus" size="lg">VERSUS<small>Compete · two tandems · 1v1–2v2</small></uf-button>
+    <uf-button size="lg">SOLO RIDE<small>Just you</small></uf-button>
+  </uf-step>
+</section>
+
+<section id="uf-flow">
+  <h2>&lt;uf-flow&gt; · one active step, history, data-flow-go / data-flow-back</h2>
+  <uf-flow id="demo-flow" current="one" style="max-width:420px;margin:0 auto">
+    <uf-step id="one" prompt="Step one" hint="click to go to step two"><uf-button variant="accent" data-flow-go="two">NEXT →</uf-button></uf-step>
+    <uf-step id="two" prompt="Step two" hint="<b>B</b> back"><uf-button data-flow-go="three">NEXT →</uf-button><uf-button variant="ghost" data-flow-back>← Back</uf-button></uf-step>
+    <uf-step id="three" prompt="Step three"><uf-button variant="ghost" data-flow-back>← Back</uf-button></uf-step>
+  </uf-flow>
+  <p style="font:var(--uf-size-xs) var(--uf-font-mono);color:var(--uf-color-fg-muted);text-align:center;margin-top:8px">current: <span id="demo-flow-current"></span></p>
+</section>
+
+<section id="uf-seat">
+  <h2>&lt;uf-seat&gt; · lobby seats</h2>
+  <div class="states" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+    <div class="state"><uf-seat seat="Captain" state="open"></uf-seat><small>open · captain</small></div>
+    <div class="state"><uf-seat seat="Stoker" tone="stoker" who="DualSense" dev="press A to ready" state="joined" badge="P2"></uf-seat><small>joined · stoker</small></div>
+    <div class="state"><uf-seat seat="Captain" tone="team-a" who="Steam Controller" dev="ready" state="ready" badge="P1"></uf-seat><small>ready · team-a</small></div>
+    <div class="state"><uf-seat seat="Stoker" tone="team-b" who="Xbox" dev="press A to ready" state="joined" badge="P4"></uf-seat><small>joined · team-b</small></div>
+    <div class="state"><uf-seat seat="Stoker" who="LOCKED" dev="solo" state="locked"></uf-seat><small>locked</small></div>
+  </div>
+</section>
+
+<section id="uf-chip">
+  <h2>&lt;uf-chip&gt; · status tags</h2>
+  <div class="states">
+    <div class="state"><uf-chip>P1</uf-chip><small>neutral</small></div>
+    <div class="state"><uf-chip tone="accent">READY</uf-chip><small>accent</small></div>
+    <div class="state"><uf-chip tone="info">AVAILABLE</uf-chip><small>info</small></div>
+    <div class="state"><uf-chip tone="warn">ACTIVE</uf-chip><small>warn</small></div>
+    <div class="state"><uf-chip tone="danger" label="DISCONNECTED"></uf-chip><small>danger · label prop</small></div>
+  </div>
+</section>
+
+
+<section id="kit-04">
+  <h2>kit 0.4 · room, garage and end-of-ride pieces</h2>
+  <h2>&lt;uf-player-card&gt; + &lt;uf-achievement&gt; · the room (no video)</h2>
+  <div class="cards2">
+    <uf-player-card id="demo-player" name="Pete Gordon" subtitle="Captain · front seat" tone="captain" badge="P1">
+      <uf-achievement size="sm" icon="🏠" name="Home Sweet Home" state="earned"></uf-achievement>
+      <uf-achievement size="sm" icon="🍪" name="Cookie" state="earned"></uf-achievement>
+    </uf-player-card>
+    <uf-player-card name="Waiting for partner…" subtitle="Stoker · back seat" tone="stoker" state="waiting"></uf-player-card>
+  </div>
+  <div class="ach-grid mt">
+    <uf-achievement icon="🏠" name="Home Sweet Home" description="Reach Grandma's" state="earned"></uf-achievement>
+    <uf-achievement icon="🥇" name="Grandma's Favourite" description="Gold at Grandma's" state="new"></uf-achievement>
+    <uf-achievement icon="🎯" name="Sharpshooter" description="Land 10 slingshot targets" state="progress" progress="0.4"></uf-achievement>
+    <uf-achievement icon="❔" name="???" description="A hidden achievement" state="locked"></uf-achievement>
+  </div>
+  <h2>&lt;uf-card layout=row&gt; + &lt;uf-pips&gt; · the garage</h2>
+  <div class="stack w640">
+    <uf-card id="demo-upgrade" layout="row" icon="🎯" heading="Slingshot" description="Thicker bands, faster launch" level="3" level-max="10" meta="🪙 40" meta-detail="+42 m"></uf-card>
+    <uf-card layout="row" icon="🛞" heading="Tyres &amp; frame" description="Less rolling drag and less wind drag" level="0" level-max="10" meta="🪙 70" meta-detail="+26 m"></uf-card>
+    <uf-card layout="row" icon="🪙" heading="Coin multiplier" description="Every ride, every mode pays more" level="10" level-max="10" meta="MAX" locked></uf-card>
+  </div>
+  <h2>&lt;uf-stat&gt; + &lt;uf-ledger&gt; in a headline &lt;uf-sheet&gt; · end of ride</h2>
+  <div class="states">
+    <div class="state"><uf-button id="demo-result-open">Open "You made it!"</uf-button><small>sheet headline tone=accent</small></div>
+  </div>
+  <div class="stat-grid mt">
+    <uf-stat icon="⏱️" value="18s" label="Time"></uf-stat>
+    <uf-stat icon="🚴" value="40 m" label="Distance"></uf-stat>
+    <uf-stat icon="🎁" value="1" label="Presents"></uf-stat>
+    <uf-stat icon="🥇" value="Gold" label="Medal" tone="gold" emphasis></uf-stat>
+  </div>
+  <div class="cards2 mt w640">
+    <uf-stat variant="card" tone="team-a" label="Team blue" value="11s" detail="0 crashes · 🎁 0"></uf-stat>
+    <uf-stat variant="card" tone="team-b" label="Team red" value="DNF · 19 m" detail="0 crashes · 🎁 0"></uf-stat>
+  </div>
+  <div class="mt w640"><uf-ledger id="demo-ledger" heading="Chaos Coins" unit="🪙"></uf-ledger></div>
+  <uf-sheet id="demo-result" heading="You made it!" tone="accent" headline size="lg">
+    <div class="stat-grid">
+      <uf-stat icon="⏱️" value="18s" label="Time"></uf-stat><uf-stat icon="🚴" value="40 m" label="Distance"></uf-stat>
+      <uf-stat icon="💥" value="1" label="Crashes"></uf-stat><uf-stat icon="🥇" value="Gold" label="Medal" tone="gold" emphasis></uf-stat>
+    </div>
+    <uf-ledger id="demo-ledger-2" heading="Chaos Coins" unit="🪙"></uf-ledger>
+    <div class="ach-grid"><uf-achievement size="sm" icon="🥇" name="Grandma's Favourite" state="new"></uf-achievement><uf-achievement size="sm" icon="🍪" name="Cookie" state="new"></uf-achievement></div>
+    <div slot="actions"><uf-button>PLAY AGAIN</uf-button><uf-button variant="accent">NEXT LEVEL</uf-button></div>
+  </uf-sheet>
+  <uf-pips value="3" max="10"></uf-pips> <uf-pips value="5" max="5" tone="accent"></uf-pips>
+</section>
+
+<!-- uf:elements -->
+
+<script type="module">
+  import './src/index.js';
+  const cs = getComputedStyle(document.documentElement);
+  const names = ['bg','surface','surface-2','line','fg','fg-muted','accent','accent-2','danger','info','versus','captain','stoker','team-a','team-b'];
+  document.getElementById('swatches').innerHTML = names.map((n) => `<div class="sw" style="background:var(--uf-color-${n})">--uf-color-${n}<br>${cs.getPropertyValue('--uf-color-' + n).trim()}</div>`).join('');
+  const f = document.getElementById('demo-flow'); const out = document.getElementById('demo-flow-current');
+  const show = () => { out.textContent = f.current + (f.canBack ? '  (history: ' + f.history.join(' › ') + ')' : ''); };
+  f.addEventListener('uf-flow:change', show); queueMicrotask(() => queueMicrotask(show));
+  // uf-controller-glyph: every family × the main roles.
+  const fams = ['playstation', 'xbox', 'nintendo', 'steam', 'generic', 'keyboard'];
+  document.getElementById('glyph-table').innerHTML = fams.map((fam) =>
+    `<div class="state"><span>${['confirm', 'back', 'alt', 'extra', 'menu', 'lb'].map((b) => `<uf-controller-glyph button="${b}" family="${fam}"></uf-controller-glyph>`).join(' ')}</span><small>${fam}</small></div>`).join('');
+  // uf-controller-roster: rows shaped like core's controllerRoster() output. Seat
+  // words are the app's (label + tone); here, Tandemonium's.
+  const rows = [
+    { key: 's:P1', name: 'Sony DualSense', shortName: 'DualSense', state: 'ready', player: 1, seat: { team: 'a', role: 'captain', label: 'P1', tone: 'team-a' }, glyphFamily: 'playstation', connection: 'bluetooth', active: true, detail: '054c:0ce6' },
+    { key: 's:P2', name: 'Steam Controller 2026 (via Puck)', shortName: 'Steam Controller', state: 'seated', player: 2, seat: { team: 'b', role: 'captain', label: 'P2', tone: 'team-b' }, glyphFamily: 'steam', connection: 'puck', active: false, detail: '28de:1304' },
+    { key: 's:P3', name: 'Nintendo Switch Pro', shortName: 'Switch Pro', state: 'joined', player: 3, seat: null, glyphFamily: 'nintendo', connection: 'gamepad', active: false },
+    { key: 'g:3', name: 'GameSir Super Nova (DS4 mode)', shortName: 'Super Nova', state: 'connected', player: null, seat: null, glyphFamily: 'playstation', connection: 'usb', active: false, detail: '054c:09cc' },
+    { key: 'g:4', name: 'Xbox Series X|S', shortName: 'Xbox Series', state: 'connected', player: null, seat: null, glyphFamily: 'xbox', connection: 'gamepad', active: false },
+    { key: 'k', name: 'Keyboard', shortName: 'Keyboard', state: 'connected', player: null, seat: null, glyphFamily: 'keyboard', connection: 'keyboard', active: false },
+  ];
+  document.getElementById('demo-roster-strip').rows = rows;
+  document.getElementById('demo-roster-full').rows = rows.map((r, i) => (i < 2 ? { ...r, seat: { ...r.seat, team: 'coop', label: i ? 'Stoker' : 'Captain', tone: i ? 'stoker' : 'captain' } } : r));
+  document.getElementById('demo-roster-list').rows = rows;
+  // uf-sheet + uf-system-bar demos.
+  const sheet = document.getElementById('demo-sheet');
+  document.getElementById('demo-sheet-open').addEventListener('click', () => sheet.show());
+  document.getElementById('demo-sheet-done').addEventListener('click', () => sheet.close());
+  const bar = document.getElementById('demo-bar');
+  document.getElementById('demo-bar-toggle').addEventListener('click', () => { bar.hidden = !bar.hidden; });
+  for (const id of ['demo-ledger', 'demo-ledger-2']) { const l = document.getElementById(id); l.items = [{ label: 'Distance (40 m)', amount: 0 }, { label: 'Finished', amount: 25 }, { label: 'Gold medal', amount: 100 }]; l.balance = 138; }
+  document.getElementById('demo-player').stats = [{ value: 42, label: 'Rides' }, { value: 9, label: 'Golds' }, { value: 17, label: 'Achievements' }];
+  const res = document.getElementById('demo-result'); document.getElementById('demo-result-open').addEventListener('click', () => res.show());
+  document.getElementById('typescale').innerHTML = ['xs','sm','md','lg','xl','2xl'].map((s) => `<span style="font-size:var(--uf-size-${s})">${s} ${cs.getPropertyValue('--uf-size-' + s).trim()}</span>`).join('');
+</script>
+</body>
+</html>
