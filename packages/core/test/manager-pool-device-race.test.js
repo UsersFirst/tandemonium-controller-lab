@@ -12,21 +12,24 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { ControllerManager } from '../src/manager.js';
-import { ControllerRegistry } from '../src/drivers/controller-registry.js';
-
-const fakeDriver = () => ({ connectionType: 'usb', destroy() {}, disconnect() {} });
-
-async function withSlowConnect(fn) {
-  const orig = ControllerRegistry.connect;
+// Stand in for the slow part (driver connect + lazy SensorFusion, which pulls
+// in three) on this manager: it takes a while, then adds one pool entry.
+async function withSlowConnect(m, fn) {
   let connects = 0;
-  ControllerRegistry.connect = async () => { connects++; await new Promise((r) => setTimeout(r, 30)); return fakeDriver(); };
-  try { await fn(() => connects); } finally { ControllerRegistry.connect = orig; }
+  m._poolDeviceNow = async (device) => {
+    connects++;
+    await new Promise((r) => setTimeout(r, 30));
+    const entry = { device, destroy() {} };
+    m._hidPool.set(device, entry);
+    return entry;
+  };
+  await fn(() => connects);
 }
 
 test('two concurrent poolDevice calls for one device connect once and return the same entry', async () => {
   const m = new ControllerManager({ slotIds: ['P1', 'P2'] });
   const device = { vendorId: 0x054c, productId: 0x0ce6, productName: 'DualSense Wireless Controller', collections: [], opened: true, addEventListener() {}, removeEventListener() {} };
-  await withSlowConnect(async (connects) => {
+  await withSlowConnect(m, async (connects) => {
     const [a, b] = await Promise.all([m.poolDevice(device), m.poolDevice(device)]);
     assert.ok(a, 'pooled');
     assert.equal(a, b, 'both callers get the same entry');
@@ -44,7 +47,7 @@ test('connectHidForSlot racing autoPoolApprovedHid pools the device once', async
     value: { hid: { getDevices: async () => [device], requestDevice: async () => [], addEventListener() {}, removeEventListener() {} } },
   });
   try {
-    await withSlowConnect(async (connects) => {
+    await withSlowConnect(m, async (connects) => {
       await Promise.all([m.autoPoolApprovedHid(), m.connectHidForSlot('P1', { prompt: false })]);
       assert.equal(connects(), 1, 'one driver connect for one controller');
       const held = [...m._hidPool.values()].filter((e) => e.device === device).length
