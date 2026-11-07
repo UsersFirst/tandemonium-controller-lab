@@ -4,6 +4,9 @@
 // Maintained by tools/ui-kit/new-element.mjs — one entry per element.
 
 // uf:elements-imports
+import type { UfAchievementSheet } from './elements/uf-achievement-sheet.js';
+import type { UfAchievementDetail } from './elements/uf-achievement-detail.js';
+import type { UfAchievementGrid } from './elements/uf-achievement-grid.js';
 import type { UfPips } from './elements/uf-pips.js';
 import type { UfPlayerCard } from './elements/uf-player-card.js';
 import type { UfAchievement } from './elements/uf-achievement.js';
@@ -28,6 +31,9 @@ import type { UfButton } from './elements/uf-button.js';
 declare global {
   interface HTMLElementTagNameMap {
     // uf:elements-map
+    'uf-achievement-sheet': UfAchievementSheet;
+    'uf-achievement-detail': UfAchievementDetail;
+    'uf-achievement-grid': UfAchievementGrid;
     'uf-pips': UfPips;
     'uf-player-card': UfPlayerCard;
     'uf-achievement': UfAchievement;

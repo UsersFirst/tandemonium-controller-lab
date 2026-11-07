@@ -500,3 +500,104 @@ test('uf-sheet: a tall body scrolls inside the card; the card never runs off the
   assert.ok(r.cardBottom <= r.vh, `card bottom ${r.cardBottom} within ${r.vh}`);
   assert.ok(r.okBottom <= r.vh, 'the action row stays on screen');
 });
+
+const frames = (n = 2) => ev((k) => new Promise((res) => { const step = (i) => (i ? requestAnimationFrame(() => step(i - 1)) : res()); step(k); }), n);
+
+test('uf-achievement-grid: n of N, sections with counts, earned/locked/progress tiles, select event', skip, async () => {
+  const r = await ev(async () => {
+    const g = document.getElementById('demo-ach-grid');
+    await new Promise((res) => queueMicrotask(res));
+    const tiles = [...g.querySelectorAll('.uag-item')];
+    let picked = null;
+    g.addEventListener('uf-achievement-grid:select', (e) => { picked = e.detail.id; }, { once: true });
+    g.tile('boxcars').click();
+    return {
+      count: g.querySelector('.uag-count').textContent,
+      sections: [...g.querySelectorAll('.uag-section-title')].map((t) => t.textContent),
+      earned: tiles.filter((t) => t.classList.contains('earned')).map((t) => t.dataset.ach),
+      progress: g.tile('full_set').querySelector('.uag-progress')?.textContent,
+      buttons: tiles.every((t) => t.tagName === 'BUTTON' && t.getAttribute('aria-label')),
+      picked, focusables: g.focusables().length,
+    };
+  });
+  assert.equal(r.count, '3 / 8 Unlocked');
+  assert.deepEqual(r.sections, ['Firsts 3/5', 'Streaks 0/3']);
+  assert.deepEqual(r.earned, ['first_roll', 'lucky_seven', 'snake_eyes']);
+  assert.equal(r.progress, '4/6 doubles');
+  assert.ok(r.buttons, 'every badge is a labelled button');
+  assert.equal(r.picked, 'boxcars');
+  assert.equal(r.focusables, 8);
+});
+
+test('uf-achievement-detail: state, kicker, date, progress bar, number and ID', skip, async () => {
+  const r = await ev(() => {
+    const read = (id) => { const d = document.getElementById(id); return {
+      state: d.dataset.state, kicker: d.querySelector('.uad-kicker')?.textContent, status: d.querySelector('.uad-status')?.textContent,
+      count: d.querySelector('.uad-count')?.textContent ?? null, id: d.querySelector('.uad-id')?.textContent ?? null, bar: !!d.querySelector('.uad-bar') }; };
+    return { earned: read('demo-ach-earned'), progress: read('demo-ach-progress'), locked: read('demo-ach-locked') };
+  });
+  assert.deepEqual(r.earned, { state: 'earned', kicker: 'Achievement unlocked', status: 'Unlocked November 7, 2026', count: 'No. 5 of 22', id: 'first_roll', bar: false });
+  assert.equal(r.progress.state, 'progress'); assert.equal(r.progress.status, '4 / 6 doubles'); assert.equal(r.progress.bar, true);
+  assert.deepEqual(r.locked, { state: 'locked', kicker: 'Locked', status: 'Not yet', count: null, id: null, bar: false });
+});
+
+test('uf-achievement-sheet: grid → card (section heading, ID) → Esc back to the grid on the same badge → Esc closes, focus returns', skip, async () => {
+  await ev(() => { document.getElementById('demo-ach-open').focus(); document.getElementById('demo-ach-sheet').show(); });
+  await frames(3);
+  const opened = await ev(() => { const s = document.getElementById('demo-ach-sheet'); return { open: s.open, active: document.activeElement?.dataset?.ach }; });
+  assert.equal(opened.open, true);
+  assert.equal(opened.active, 'first_roll', 'focus starts on the first badge');
+  await ev(() => document.getElementById('demo-ach-sheet').gridElement.tile('hot_hand').click());
+  await page.waitForFunction(() => document.getElementById('demo-ach-sheet').detailOpen, { timeout: 3000 });
+  const card = await ev(() => { const s = document.getElementById('demo-ach-sheet'); return {
+    heading: s.querySelector('.uas-detail .uf-sheet__title').textContent, id: s.detailElement.querySelector('.uad-id').textContent,
+    count: s.detailElement.querySelector('.uad-count').textContent, lifts: document.querySelectorAll('.uas-lift').length }; });
+  assert.deepEqual(card, { heading: 'Streaks', id: 'hot_hand', count: 'No. 6 of 8', lifts: 0 });
+  await page.keyboard.press('Escape');
+  await frames(3);
+  const back = await ev(() => { const s = document.getElementById('demo-ach-sheet'); return { open: s.open, detail: s.detailOpen, active: document.activeElement?.dataset?.ach,
+    dim: s.querySelector('.uas-list .uf-sheet__body').classList.contains('uas-dim') }; });
+  assert.deepEqual(back, { open: true, detail: false, active: 'hot_hand', dim: false }, 'Esc on the card goes back to the grid only');
+  await page.keyboard.press('Escape');
+  await frames(2);
+  const closed = await ev(() => ({ open: document.getElementById('demo-ach-sheet').open, active: document.activeElement?.id }));
+  assert.deepEqual(closed, { open: false, active: 'demo-ach-open' });
+});
+
+test('uf-achievement-sheet + FocusController: badges are the scope, A opens a card, B goes back to the badge, B again closes', skip, async () => {
+  const r = await ev(async () => {
+    const { FocusController, ManualInput } = await import('./src/index.js');
+    const raf = (n = 3) => new Promise((res) => { const step = (i) => (i ? requestAnimationFrame(() => step(i - 1)) : res()); step(n); });
+    const host = document.createElement('div');
+    host.innerHTML = '<uf-achievement-sheet id="t-ach"></uf-achievement-sheet>';
+    document.body.appendChild(host);
+    const s = document.getElementById('t-ach');
+    s.achievements = [
+      { id: 'a', name: 'A', icon: '🅰️', earned: true }, { id: 'b', name: 'B', icon: '🅱️' }, { id: 'c', name: 'C', icon: '©️' },
+    ];
+    const input = new ManualInput();
+    let outerBack = 0;
+    const fc = new FocusController({ input, onBack: () => outerBack++ });
+    s.attachFocus(fc);
+    const tap = async (k) => { input.press(k); fc.poll(); input.release(k); fc.poll(); await raf(); };
+    s.show(); await raf();
+    const out = { scope: fc.items.map((el) => el.dataset.ach || el.className), first: fc.focusedEl?.dataset.ach };
+    await tap('right');
+    out.moved = fc.focusedEl?.dataset.ach;
+    await tap('a');
+    await new Promise((res) => setTimeout(res, 800));
+    out.cardOpen = s.detailOpen; out.cardId = s.detailId;
+    await tap('b');
+    out.afterB = { card: s.detailOpen, grid: s.open, focus: fc.focusedEl?.dataset.ach };
+    await tap('b');
+    out.afterB2 = { grid: s.open, outerBack };
+    host.remove();
+    return out;
+  });
+  assert.deepEqual(r.scope.filter((x) => x.length === 1), ['a', 'b', 'c'], 'every badge (plus the sheet Close) is in scope');
+  assert.equal(r.first, 'a');
+  assert.equal(r.moved, 'b');
+  assert.equal(r.cardOpen, true); assert.equal(r.cardId, 'b');
+  assert.deepEqual(r.afterB, { card: false, grid: true, focus: 'b' });
+  assert.deepEqual(r.afterB2, { grid: false, outerBack: 0 }, 'B closed the sheet, not the page behind it');
+});

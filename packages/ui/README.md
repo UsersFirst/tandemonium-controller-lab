@@ -29,9 +29,14 @@ Typed, build-free Web Components and design tokens shared by Tandemonium and the
 | `uf-qr` | couch-sized QR (vendored `qrcode-generator`, MIT — `src/third_party/`) |
 | `uf-player-card` | who a player is: avatar or initials, name, seat line, stats, extra content (room, level summary) |
 | `uf-achievement` | one achievement: earned · new · locked · progress; sm row or md card |
+| `uf-achievement-grid` | every achievement as buttons by section, "n / N Unlocked"; `.achievements` + `.sections`; emits `uf-achievement-grid:select` |
+| `uf-achievement-detail` | one achievement's card: badge, name, description, unlocked date / locked / progress bar, "No. n of N", its ID (`show-id`) |
+| `uf-achievement-sheet` | the grid in a `uf-sheet`; a badge lifts into its detail card; Back steps card → grid → closed; `attachFocus()` |
 | `uf-stat` | one figure (icon, value, label); `variant=card` for team results |
 | `uf-ledger` | earnings: line items, total, balance (coins, points…) |
 | `uf-pips` | a level as dots (3 of 10) |
+
+0.5 adds the achievements set (`uf-achievement-grid`, `uf-achievement-detail`, `uf-achievement-sheet`), data-driven so any game (Tandemonium's 100, 7, 11, Doubles' 22) shows its own list.
 
 0.4 also adds `uf-card layout=row` (+ `meta`, `level`/`levelMax` pips) for upgrade lists and `uf-sheet tone` + `headline` for result screens.
 
