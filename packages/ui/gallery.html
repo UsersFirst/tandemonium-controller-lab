@@ -22,6 +22,7 @@
   section { border: 1px solid var(--uf-color-line); border-radius: var(--uf-radius-lg); padding: var(--uf-space-4); margin-bottom: var(--uf-space-4); }
   .states { display: flex; flex-wrap: wrap; gap: var(--uf-space-3); align-items: center; }
   .state { display: flex; flex-direction: column; gap: var(--uf-space-1); align-items: flex-start; }
+  .state-ach { max-width: 30em; }  .state-ach-tv { max-width: 40em; }
   .state small { font: var(--uf-size-xs) var(--uf-font-mono); color: var(--uf-color-fg-muted); }
   .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--uf-space-2); }
   .sw { height: 56px; border-radius: var(--uf-radius-sm); border: 1px solid var(--uf-color-line); display: flex; align-items: flex-end; padding: var(--uf-space-1) var(--uf-space-2); font: var(--uf-size-xs) var(--uf-font-mono); text-shadow: 0 1px 2px #000; }
@@ -262,8 +263,8 @@
 <section id="uf-achievement-grid">
   <h2>&lt;uf-achievement-grid&gt; · every achievement as buttons, by section, with n of N</h2>
   <div class="states">
-    <div class="state" style="max-width:30em"><uf-achievement-grid id="demo-ach-grid"></uf-achievement-grid><small>sections · earned · locked · progress</small></div>
-    <div class="state" style="max-width:40em"><uf-achievement-grid id="demo-ach-grid-tv" size="tv"></uf-achievement-grid><small>size=tv · no sections</small></div>
+    <div class="state state-ach"><uf-achievement-grid id="demo-ach-grid"></uf-achievement-grid><small>sections · earned · locked · progress</small></div>
+    <div class="state state-ach-tv"><uf-achievement-grid id="demo-ach-grid-tv" size="tv"></uf-achievement-grid><small>size=tv · no sections</small></div>
   </div>
 </section>
 
