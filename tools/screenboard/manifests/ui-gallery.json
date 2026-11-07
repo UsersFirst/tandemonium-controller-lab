@@ -63,6 +63,24 @@
       "title": "Gallery · <uf-chip>",
       "clip": "#uf-chip",
       "ops": []
+    },
+    {
+      "id": "uf-achievement-grid",
+      "title": "Gallery · <uf-achievement-grid>",
+      "clip": "#uf-achievement-grid",
+      "ops": []
+    },
+    {
+      "id": "uf-achievement-detail",
+      "title": "Gallery · <uf-achievement-detail>",
+      "clip": "#uf-achievement-detail",
+      "ops": []
+    },
+    {
+      "id": "uf-achievement-sheet",
+      "title": "Gallery · <uf-achievement-sheet>",
+      "clip": "#uf-achievement-sheet",
+      "ops": []
     }
   ]
 }
