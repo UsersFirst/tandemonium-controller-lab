@@ -30,3 +30,4 @@ export { UfSeat } from './elements/uf-seat.js';
 export { UfFlow } from './elements/uf-flow.js';
 export { UfStep } from './elements/uf-step.js';
 export { UfButton } from './elements/uf-button.js';
+export { UfPerson, personTag, PERSON_SOURCES } from './elements/uf-person.js';

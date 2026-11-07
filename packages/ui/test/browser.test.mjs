@@ -601,3 +601,50 @@ test('uf-achievement-sheet + FocusController: badges are the scope, A opens a ca
   assert.deepEqual(r.afterB, { card: false, grid: true, focus: 'b' });
   assert.deepEqual(r.afterB2, { grid: false, outerBack: 0 }, 'B closed the sheet, not the page behind it');
 });
+
+test('uf-person: picture, sign-in badge and name; uf-seat and uf-controller-roster show it next to the controller', skip, async () => {
+  const r = await ev(async () => {
+    const raf = () => new Promise((res) => requestAnimationFrame(() => res(null)));
+    const p = document.createElement('uf-person');
+    Object.assign(p, { name: 'Sam <b>', pic: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', source: 'discord' });
+    document.body.appendChild(p); await raf();
+    const out = {
+      name: p.querySelector('.uf-person__name')?.textContent,
+      img: !!p.querySelector('.uf-person__pic img'),
+      badge: p.querySelector('.uf-person__src')?.getAttribute('aria-label'),
+      title: p.title,
+    };
+    p.pic = ''; p.source = 'steam'; await raf();
+    out.bare = !!p.querySelector('.uf-person__pic--bare .uf-person__src') && !p.querySelector('img');
+    out.steam = p.querySelector('.uf-person__src')?.getAttribute('aria-label');
+    p.source = ''; await raf();
+    out.plain = p.innerHTML.indexOf('uf-person__pic') === -1;
+    p.remove();
+    const seat = document.createElement('uf-seat');
+    Object.assign(seat, { seat: 'Player 2', who: 'Sam', state: 'joined', dev: 'DualSense' });
+    document.body.appendChild(seat); await raf();
+    out.seatPlain = !seat.querySelector('uf-person');
+    seat.source = 'discord'; await raf();
+    out.seatPerson = seat.querySelector('.uf-seat__who uf-person')?.getAttribute('name');
+    seat.remove();
+    const ro = document.createElement('uf-controller-roster');
+    document.body.appendChild(ro);
+    ro.rows = [{ key: 'p2', shortName: 'DualSense', state: 'seated', player: 2, person: { name: 'Sam', source: 'discord' } }, { key: 'x', shortName: 'Switch Pro', state: 'connected' }];
+    await raf();
+    const chips = [...ro.querySelectorAll('.ucr-chip')];
+    out.chip = { person: chips[0].querySelector('uf-person')?.getAttribute('name'), pad: chips[0].querySelector('em')?.textContent, other: !chips[1].querySelector('uf-person') };
+    ro.rows = [{ key: 'p2', shortName: 'DualSense', state: 'seated', player: 2, person: null }, { key: 'x', shortName: 'Switch Pro', state: 'connected' }];
+    await raf();
+    out.signedOut = !ro.querySelector('uf-person');
+    ro.remove();
+    return out;
+  });
+  assert.equal(r.name, 'Sam <b>', 'the name is text, never markup');
+  assert.equal(r.img, true); assert.equal(r.badge, 'Discord'); assert.equal(r.title, 'Sam <b> · Discord');
+  assert.equal(r.bare, true, 'no picture: the badge alone'); assert.equal(r.steam, 'Steam');
+  assert.equal(r.plain, true, 'no picture, no source: just the name');
+  assert.equal(r.seatPlain, true, 'a seat without pic/source is unchanged');
+  assert.equal(r.seatPerson, 'Sam');
+  assert.deepEqual(r.chip, { person: 'Sam', pad: 'DualSense', other: true });
+  assert.equal(r.signedOut, true, 'a row that loses its person re-renders without it');
+});
