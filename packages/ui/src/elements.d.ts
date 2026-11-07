@@ -24,6 +24,7 @@ import type { UfTeam } from './elements/uf-team.js';
 import type { UfControllerGlyph } from './elements/uf-controller-glyph.js';
 import type { UfChip } from './elements/uf-chip.js';
 import type { UfSeat } from './elements/uf-seat.js';
+import type { UfPerson } from './elements/uf-person.js';
 import type { UfFlow } from './elements/uf-flow.js';
 import type { UfStep } from './elements/uf-step.js';
 import type { UfButton } from './elements/uf-button.js';
@@ -51,6 +52,7 @@ declare global {
     'uf-controller-glyph': UfControllerGlyph;
     'uf-chip': UfChip;
     'uf-seat': UfSeat;
+    'uf-person': UfPerson;
     'uf-flow': UfFlow;
     'uf-step': UfStep;
     'uf-button': UfButton;
