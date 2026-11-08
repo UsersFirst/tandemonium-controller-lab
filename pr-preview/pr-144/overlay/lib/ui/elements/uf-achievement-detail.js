@@ -38,11 +38,18 @@ export function longDate(when) {
 const fmt = (/** @type {number} */ v) => Math.floor(v).toLocaleString('en-US');
 
 /**
- * The card's state, kicker and status line for an achievement.
+ * The card's state, kicker and status line for an achievement (an item's own
+ * `kicker` / `status` win over the ones its state gives).
  * @param {AchievementItem} a
  * @returns {{ state: 'earned'|'secret'|'full'|'progress'|'locked', kicker: string, status: string }}
  */
 export function detailState(a) {
+  const s = baseState(a);
+  return { state: s.state, kicker: a.kicker || s.kicker, status: a.status || s.status };
+}
+
+/** @param {AchievementItem} a @returns {{ state: 'earned'|'secret'|'full'|'progress'|'locked', kicker: string, status: string }} */
+function baseState(a) {
   if (isEarned(a)) {
     const date = longDate(a.earnedAt);
     return { state: 'earned', kicker: 'Achievement unlocked', status: date ? 'Unlocked ' + date : 'Unlocked' };
