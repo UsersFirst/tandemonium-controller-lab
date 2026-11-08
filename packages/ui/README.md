@@ -31,11 +31,13 @@ Typed, build-free Web Components and design tokens shared by Tandemonium and the
 | `uf-player-card` | who a player is: avatar or initials, name, seat line, stats, extra content (room, level summary) |
 | `uf-achievement` | one achievement: earned · new · locked · progress; sm row or md card |
 | `uf-achievement-grid` | every achievement as buttons by section, "n / N Unlocked"; `.achievements` + `.sections`; emits `uf-achievement-grid:select` |
-| `uf-achievement-detail` | one achievement's card: badge, name, description, unlocked date / locked / progress bar, "No. n of N", its ID (`show-id`) |
+| `uf-achievement-detail` | one achievement's card: badge, name, description, unlocked date / locked / progress bar, "No. n of N", its ID (`show-id`); `extraHtml` / `footHtml` for a game's own lines |
 | `uf-achievement-sheet` | the grid in a `uf-sheet`; a badge lifts into its detail card; Back steps card → grid → closed; `attachFocus()` |
 | `uf-stat` | one figure (icon, value, label); `variant=card` for team results |
 | `uf-ledger` | earnings: line items, total, balance (coins, points…) |
 | `uf-pips` | a level as dots (3 of 10) |
+
+0.6.1 adds `uf-achievement-detail` `.footHtml` (a game's own line under the status and its bar: Tandemonium's "Best: Daily Ride · date, time") and an item's own `kicker` / `status` for the card (Tandemonium's "Earned with a friend").
 
 0.6 adds `uf-person`: seats and controller rosters show the signed-in player (picture + sign-in badge) next to the controller.
 
