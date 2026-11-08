@@ -22,6 +22,7 @@
   section { border: 1px solid var(--uf-color-line); border-radius: var(--uf-radius-lg); padding: var(--uf-space-4); margin-bottom: var(--uf-space-4); }
   .states { display: flex; flex-wrap: wrap; gap: var(--uf-space-3); align-items: center; }
   .state { display: flex; flex-direction: column; gap: var(--uf-space-1); align-items: flex-start; }
+  .state-ach { max-width: 30em; }  .state-ach-tv { max-width: 40em; }
   .state small { font: var(--uf-size-xs) var(--uf-font-mono); color: var(--uf-color-fg-muted); }
   .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--uf-space-2); }
   .sw { height: 56px; border-radius: var(--uf-radius-sm); border: 1px solid var(--uf-color-line); display: flex; align-items: flex-end; padding: var(--uf-space-1) var(--uf-space-2); font: var(--uf-size-xs) var(--uf-font-mono); text-shadow: 0 1px 2px #000; }
@@ -90,6 +91,7 @@
   <div class="versus mt">
     <uf-team tone="team-a" heading="Team blue" layout="row">
       <uf-seat seat="Player 1" tone="team-a" who="DualSense" state="joined" badge="P1" dev="press A to ready"></uf-seat>
+      <uf-seat id="t-person-seat" seat="Player 2" tone="team-a" who="Sam" source="discord" dev="DualSense" state="joined" badge="P2"></uf-seat>
       <uf-seat seat="Player 3" tone="team-a" who="Switch Pro" state="candidate" hint="press <uf-controller-glyph button=confirm family=nintendo size=sm></uf-controller-glyph> to join"></uf-seat>
     </uf-team>
     <b class="vs">VS</b>
@@ -259,6 +261,30 @@
   <uf-pips value="3" max="10"></uf-pips> <uf-pips value="5" max="5" tone="accent"></uf-pips>
 </section>
 
+<section id="uf-achievement-grid">
+  <h2>&lt;uf-achievement-grid&gt; · every achievement as buttons, by section, with n of N</h2>
+  <div class="states">
+    <div class="state state-ach"><uf-achievement-grid id="demo-ach-grid"></uf-achievement-grid><small>sections · earned · locked · progress</small></div>
+    <div class="state state-ach-tv"><uf-achievement-grid id="demo-ach-grid-tv" size="tv"></uf-achievement-grid><small>size=tv · no sections</small></div>
+  </div>
+</section>
+
+<section id="uf-achievement-detail">
+  <h2>&lt;uf-achievement-detail&gt; · one achievement's card, with its ID</h2>
+  <div class="states">
+    <div class="state"><uf-achievement-detail id="demo-ach-earned" number="5" total="22"></uf-achievement-detail><small>earned</small></div>
+    <div class="state"><uf-achievement-detail id="demo-ach-progress" number="9" total="22"></uf-achievement-detail><small>progress</small></div>
+    <div class="state"><uf-achievement-detail id="demo-ach-locked" show-id="false"></uf-achievement-detail><small>locked · show-id=false</small></div>
+  </div>
+</section>
+
+<section id="uf-achievement-sheet">
+  <h2>&lt;uf-achievement-sheet&gt; · the grid in a sheet; a badge opens its card (B / Esc go back)</h2>
+  <div class="states">
+    <div class="state"><uf-button id="demo-ach-open" variant="accent">ACHIEVEMENTS 3/8</uf-button><uf-achievement-sheet id="demo-ach-sheet"></uf-achievement-sheet><small>opens the sheet</small></div>
+  </div>
+</section>
+
 <!-- uf:elements -->
 
 <script type="module">
@@ -295,6 +321,28 @@
   for (const id of ['demo-ledger', 'demo-ledger-2']) { const l = document.getElementById(id); l.items = [{ label: 'Distance (40 m)', amount: 0 }, { label: 'Finished', amount: 25 }, { label: 'Gold medal', amount: 100 }]; l.balance = 138; }
   document.getElementById('demo-player').stats = [{ value: 42, label: 'Rides' }, { value: 9, label: 'Golds' }, { value: 17, label: 'Achievements' }];
   const res = document.getElementById('demo-result'); document.getElementById('demo-result-open').addEventListener('click', () => res.show());
+  // Achievements: one data set for the grid, the cards and the sheet.
+  const achSections = [{ id: 'firsts', title: 'Firsts' }, { id: 'streaks', title: 'Streaks' }];
+  const achItems = [
+    { id: 'first_roll', name: 'First Roll', description: 'Roll the dice', icon: '🎲', section: 'firsts', earnedAt: '2026-11-07 15:00:00' },
+    { id: 'lucky_seven', name: 'Lucky Seven', description: 'Score a 7', icon: '7️⃣', section: 'firsts', earnedAt: 1762527600000 },
+    { id: 'snake_eyes', name: 'Snake Eyes', description: 'Roll double 1s', icon: '🐍', section: 'firsts', earned: true },
+    { id: 'boxcars', name: 'Boxcars', description: 'Roll double 6s', icon: '🚃', section: 'firsts' },
+    { id: 'full_set', name: 'The Full Set', description: 'Roll all six doubles', icon: '🎰', section: 'firsts', progress: [4, 6], unit: 'doubles' },
+    { id: 'hot_hand', name: 'Hot Hand', description: 'Score 3 in a row', icon: '🔥', section: 'streaks' },
+    { id: 'secret', name: '???', description: 'A hidden one', icon: '❔', section: 'streaks', secret: true },
+    { id: 'full_only', name: 'Unstoppable', description: 'Score 8 in a row', icon: '🚀', section: 'streaks', unavailable: 'Full game', unavailableNote: 'Unlocks in the full game' },
+  ];
+  document.getElementById('demo-ach-grid').sections = achSections;
+  document.getElementById('demo-ach-grid').achievements = achItems;
+  document.getElementById('demo-ach-grid-tv').achievements = achItems.slice(0, 5);
+  document.getElementById('demo-ach-earned').achievement = achItems[0];
+  document.getElementById('demo-ach-progress').achievement = achItems[4];
+  document.getElementById('demo-ach-progress').footHtml = '<div class="uad-foot">Best: Table 3 · November 6, 2026</div>';
+  document.getElementById('demo-ach-locked').achievement = achItems[3];
+  const achSheet = document.getElementById('demo-ach-sheet');
+  achSheet.sections = achSections; achSheet.achievements = achItems;
+  document.getElementById('demo-ach-open').addEventListener('click', () => achSheet.show());
   document.getElementById('typescale').innerHTML = ['xs','sm','md','lg','xl','2xl'].map((s) => `<span style="font-size:var(--uf-size-${s})">${s} ${cs.getPropertyValue('--uf-size-' + s).trim()}</span>`).join('');
 </script>
 </body>
