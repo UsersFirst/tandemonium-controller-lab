@@ -8,6 +8,7 @@ Vendor-agnostic gamepad drivers, WebHID sensor fusion, and the slot/claim `Contr
 | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `@usersfirst/controller-core`                              | Barrel: `ControllerManager`, `SensorFusion`, all drivers + registry, `DEVICES`, `PROTOCOLS`, helpers     |
 | `@usersfirst/controller-core/manager`                      | Slot/claim manager + synthetic-gamepad helpers (the headless P1/P2/... lifecycle)                        |
+| `@usersfirst/controller-core/units`                        | `ControllerUnit` (one physical controller across its sources), presence, Steam XInput helpers            |
 | `@usersfirst/controller-core/sensor-fusion`                | `SensorFusion` (gyro orientation + bias calibration + drift correction)                                  |
 | `@usersfirst/controller-core/device-identity`              | What a UI shows for a controller: `identifyGamepadId`, `identifyHidDevice`, `identityOf`, `connectionOf`, `glyphFamilyOf` |
 | `@usersfirst/controller-core/drivers/controller-registry`  | Registry lookup (`getEntry`, `getDriver`, `identifyFromGamepadId`, `getGamepadQuirks`, ...)              |
@@ -24,6 +25,29 @@ Vendor-agnostic gamepad drivers, WebHID sensor fusion, and the slot/claim `Contr
 `SensorFusion` keeps orientation, gravity, stillness detection, and bias-calibration state internal — replacing ~250 lines of duplicated gyro math that used to live inside each consumer. Its algorithms are derived from [JibbSmart/GamepadMotionHelpers](https://github.com/JibbSmart/GamepadMotionHelpers) by Julian "Jibb" Smart (MIT) and the [GyroWiki](http://gyrowiki.jibbsmart.com/) write-ups; see [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) for the upstream license.
 
 No bundler is required — this is plain ESM. Designed for direct use in Electron + browser contexts via importmap, as well as bundlers (Vite, webpack, esbuild) for web apps.
+
+## One controller, one unit (0.7)
+
+A pad can reach the page through WebHID, a live or **frozen** Gamepad-API pad, and Steam's virtual XInput twin at once. `ControllerManager` folds those into one `ControllerUnit` per physical controller, every frame, and claims, the roster and `units()` work on units: one controller is one row, one card, one seat. Each unit also has a **presence** (`latent` / `present` / `silent` / `gone`), so a Steam Controller switched off on a Puck that stays plugged in is `silent` (its slot reads `connected === false`, and by default its seat is freed) instead of JOINED forever.
+
+```js
+const mgr = new ControllerManager({ slotIds: ['P1', 'P2', 'P3', 'P4'] });
+// each frame, before ingestFrame (only under Steam; null otherwise):
+mgr.setSteamInputMap(window.steam?.input?.getXInputMap?.() ?? null);
+const { claimed, released, why } = mgr.ingestFrame(navigator.getGamepads(), performance.now());
+// why: { P2: 'silent' | 'twin' | 'gesture' }: tell the seat screen who stood up and why
+
+for (const u of mgr.units()) {          // one per physical controller, seated ones included
+  u.key; u.identity.shortName; u.presence; u.slot;
+  u.sources;                            // [{ kind: 'webhid' | 'gamepad' | 'steam-xinput', … }]
+  u.frame();                            // its input as ONE gamepad (OR of live sources)
+}
+mgr.claimUnitForSlot('P2', unit);       // a seat screen seats a unit, never a raw source
+mgr.isTwinPad(gp);                      // Steam's echo of a controller we already read
+mgr.releaseSilentSeats = state === 'lobby';   // keep seats mid-game, free them on seat screens
+```
+
+The model, the platform facts it encodes and the 0.6 → 0.7 migration: [`docs/controller-units.md`](../../docs/controller-units.md).
 
 ## Showing controllers in a UI: identity and roster
 
@@ -52,7 +76,7 @@ manager.controllerRoster(navigator.getGamepads(), {
 
 - **`shortName`** is what a seat or chip shows. **`glyphFamily`** (`playstation` · `xbox` · `nintendo` · `steam` · `generic` · `keyboard`) picks the button prompts. It comes from the entry's protocol unless the entry sets `glyphFamily`.
 - **States:** a claimed slot is `joined`. The app's `seatOf` makes it `seated` or `ready`. Pooled WebHID devices and unclaimed pads are `connected`.
-- **What the roster filters:** idle Steam Puck receiver interfaces, stuck-stick Bluetooth ghost pads, and pads the host's `padFilter` rejects. A pad whose vid:pid is already a pooled entry isn't listed twice.
+- **What the roster filters:** one row per unit (0.7): a pad that belongs to a WebHID controller (live or frozen) is that controller's row, Steam's XInput twins are never rows, and latent receiver interfaces, silent (switched-off) controllers, stuck-stick Bluetooth ghost pads and pads the host's `padFilter` rejects are left out. Rows carry `connected` and `unitKey`.
 - **Seats belong to the app.** Core only reports what the app tells it through `seatOf`, and it has no vocabulary for seats: `team` and `role` are whatever the game calls them, and `label` / `tone` tell a UI what to print on the seat badge and how to colour it. Tandemonium passes captain and stoker; another game would pass its own.
 
 ## Pairing a second controller (host HID picker)

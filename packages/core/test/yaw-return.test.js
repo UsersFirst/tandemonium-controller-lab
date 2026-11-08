@@ -97,3 +97,12 @@ test('stepYawReturn is a no-op when disabled (halfLife 0) or dt ≤ 0', () => {
   assert.equal(stepYawReturn(0.25, o, 0, 0.5), 0.25, 'dt 0 → no step');
   assert.equal(stepYawReturn(0.25, o, -0.1, 0.5), 0.25, 'negative dt → no step');
 });
+
+test('the at-rest yaw return ships ON at a 2 s half-life (core 0.7, Tandemonium #596)', async () => {
+  const { DEFAULT_YAW_RETURN_HALF_LIFE_S } = await import('../src/yaw-return.js');
+  assert.equal(DEFAULT_YAW_RETURN_HALF_LIFE_S, 2);
+  const { readFileSync } = await import('node:fs');
+  // SensorFusion needs `three` (absent in CI), so check its constructor source.
+  const src = readFileSync(new URL('../src/sensor-fusion.js', import.meta.url), 'utf8');
+  assert.match(src, /this\.yawReturnHalfLife = DEFAULT_YAW_RETURN_HALF_LIFE_S;/);
+});
