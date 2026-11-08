@@ -37,7 +37,7 @@ Typed, build-free Web Components and design tokens shared by Tandemonium and the
 | `uf-ledger` | earnings: line items, total, balance (coins, points…) |
 | `uf-pips` | a level as dots (3 of 10) |
 
-0.6.1 adds `uf-achievement-detail` `.footHtml`: a game's own line under the status and its bar (Tandemonium's "Best: Daily Ride · date, time").
+0.6.1 adds `uf-achievement-detail` `.footHtml` (a game's own line under the status and its bar: Tandemonium's "Best: Daily Ride · date, time") and an item's own `kicker` / `status` for the card (Tandemonium's "Earned with a friend").
 
 0.6 adds `uf-person`: seats and controller rosters show the signed-in player (picture + sign-in badge) next to the controller.
 

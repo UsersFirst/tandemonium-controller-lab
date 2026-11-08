@@ -540,6 +540,13 @@ test('uf-achievement-detail: state, kicker, date, progress bar, number and ID', 
     return { earned: read('demo-ach-earned'), progress: read('demo-ach-progress'), locked: read('demo-ach-locked'), foot: foot?.textContent ?? null, footAfterBar };
   });
   assert.equal(r.foot, 'Best: Table 3 · November 6, 2026');
+  const own = await ev(async () => {
+    const { detailState } = await import('./src/elements/uf-achievement-detail.js');
+    return [detailState({ id: 'x', name: 'X', earnedAt: '2026-11-07 15:00:00', kicker: 'Earned with a friend', status: 'Claim it in the full game' }),
+      detailState({ id: 'y', name: 'Y', earnedAt: '2026-11-07 15:00:00' }).kicker];
+  });
+  assert.deepEqual(own[0], { state: 'earned', kicker: 'Earned with a friend', status: 'Claim it in the full game' }, "an item's own kicker / status win");
+  assert.equal(own[1], 'Achievement unlocked');
   assert.ok(r.footAfterBar, 'footHtml sits under the status bar, above "No. n of N"');
   assert.deepEqual(r.earned, { state: 'earned', kicker: 'Achievement unlocked', status: 'Unlocked November 7, 2026', count: 'No. 5 of 22', id: 'first_roll', bar: false });
   assert.equal(r.progress.state, 'progress'); assert.equal(r.progress.status, '4 / 6 doubles'); assert.equal(r.progress.bar, true);
