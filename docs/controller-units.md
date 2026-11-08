@@ -80,6 +80,7 @@ ControllerUnit
 - **Claims are per unit.** A unit is claimed once, by whichever source pressed first. The 0.6 HID-claim skip ("an unclaimed Gamepad pad shares this productName, leave it to the Gamepad claim") is gone; it deadlocked a frozen DualSense (bug 6).
 - The Gamepad claim skips twins, pending pads, and pads whose unit is already seated over WebHID. Claiming a `linked` pad attaches **that** unit's entry.
 - **A twin never holds a seat.** If one got a seat before it could be recognised (F2: twin first, hardware late), the next frame either **moves the seat to the twin's controller** (same seat, same player, now on its WebHID source; slot emits `'rebound'`) when that controller has no seat, or releases it with reason `'twin'` when the controller sits elsewhere. This runs even while `autoClaimSuspended`.
+- **Boot-claim** (`claimFirstAvailable`, a press-free convenience) skips twins, pending and ambiguous pads, pads whose controller sits, and any XInput pad while a mirrorable WebHID controller has no twin yet: with no press there is no evidence it isn't that controller's echo.
 - `claimPadForSlot` on a twin seats its controller. `claimUnitForSlot(slotId, unit)` is the seat-screen call: WebHID source plus its own pad, never the twin.
 - `Slot` keeps `_hidEntry` and `gamepadIndex` (the unit's seated sources) for compatibility. `slot.unit` and `slot.connected` are new.
 

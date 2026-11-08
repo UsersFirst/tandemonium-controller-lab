@@ -111,3 +111,24 @@ test('presence: slot emits "presence" on silence and return; ingestFrame says wh
     assert.equal(rig.mgr.getSlot('P1').releaseReason, 'silent');
   });
 });
+
+test('boot-claim (claimFirstAvailable) never seats a pad that may be Steam\'s twin, before any press', async () => {
+  await withRig({ hid: [hidDevice.steamPuck('body-1')], steam: [] }, (rig) => {
+    const x = rig.pads.plug('xbox');            // under Steam: maybe body 1's echo, maybe a real pad
+    rig.tick(50);
+    assert.equal(rig.mgr.claimFirstAvailable('P1', rig.pads.snapshot()), null, 'no evidence either way: defer to a press');
+    assert.equal(rig.seat('P1').state, 'empty');
+    rig.tapHid('body-1', FACE_A.steam, 8); rig.tapPad(x, 'A', 60); rig.tick(300);
+    assert.equal(rig.mgr.isTwinPad(x), true);
+    assert.equal(rig.seat('P1').hid, 'body-1', 'the press seats the controller itself');
+  });
+});
+
+test('boot-claim still takes a lone real pad when nothing could be mirrored', async () => {
+  await withRig({}, (rig) => {
+    const x = rig.pads.plug('xbox');
+    rig.tick(50);
+    assert.ok(rig.mgr.claimFirstAvailable('P1', rig.pads.snapshot()));
+    assert.equal(rig.seat('P1').pad, x);
+  });
+});
