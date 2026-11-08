@@ -757,6 +757,16 @@ export class ControllerManager {
       if (!gp) continue;
       if (claimedIndices.has(gp.index)) continue;
       if (!this._padAllowed(gp)) continue;
+      // Units: never boot-claim Steam's twin, a press waiting for its hardware,
+      // or a pad whose controller already sits. And never an unconfirmed XInput
+      // pad while a WebHID controller Steam could be mirroring has no twin yet:
+      // with no press there is no evidence it isn't that controller's echo.
+      const info = this._padInfo.get(gp.index);
+      if (info && info.id === gp.id) {
+        if (info.role === 'twin' || info.role === 'pending' || info.role === 'ambiguous') continue;
+        if (info.unit && info.unit.entry && info.unit.slot) continue;
+      }
+      if (isXInputPadId(gp.id) && this._twinEligibleUnits().length) continue;
       const stickMag = Math.max(
         Math.abs(gp.axes[0] || 0),
         Math.abs(gp.axes[1] || 0),
