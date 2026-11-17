@@ -6,6 +6,9 @@ import { noticeText, summaryLines, providerName, TEXT } from '../src/text.js';
 import { UfAccountNotice } from '../src/elements/uf-account-notice.js';
 import { UfCombineAccounts } from '../src/elements/uf-combine-accounts.js';
 import { UfDeviceSignin } from '../src/elements/uf-device-signin.js';
+import { UfSignin } from '../src/elements/uf-signin.js';
+import { UfProfileCard } from '../src/elements/uf-profile-card.js';
+import { providerIcon } from '../src/elements/icons.js';
 import { esc } from '../src/elements/base.js';
 
 const notice = { id: 5, kind: 'link', provider: 'discord', login_name: 'petegordon', from_name: null, created_at: 1794700800, undo_until: 1795305600, seen: false };
@@ -70,4 +73,44 @@ test('<uf-device-signin> shows the code and the steps, never the address as a li
   assert.match(el.render(), /Type the code on your phone…/);
   el.hasAttribute = (n) => n === 'open-here';
   assert.match(el.render(), /Open on this computer/);
+});
+
+test('<uf-signin> names each provider; a prepared address makes a plain link, and only to https', () => {
+  const el = new UfSignin();
+  let html = el.render();
+  assert.match(html, /<button[^>]*data-provider="discord"[^>]*>[\s\S]*Sign in with Discord/);
+  assert.match(html, /<button[^>]*data-provider="steam"[^>]*>[\s\S]*Sign in with Steam/);
+  assert.ok(html.indexOf('discord') < html.indexOf('steam'), 'Discord first');
+  assert.ok(html.includes('<svg'), 'each has its mark');
+
+  el._links = { discord: 'https://discord.com/oauth2/authorize?client_id=1&state=a"b', steam: 'javascript:alert(1)' };
+  html = el.render();
+  assert.match(html, /<a class="uf-id-provider" data-provider="discord" href="https:\/\/discord\.com\/oauth2\/authorize\?client_id=1&amp;state=a&quot;b"/);
+  assert.match(html, /<button[^>]*data-provider="steam"/, 'anything but https stays a button');
+  assert.ok(!html.includes('javascript:'));
+
+  el._busy = 'steam';
+  html = el.render();
+  assert.match(html, /data-provider="steam" disabled aria-busy="true"/);
+  el._error = 'Steam sign-in is unavailable right now';
+  assert.match(el.render(), /role="alert">Steam sign-in is unavailable right now/);
+  assert.equal(providerIcon('nope'), '');
+});
+
+test('<uf-profile-card> one line per login: linked ones by name, the missing one as a Link button', () => {
+  const el = new UfProfileCard();
+  assert.equal(el.render(), '', 'nothing signed out');
+  el._user = { id: 7, name: 'Pete', avatar: null, identities: { discord: { name: '<b>pete</b>', avatar: 'https://cdn.test/d.png' } } };
+  let html = el.render();
+  assert.match(html, /data-provider="discord" data-linked="true"/);
+  assert.ok(html.includes('&lt;b&gt;pete&lt;/b&gt;') && !html.includes('<b>pete'), 'names are escaped');
+  assert.match(html, /<img class="uf-id-login-pic" src="https:\/\/cdn\.test\/d\.png"/);
+  assert.match(html, /data-provider="steam" data-linked="false"[\s\S]*<button[^>]*data-act="link" data-provider="steam">Link Steam<\/button>/);
+  assert.ok(!html.includes('data-act="signout"'), 'Sign out only when asked for');
+
+  el._user = { ...el._user, identities: { ...el._user.identities, steam: { name: 'pete_steam' } } };
+  el._note = 'Both sign-ins open this account.';
+  html = el.render();
+  assert.ok(!html.includes('data-act="link"'), 'nothing left to link');
+  assert.match(html, /uf-id-note">Both sign-ins open this account\./);
 });

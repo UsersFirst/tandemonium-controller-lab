@@ -65,6 +65,14 @@ function fakeApi(state = {}) {
       if (s.gone) return json(401, { error: 'Account not found', code: 'account_gone' });
       return json(200, { user: { id: s.account.id, display_name: s.account.name, avatar_url: null, identities: s.account.logins }, achievements: [] });
     }
+    if (path === '/me/games') return authed ? json(200, { games: { dice: { earned: [{ id: 'first_roll', earnedAt: '2026-11-05 10:00:00' }], stats: { rolls: 4 } } } }) : json(401, {});
+    if (path === '/me/discord') return json(200, { linked: true, member: true });
+    if (path === '/auth/handoff') return authed ? json(200, { code: 'one-time' }) : json(401, {});
+    if (path === '/me/delete') {
+      if (body.confirm !== 'DELETE') return json(400, { error: 'Type DELETE to confirm.' });
+      s.gone = true;
+      return json(200, { deleted: true });
+    }
     if (path === '/me/notices') return json(200, { notices: s.notices });
     if (path === '/me/notices/seen') { s.notices = s.notices.map((n) => (n.id === body.id ? { ...n, seen: true } : n)); return json(200, { ok: true }); }
     if (path === '/me/notices/undo') {
@@ -117,7 +125,7 @@ test('redirect sign-in: begins without a session, goes to the provider, and resu
     body: { device_id: 'device-1', mode: 'redirect', join_server: true, scopes: ['email'], return_to: 'https://game.test/play' } });
 
   l.hash = '#ht_auth=' + encodeURIComponent(jwt({ sub: 7, lid: 1, via: 'discord:80' }));
-  assert.deepEqual(await c.resume(), { signedIn: true, server: undefined, steam: undefined });
+  assert.deepEqual(await c.resume(), { signedIn: true, server: undefined, steam: undefined, after: undefined });
   assert.equal(c.isSignedIn(), true);
   assert.equal(c.user.id, 7);
   assert.equal(c.user.provider, 'discord');
@@ -284,4 +292,48 @@ test('an account that is gone: the token is dropped; signOut clears everything',
   assert.equal(c.user, null);
   assert.equal(storage.m.size, 0);
   assert.throws(() => new IdentityClient({}), /apiBase/);
+});
+
+test('"Confirm it’s you": sign in again, and resume() says what to carry on with, for the same account only', async () => {
+  const api = fakeApi();
+  const { l, hist } = loc('https://site.test/account');
+  const { c, storage } = client(api, { location: l, history: hist });
+  c.apply(jwt({ sub: 7, lid: 1 }), { id: 7, name: 'Pete', identities: { discord: { name: 'Pete' } } }, { provider: 'discord' });
+
+  await c.confirmRedirect('discord', 'link:steam');
+  assert.equal(l.assigned, 'https://api.test/auth/go?r=req1');
+  assert.equal(api.s.calls.at(-1).authed, false, 'a sign-in, not a link');
+  l.hash = '#ht_auth=' + encodeURIComponent(jwt({ sub: 7, lid: 1, via: 'discord:80' }));
+  assert.equal((await c.resume()).after, 'link:steam');
+  assert.equal(storage.m.has('ht_after_signin'), false, 'read once');
+
+  // Came back as someone else: nothing carries on.
+  await c.confirmRedirect('discord', 'link:steam');
+  l.hash = '#ht_auth=' + encodeURIComponent(jwt({ sub: 99, lid: 5, via: 'discord:81' }));
+  assert.equal((await c.resume()).after, undefined);
+
+  // An ordinary sign-in has nothing to carry on with.
+  l.hash = '#ht_auth=' + encodeURIComponent(jwt({ sub: 7, lid: 1, via: 'discord:80' }));
+  assert.equal((await c.resume()).after, undefined);
+});
+
+test('the account’s games, server membership, hand-off code and delete', async () => {
+  const api = fakeApi();
+  const { c } = client(api);
+  assert.deepEqual(await c.games(), {}, 'signed out: nothing, and no call');
+  assert.equal(await c.handoff(), null);
+  assert.equal(api.s.calls.length, 0);
+
+  c.apply(jwt({ sub: 7, lid: 1 }), { id: 7, name: 'Pete', identities: { discord: { name: 'Pete' } } }, { provider: 'discord' });
+  assert.equal((await c.games()).dice.earned[0].id, 'first_roll');
+  assert.equal((await c.membership()).member, true);
+  assert.equal(await c.handoff(), 'one-time');
+  await c.refresh();
+  assert.deepEqual(c.me.achievements, [], 'refresh keeps the whole /me answer');
+
+  assert.match((await c.deleteAccount('delete')).error, /Type DELETE/);
+  assert.equal(c.isSignedIn(), true, 'a refused delete changes nothing');
+  assert.deepEqual(await c.deleteAccount('DELETE'), { deleted: true });
+  assert.equal(c.isSignedIn(), false);
+  assert.equal(c.me, null);
 });

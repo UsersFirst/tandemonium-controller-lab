@@ -1,6 +1,6 @@
 {
   "name": "@usersfirst/identity",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "description": "House Tandem sign-in for any game or site: the session, redirect and device sign-in, linking, the combine question, notices with undo. Build-free.",

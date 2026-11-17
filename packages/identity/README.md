@@ -10,8 +10,10 @@ Build-free ESM, like `@usersfirst/ui`. The client and the wording have no DOM.
 
 | | |
 |---|---|
-| `IdentityClient` | the session, sign-in (redirect or device code), linking, the combine question, notices with undo |
+| `IdentityClient` | the session, sign-in (redirect or device code), linking, the combine question, notices with undo, the account's games, delete |
 | `TEXT`, `noticeText`, `summaryLines` | the flow's words, so every game says the same thing |
+| `<uf-signin>` | "Sign in with Discord" / "Sign in with Steam", for a browser on the same device |
+| `<uf-profile-card>` | the account's logins, one line each, with a **Link** button for a missing one |
 | `<uf-device-signin>` | a QR, three steps and the code, for a TV or a desktop build |
 | `<uf-account-notice>` | "The Discord account … was linked", with **Not me, remove it** / **OK, that was me** |
 | `<uf-combine-accounts>` | both accounts side by side, **Cancel** / **Combine** |
@@ -49,9 +51,18 @@ await identity.linkRedirect('steam');       // on the way back, resume() answers
 const back = await identity.resume();       // { link: 'linked' } or { link: 'combine', id, provider, other, into }
 if (back?.link === 'combine') { dialog.question = back; /* then */ await identity.combine(back.id, true); }
 
+// Linking needs a sign-in from the last few minutes. A browser can't get one quietly:
+// "Confirm it's you" signs in again, and resume() says what to carry on with.
+try { await identity.linkRedirect('steam'); } catch (e) { if (e.fresh) await identity.confirmRedirect('discord', 'link:steam'); }
+// …back on the page: (await identity.resume()).after === 'link:steam'
+
 // What changed lately, with undo:
 for (const n of await identity.notices()) { /* <uf-account-notice>.notice = n */ }
 await identity.undo(notice.id);
+
+// The account across games, and its end:
+await identity.games();                     // { dice: { earned, stats, playtime }, tandemonium: … }
+await identity.deleteAccount('DELETE');     // the server wants the typed word
 ```
 
 ## Rules the server enforces (and this client follows)
