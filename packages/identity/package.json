@@ -1,0 +1,22 @@
+{
+  "name": "@usersfirst/identity",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "House Tandem sign-in for any game or site: the session, redirect and device sign-in, linking, the combine question, notices with undo. Build-free.",
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./text": "./src/text.js",
+    "./elements/*": "./src/elements/*.js"
+  },
+  "files": [
+    "src",
+    "demo.html",
+    "README.md"
+  ]
+}
