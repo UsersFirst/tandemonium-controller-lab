@@ -17,7 +17,7 @@ const port = server.address().port;
 let pass = 0, fail = 0;
 const check = (ok, what, extra = '') => { ok ? pass++ : fail++; console.log((ok ? 'PASS ' : 'FAIL ') + what + (extra ? '  ' + extra : '')); };
 
-const browser = await puppeteer.launch();
+const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
 const page = await browser.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
