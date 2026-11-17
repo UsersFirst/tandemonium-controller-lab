@@ -128,6 +128,7 @@ export class IdentityClient {
     /** @type {IdentityUser|null} */ this.user = null;
     /** @type {string|null} */ this.token = null;
     /** @type {string|null} */ this.lastError = null;
+    /** The last refresh()'s HTTP status (0: offline). 401 without `account_gone` is a token the server no longer takes. */ this.meStatus = 0;
     /** The last /me answer (the user, and what the API adds: achievements, best scores), or null. @type {any} */ this.me = null;
     this._listeners = new Set();
     this._device = null;
@@ -221,6 +222,7 @@ export class IdentityClient {
   async refresh() {
     if (!this.token) return null;
     const r = await this.api('/me').catch(() => null);
+    this.meStatus = r ? r.status : 0;
     if (!r) return null;
     if (r.status === 401 && r.data.code === 'account_gone') { this.clearToken(); this._emit('gone'); return null; }
     if (!r.ok || !r.data.user || !this.user) return null;

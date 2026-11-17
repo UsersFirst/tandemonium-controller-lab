@@ -330,6 +330,7 @@ test('the account’s games, server membership, hand-off code and delete', async
   assert.equal(await c.handoff(), 'one-time');
   await c.refresh();
   assert.deepEqual(c.me.achievements, [], 'refresh keeps the whole /me answer');
+  assert.equal(c.meStatus, 200);
 
   assert.match((await c.deleteAccount('delete')).error, /Type DELETE/);
   assert.equal(c.isSignedIn(), true, 'a refused delete changes nothing');

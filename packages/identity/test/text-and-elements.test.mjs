@@ -43,6 +43,8 @@ test('<uf-account-notice> renders the text and the undo first; text is escaped',
   assert.ok(html.indexOf('data-act="undo"') < html.indexOf('data-act="ok"'));
   el._busy = true;
   assert.equal((el.render().match(/ disabled/g) || []).length, 2);
+  el._notice = { ...notice, seen: true };
+  assert.ok(el.render().includes('data-act="undo"') && !el.render().includes('data-act="ok"'), 'seen: only the undo is left');
   assert.equal(esc(`<a href="x">'</a>`), '&lt;a href=&quot;x&quot;&gt;&#39;&lt;/a&gt;');
 });
 
