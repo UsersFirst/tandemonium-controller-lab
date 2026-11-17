@@ -52,7 +52,22 @@ check(s.noticeBtns.join('|') === 'Not me, remove it|OK, that was me', 'undo come
 check(/This Steam account already has its own House Tandem account/.test(s.combineTitle || ''), 'combine: the title names the provider');
 check(s.combineCards.length === 2 && /Old Steam Pete Steam 210 rides · 89 badges in Tandemonium ?Also: Carnival Dozer \(12 badges\), 7, 11, Doubles/.test(s.combineCards[0]), 'combine: both accounts, with the other games', s.combineCards[0]);
 check(s.combineBtns.join('|') === 'Cancel|Combine', 'Cancel first, then Combine');
+const first = await page.evaluate(() => ({
+  signin: [...document.querySelectorAll('uf-signin .uf-id-provider')].map((b) => b.tagName + ':' + b.textContent.trim()),
+  rows: [...document.querySelectorAll('uf-profile-card li')].map((li) => li.dataset.provider + ':' + li.dataset.linked + ':' + li.textContent.trim()),
+  out: !!document.querySelector('uf-profile-card button[data-act="signout"]'),
+}));
+check(first.signin.join('|') === 'A:Sign in with Discord|BUTTON:Sign in with Steam', 'sign-in: Discord is its own link, Steam a button', first.signin.join('|'));
+check(first.rows.join('|') === 'discord:true:petegordon|steam:false:Link Steam', 'profile: Discord by name, Steam as a Link button', first.rows.join('|'));
+check(first.out, 'profile: Sign out is offered when asked for');
 await page.screenshot({ path: path.join(outDir, 'identity-desktop.png'), fullPage: true });
+await page.click('uf-signin [data-provider="steam"]');
+check(await page.evaluate(() => document.getElementById('signin-log').textContent === 'sign in with steam'), 'a sign-in button emits uf-signin with its provider');
+await page.click('uf-signin [data-provider="discord"]');
+check(await page.evaluate(() => document.getElementById('signin-log').textContent === 'sign in with discord (its own link)'), 'the Discord link says it is direct');
+await page.click('uf-profile-card button[data-act="link"]');
+await new Promise((r) => setTimeout(r, 50));
+check(await page.evaluate(() => document.getElementById('profile-log').textContent === 'link steam' && document.querySelectorAll('uf-profile-card li[data-linked="true"]').length === 2), 'Link Steam emits uf-profile-link; linked, both lines show a name');
 
 // the device flow moves on: confirming, then linked
 await page.waitForFunction(() => /Type the code on your phone…/.test(document.querySelector('uf-device-signin .uf-id-status')?.textContent || ''), { timeout: 15000 }).catch(() => {});

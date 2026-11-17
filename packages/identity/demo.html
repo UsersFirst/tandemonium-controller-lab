@@ -29,6 +29,18 @@
   <button type="button" data-mode="phone" aria-pressed="false">Phone</button>
 </div>
 
+<section id="s-signin">
+  <h2>Sign in on this device · &lt;uf-signin&gt;</h2>
+  <uf-signin id="signin"></uf-signin>
+  <div class="log" id="signin-log"></div>
+</section>
+
+<section id="s-profile">
+  <h2>The account's logins · &lt;uf-profile-card&gt;</h2>
+  <uf-profile-card id="profile" signout></uf-profile-card>
+  <div class="log" id="profile-log"></div>
+</section>
+
 <section id="s-device">
   <h2>Sign in from a TV or desktop build · &lt;uf-device-signin&gt;</h2>
   <uf-device-signin id="device" open-here></uf-device-signin>
@@ -73,6 +85,25 @@
   const client = new IdentityClient({ apiBase: 'https://api.demo', fetch: fakeFetch, storage: mem(), tabStorage: mem() });
   client.apply(jwt({ sub: 7, lid: 1 }), user, { provider: 'steam' });
   window.__client = client;
+
+  // ── sign in on this device ──
+  const signin = document.getElementById('signin');
+  const slog = document.getElementById('signin-log');
+  signin.links = { discord: 'https://discord.com/oauth2/authorize?client_id=demo' };   // a prepared link: a tap can open the Discord app
+  signin.addEventListener('click', (e) => { if (e.target.closest('a')) e.preventDefault(); });   // the demo stays on the page
+  signin.addEventListener('uf-signin', (e) => { slog.textContent = `sign in with ${e.detail.provider}${e.detail.direct ? ' (its own link)' : ''}`; });
+
+  // ── the account's logins ──
+  const profile = document.getElementById('profile');
+  const plog = document.getElementById('profile-log');
+  profile.user = { id: 7, name: 'petegordon', avatar: null, identities: { discord: { name: 'petegordon', avatar: 'https://cdn.discordapp.com/embed/avatars/0.png' } } };
+  profile.note = 'Link the other one and it joins this account: rides, achievements and both pictures.';
+  profile.addEventListener('uf-profile-link', (e) => {
+    plog.textContent = 'link ' + e.detail.provider;
+    profile.user = { ...profile.user, identities: { ...profile.user.identities, steam: { name: 'pete_steam', avatar: null } } };
+    profile.note = '';
+  });
+  profile.addEventListener('uf-profile-signout', () => { plog.textContent = 'signed out'; });
 
   // ── device sign-in ──
   const device = document.getElementById('device');
