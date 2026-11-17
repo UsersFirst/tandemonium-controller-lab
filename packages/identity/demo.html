@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@usersfirst/identity · demo</title>
+<link rel="stylesheet" href="../ui/src/tokens.css">
+<style>
+  body { margin: 0; padding: 24px; background: var(--uf-color-bg, #17131f); color: var(--uf-color-fg, #f4efe6); font-family: var(--uf-font-ui, system-ui, sans-serif); }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { opacity: .7; margin: 0 0 20px; }
+  section { max-width: 760px; margin: 0 0 28px; padding: 16px; border: 1px solid var(--uf-color-line-soft, #3a3147); border-radius: 12px; background: var(--uf-color-surface-0, #1c1726); }
+  section > h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; opacity: .65; }
+  .log { font: 12px/1.5 ui-monospace, monospace; opacity: .75; margin-top: 10px; min-height: 1.5em; }
+  body.tv { font-size: 20px; --uf-size-sm: 20px; --uf-size-md: 24px; --uf-size-lg: 30px; --uf-size-2xl: 64px; }
+  body.tv section { max-width: 1100px; }
+  body.phone section { max-width: 360px; }
+  .modes { display: flex; gap: 8px; margin-bottom: 20px; }
+  .modes button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid #5b5068; background: #2a2335; color: inherit; cursor: pointer; }
+  .modes button[aria-pressed="true"] { background: #ffd36b; color: #17131f; border-color: #ffd36b; }
+</style>
+</head>
+<body>
+<h1>@usersfirst/identity</h1>
+<p class="sub">The sign-in pieces every House Tandem game shares, against a pretend server. Nothing here talks to the real API.</p>
+<div class="modes" role="group" aria-label="Layout">
+  <button type="button" data-mode="" aria-pressed="true">Desktop</button>
+  <button type="button" data-mode="tv" aria-pressed="false">TV</button>
+  <button type="button" data-mode="phone" aria-pressed="false">Phone</button>
+</div>
+
+<section id="s-device">
+  <h2>Sign in from a TV or desktop build · &lt;uf-device-signin&gt;</h2>
+  <uf-device-signin id="device" open-here></uf-device-signin>
+  <div class="log" id="device-log"></div>
+</section>
+
+<section id="s-notice">
+  <h2>A login was linked · &lt;uf-account-notice&gt;</h2>
+  <uf-account-notice id="notice"></uf-account-notice>
+  <div class="log" id="notice-log"></div>
+</section>
+
+<section id="s-combine">
+  <h2>The login already has its own account · &lt;uf-combine-accounts&gt;</h2>
+  <uf-combine-accounts id="combine"></uf-combine-accounts>
+  <div class="log" id="combine-log"></div>
+</section>
+
+<script type="module">
+  import '../ui/src/index.js';                       // registers <uf-qr> (optional: the element falls back to text)
+  import { IdentityClient } from './src/index.js';
+
+  // ── a pretend account API ──
+  const enc = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+  const jwt = (c) => `${enc({ alg: 'HS256' })}.${enc({ exp: Math.floor(Date.now() / 1000) + 3600, ...c })}.demo`;
+  const state = { polls: 0, notices: [{ id: 5, kind: 'link', provider: 'discord', login_name: 'petegordon', from_name: null,
+    created_at: Math.floor(Date.now() / 1000) - 3600, undo_until: Math.floor(Date.now() / 1000) + 7 * 86400, seen: false }] };
+  const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const user = { id: 7, name: 'pete_steam', avatar: null, identities: { steam: { name: 'pete_steam' }, discord: { name: 'petegordon' } } };
+  const fakeFetch = async (url, init = {}) => {
+    const path = new URL(url).pathname;
+    const body = init.body ? JSON.parse(init.body) : {};
+    if (path === '/auth/discord/begin') { state.polls = 0; return json(200, { id: 'demo', secret: 's', code: 'K7QF', url: 'https://api.housetandem.com/auth/discord/go?r=demo', expires_in: 600 }); }
+    if (path === '/auth/poll') { state.polls++; return json(200, state.polls < 3 ? { status: 'pending' } : state.polls < 6 ? { status: 'confirming' } : { status: 'done', token: jwt({ sub: 7, lid: 2 }), user, linked: true, merged: false }); }
+    if (path === '/me') return json(200, { user: { id: 7, display_name: user.name, avatar_url: null, identities: user.identities } });
+    if (path === '/me/notices') return json(200, { notices: state.notices });
+    if (path === '/me/notices/seen') { state.notices = []; return json(200, { ok: true }); }
+    if (path === '/me/notices/undo') { state.notices = []; return json(200, { undone: true, kind: 'link', signed_out: false }); }
+    return json(404, {});
+  };
+  const mem = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) }; };
+  const client = new IdentityClient({ apiBase: 'https://api.demo', fetch: fakeFetch, storage: mem(), tabStorage: mem() });
+  client.apply(jwt({ sub: 7, lid: 1 }), user, { provider: 'steam' });
+  window.__client = client;
+
+  // ── device sign-in ──
+  const device = document.getElementById('device');
+  const dlog = document.getElementById('device-log');
+  async function startDevice() {
+    device.status = 'getting';
+    const dev = await client.startDevice({
+      link: true,
+      onStatus: (s) => { device.status = s === 'confirming' ? 'confirming' : 'waiting'; },
+      onDone: (u, info) => { dlog.textContent = u ? `linked: ${Object.keys(u.identities).join(' + ')}` : `ended: ${info.error}`; },
+    });
+    device.url = dev.url; device.code = dev.code; device.status = 'waiting';
+  }
+  device.addEventListener('uf-open-here', (e) => { dlog.textContent = 'would open ' + e.detail.url; });
+  startDevice();
+
+  // ── notice ──
+  const notice = document.getElementById('notice');
+  const nlog = document.getElementById('notice-log');
+  notice.notice = (await client.notices())[0];
+  notice.addEventListener('uf-notice-ok', async (e) => { await client.seen(e.detail.id); notice.hidden = true; nlog.textContent = 'marked as seen'; });
+  notice.addEventListener('uf-notice-undo', async (e) => {
+    notice.busy = true;
+    const out = await client.undo(e.detail.id);
+    notice.busy = false;
+    if (out.error) notice.error = out.error; else { notice.hidden = true; nlog.textContent = 'undone'; }
+  });
+
+  // ── combine ──
+  const combine = document.getElementById('combine');
+  const clog = document.getElementById('combine-log');
+  combine.question = { provider: 'steam',
+    other: { name: 'Old Steam Pete', avatar: null, logins: [{ provider: 'steam' }], rides: 210, badges: 89, games: [{ game: 'coins', title: 'Carnival Dozer', badges: 12 }, { game: 'dice', title: '7, 11, Doubles', badges: 0 }] },
+    into: { name: 'petegordon', avatar: null, logins: [{ provider: 'discord' }], rides: 7, badges: 3 } };
+  combine.addEventListener('uf-combine', (e) => { clog.textContent = e.detail.ok ? 'chose Combine' : 'chose Cancel: nothing changes'; });
+
+  // ── layout switch ──
+  for (const b of document.querySelectorAll('.modes button')) {
+    b.addEventListener('click', () => {
+      document.body.className = b.dataset.mode;
+      device.setAttribute('qr-size', b.dataset.mode === 'tv' ? '260' : '168');
+      device.requestUpdate();
+      for (const o of document.querySelectorAll('.modes button')) o.setAttribute('aria-pressed', String(o === b));
+    });
+  }
+  window.__ready = true;
+</script>
+</body>
+</html>

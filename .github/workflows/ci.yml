@@ -67,6 +67,15 @@ jobs:
       - name: Test @usersfirst/ui (node + browser)
         run: node --test
         working-directory: packages/ui
+      # @usersfirst/identity: the sign-in client against a fake of the account API, its
+      # wording, and the elements' html. Then the demo page in headless Chrome.
+      - name: Typecheck @usersfirst/identity
+        run: npx tsc -p packages/identity/tsconfig.json
+      - name: Test @usersfirst/identity
+        run: node --test
+        working-directory: packages/identity
+      - name: Identity demo in a browser (desktop, TV, phone)
+        run: node packages/identity/tools/demo-check.mjs "$RUNNER_TEMP/identity-shots"
       # The ratchet: design/audit/thresholds.json are high-water marks that only
       # go down. Only the lab target exists on a CI runner; the game checks itself.
       - name: UI audit ratchet
