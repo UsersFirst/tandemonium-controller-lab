@@ -2,9 +2,10 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 const [rootArg, pptrPath, outDir] = process.argv.slice(2);
 const root = path.resolve(rootArg);
-const { default: puppeteer } = await import('file:///' + pptrPath.replace(/\\/g, '/'));
+const { default: puppeteer } = await import(pathToFileURL(path.resolve(pptrPath)).href);
 fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
