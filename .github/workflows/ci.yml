@@ -75,7 +75,7 @@ jobs:
         run: node --test
         working-directory: packages/identity
       - name: Identity demo in a browser (desktop, TV, phone)
-        run: node packages/identity/tools/demo-check.mjs . "$PWD/node_modules/puppeteer/lib/esm/puppeteer/puppeteer.js" "$RUNNER_TEMP/identity-shots"
+        run: node packages/identity/tools/demo-check.mjs "$RUNNER_TEMP/identity-shots"
       # The ratchet: design/audit/thresholds.json are high-water marks that only
       # go down. Only the lab target exists on a CI runner; the game checks itself.
       - name: UI audit ratchet

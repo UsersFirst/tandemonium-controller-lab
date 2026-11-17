@@ -74,7 +74,7 @@ await identity.undo(notice.id);
 npm test --workspace @usersfirst/identity      # the client against a fake API; wording; element html
 npm run typecheck --workspace @usersfirst/identity
 npx serve .                                    # then open /packages/identity/demo.html
-node packages/identity/tools/demo-check.mjs . <path to puppeteer.js> <out dir>   # the demo in a real browser
+node packages/identity/tools/demo-check.mjs    # the demo in a real browser (headless)
 ```
 
 ## Using it in a game

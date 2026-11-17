@@ -1,11 +1,15 @@
-// The demo page in a real browser (headless): node packages/identity/tools/demo-check.mjs <lab root> <puppeteer module path> <out dir>
+// The demo page in a real browser (headless): node packages/identity/tools/demo-check.mjs [screenshot dir]
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-const [rootArg, pptrPath, outDir] = process.argv.slice(2);
-const root = path.resolve(rootArg);
-const { default: puppeteer } = await import(pathToFileURL(path.resolve(pptrPath)).href);
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { resolvePuppeteer } from '../../../tools/_lib/resolve-puppeteer.mjs';
+// Puppeteer comes from the lab's node_modules, or a sibling game checkout (the same
+// resolver the UI kit's browser tests use). Optional argument: where to put screenshots.
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const outDir = process.argv[2] || path.join(os.tmpdir(), 'identity-demo-shots');
+const puppeteer = await resolvePuppeteer(root);
 fs.mkdirSync(outDir, { recursive: true });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
