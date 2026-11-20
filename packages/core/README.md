@@ -10,6 +10,7 @@ Vendor-agnostic gamepad drivers, WebHID sensor fusion, and the slot/claim `Contr
 | `@usersfirst/controller-core/manager`                      | Slot/claim manager + synthetic-gamepad helpers (the headless P1/P2/... lifecycle)                        |
 | `@usersfirst/controller-core/units`                        | `ControllerUnit` (one physical controller across its sources), presence, Steam XInput helpers            |
 | `@usersfirst/controller-core/sensor-fusion`                | `SensorFusion` (gyro orientation + bias calibration + drift correction)                                  |
+| `@usersfirst/controller-core/roll-zero`                    | `RollZero` (what counts as level for this controller as it is held; three-free)                          |
 | `@usersfirst/controller-core/device-identity`              | What a UI shows for a controller: `identifyGamepadId`, `identifyHidDevice`, `identityOf`, `connectionOf`, `glyphFamilyOf` |
 | `@usersfirst/controller-core/drivers/controller-registry`  | Registry lookup (`getEntry`, `getDriver`, `identifyFromGamepadId`, `getGamepadQuirks`, ...)              |
 | `@usersfirst/controller-core/drivers/base-driver`          | Abstract `ControllerDriver` (protocol interface)                                                         |
@@ -48,6 +49,31 @@ mgr.releaseSilentSeats = state === 'lobby';   // keep seats mid-game, free them 
 ```
 
 The model, the platform facts it encodes and the 0.6 → 0.7 migration: [`docs/controller-units.md`](../../docs/controller-units.md).
+
+## The roll zero: what counts as level (0.8)
+
+`gravityRollRadians()` cannot drift, but a consumer still needs a zero: the roll that means "no lean" for the way this player holds the controller. The lab owns it now (#112), so every consumer agrees and none has to guess when the controller is at rest.
+
+```js
+const fusion = slot.fusion;
+
+// "Recenter" button: the way it is held right now is level.
+const r = fusion.setRollZero();
+if (!r.still) showHint('Hold the controller steady to centre it');   // it was committed, and it says it moved
+
+// A fixed moment the game chose (a countdown): take the zero at the next still moment instead.
+fusion.rollZero.onResult = (r) => console.log(r.source, r.still, r.zero);
+fusion.requestRollZero({ timeoutMs: 3000, fallback: 'best' });       // or 'keep'
+
+// Every frame: roll from the zero. Deadzone, sensitivity and smoothing stay in the game.
+const lean = fusion.rollRelativeRadians();
+```
+
+- **Still** means the accelerometer's own roll stayed within 1.5 degrees for 400 ms. A zero taken at rest is that roll, and the tracked gravity vector is put on it, so `rollRelativeRadians()` reads 0 at once and stays there. This matters after `reset()`: the gravity roll takes seconds to come back to the real pose, and a zero read from it in that time is wrong by the whole tilt.
+- **Not still**: `setRollZero()` commits the roll of that moment and returns `still: false`. `requestRollZero()` keeps waiting; at the timeout it uses its steadiest window (`source: 'best'`, `still: false`) or leaves the old zero (`fallback: 'keep'`, `source: 'kept'`).
+- `reset()` keeps the zero (it is the grip, not fusion state). `clearRollZero()` forgets it.
+- Roll only. Pitch and yaw have no zero here; yaw has `recenter()` and the at-rest yaw return.
+- `RollZero` by itself (`@usersfirst/controller-core/roll-zero`) has no three dependency: feed it a roll and a time with `sample(roll, nowMs)`.
 
 ## Showing controllers in a UI: identity and roster
 
