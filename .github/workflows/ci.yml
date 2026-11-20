@@ -76,6 +76,10 @@ jobs:
         working-directory: packages/identity
       - name: Identity demo in a browser (desktop, TV, phone)
         run: node packages/identity/tools/demo-check.mjs "$RUNNER_TEMP/identity-shots"
+      # @usersfirst/rooms: the room transport against a fake WebSocket (no install needed).
+      - name: Test @usersfirst/rooms
+        run: node --test
+        working-directory: packages/rooms
       # The ratchet: design/audit/thresholds.json are high-water marks that only
       # go down. Only the lab target exists on a CI runner; the game checks itself.
       - name: UI audit ratchet
