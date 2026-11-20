@@ -87,6 +87,40 @@ test('GOLDEN: real Sony DS4 v1 Bluetooth capture probes to gyroOffset 14 / accel
   assert.ok(probe.meanAccelMag > 7000 && probe.meanAccelMag < 9500, `accel ${probe.meanAccelMag} ~ 1g`);
 });
 
+test('GOLDEN: real DualSense Bluetooth frame from macOS probes to gyroOffset 16 / family sony-ds5 (#85)', async () => {
+  // One real at-rest 0x31 report from a DualSense over Bluetooth on macOS (#83). event.data
+  // was 77 bytes with no report-ID byte in front, so the IMU is at the documented DS5-BT
+  // offsets (gyro 16 / accel 22) and nothing is shifted on that machine.
+  // This covers the path where the documented default is kept. The other path, recovering
+  // from a byte-shifted offset, has no real capture: that hardware did not produce the shift.
+  const fixture = loadFixture('sony-dualsense-bt-macos_054c-0ce6.json');
+  const frames = framesFromStep(fixture, 'at-rest');
+  assert.equal(frames[0].reportId, 0x31);
+  const d = new PlayStationDriver(new FakeHidDevice(frames), 'bluetooth', { mode: 'ds5', name: 'Sony DualSense' });
+
+  const probe = await d._probeImuOffset();
+  assert.ok(probe, 'BT probe should produce a result');
+  assert.equal(probe.gyroOffset, 16);
+  assert.equal(probe.accelOffset, 22);
+  assert.equal(probe.baseOffset, 1);
+  assert.equal(PlayStationDriver._imuFamilyFor(probe.gyroOffset, probe.baseOffset), 'sony-ds5');
+  // gravity (-94, 7970, 1383) is about 8090 raw, close to 1g (8192); gyro (-4, -9, 0) is at rest
+  assert.ok(probe.meanAccelMag > 7900 && probe.meanAccelMag < 8300, `accel ${probe.meanAccelMag} ~ 1g`);
+  assert.ok(probe.meanGyroAbs < 50, `gyro ${probe.meanGyroAbs} ~ 0 at rest`);
+  // the neighbours read bytes one off and score far worse
+  for (const off of [15, 17]) {
+    const s = probe.scores.find((x) => x.gyroOffset === off);
+    assert.ok(s, `offset ${off} was scored`);
+    assert.ok(s.score > probe.score + 5000, `offset ${off} (score ${s.score.toFixed(0)}) is far worse than 16 (${probe.score.toFixed(0)})`);
+  }
+
+  // init() keeps it: offset 16, family sony-ds5
+  const d2 = new PlayStationDriver(new FakeHidDevice(frames), 'bluetooth', { mode: 'ds5', name: 'Sony DualSense' });
+  await d2.init();
+  assert.equal(d2._detectedImuOffset.gyroOffset, 16);
+  assert.equal(d2._detectedImuFamily, 'sony-ds5');
+});
+
 test('init keeps the documented BT default (14) when the probe ties to the off-by-2 neighbour', async () => {
   // The exact bug that jerked steering: with gravity on Z (shared by the 14
   // and 16 windows) plus a small bias at offset 14, the raw probe scores 16

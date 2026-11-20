@@ -78,10 +78,30 @@ tests.
   (digital, no pressure), identified by correlating each bit against which grip
   was squeezed.
 
+## `sony-dualsense-bt-macos_054c-0ce6.json`
+
+- **Source:** not the capture wizard. It is the driver's own
+  `PlayStation IMU probe bytes (bluetooth 0x31, len=77, baseOffset=1)` console
+  line, copied during the #83 hardware test of a **genuine Sony DualSense**
+  (`054c:0ce6`) over **Bluetooth on macOS** (input report `0x31`), at rest.
+- **Partial:** one report, and only its **first 32 of 77 bytes** (the console
+  line prints no more). The fixture repeats that one frame 12 times so the
+  probe gets its 10 reports. The bytes are untouched. `capturedAt` is the day
+  of the test, not a recorded time.
+- **What it proves** (`imu-probe.test.js`, #85): on macOS the report-ID byte
+  is not in `event.data`, so the IMU sits at the documented DS5-BT offsets,
+  **gyro 16 / accel 22**. At rest the gyro reads (-4, -9, 0) and the accel
+  (-94, 7970, 1383), about 8090 raw (~1g, gravity on Y). Offsets 15 and 17
+  score far worse.
+- **What it does not cover:** buttons, sticks past the first bytes, the
+  touchpad, any movement (no pitch or roll step), and the probe's recovery from
+  a byte-shifted offset, which this hardware did not produce. A full wizard
+  capture from a Mac should replace this file when one is taken.
+
 The `bytes` field of each report is the WebHID input-report payload **with the
 report ID already stripped** (as `HIDInputReportEvent.data` delivers it), so byte
 indices map directly onto the driver's `parseReport` `DataView` offsets.
 
-> No genuine DualSense (DS5) capture exists in this repo yet — the DS5 parse path
-> is covered by synthesized frames in `playstation-driver.test.js`. Drop a real
-> DS5 report here and extend the probe test if you capture one.
+> The DualSense (DS5) fixture above is one partial Bluetooth frame. The rest of the DS5
+> parse path is covered by synthesized frames in `playstation-driver.test.js`. Drop a
+> full DS5 capture here and extend the probe test if you take one.
