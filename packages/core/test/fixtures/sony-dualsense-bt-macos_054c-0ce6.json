@@ -1,0 +1,77 @@
+{
+  "schema": "controller-test-report/v1",
+  "capturedAt": "2026-06-21T00:00:00.000Z",
+  "alias": "DualSense Bluetooth (macOS)",
+  "userNote": " [PARTIAL: one at-rest input report, its first 32 of 77 bytes, copied from the driver's \"PlayStation IMU probe bytes\" console line during the #83 hardware test on macOS; the console line prints no more than 32 bytes. The same frame is repeated 12 times so the probe has its 10 reports. Bytes are untouched. See #85.]",
+  "device": {
+    "vendorId": 1356,
+    "productId": 3302,
+    "vendorIdHex": "054c",
+    "productIdHex": "0ce6",
+    "productName": "DualSense Wireless Controller",
+    "connectionType": "bluetooth"
+  },
+  "pickedEntry": {
+    "name": "Sony DualSense",
+    "protocol": "dualsense",
+    "mode": "ds5",
+    "spoofs": null
+  },
+  "steps": [
+    {
+      "id": "at-rest",
+      "skipped": false,
+      "reportCount": 12,
+      "reports": [
+        {
+          "reportId": 49,
+          "bytes": "41 82 7e 80 79 00 00 01 08 00 00 00 7d 6a bd 25 fc ff f7 ff 00 00 a2 ff 22 1f 67 05 b0 f5 46 1d"
+        },
+        {
+          "reportId": 49,
+          "bytes": "41 82 7e 80 79 00 00 01 08 00 00 00 7d 6a bd 25 fc ff f7 ff 00 00 a2 ff 22 1f 67 05 b0 f5 46 1d"
+        },
+        {
+          "reportId": 49,
+          "bytes": "41 82 7e 80 79 00 00 01 08 00 00 00 7d 6a bd 25 fc ff f7 ff 00 00 a2 ff 22 1f 67 05 b0 f5 46 1d"
+        },
+        {
+          "reportId": 49,
+          "bytes": "41 82 7e 80 79 00 00 01 08 00 00 00 7d 6a bd 25 fc ff f7 ff 00 00 a2 ff 22 1f 67 05 b0 f5 46 1d"
+        },
+        {
+          "reportId": 49,
+          "bytes": "41 82 7e 80 79 00 00 01 08 00 00 00 7d 6a bd 25 fc ff f7 ff 00 00 a2 ff 22 1f 67 05 b0 f5 46 1d"
+        },
+        {
+          "reportId": 49,
+          "bytes": "41 82 7e 80 79 00 00 01 08 00 00 00 7d 6a bd 25 fc ff f7 ff 00 00 a2 ff 22 1f 67 05 b0 f5 46 1d"
+        },
+        {
+          "reportId": 49,
+          "bytes": "41 82 7e 80 79 00 00 01 08 00 00 00 7d 6a bd 25 fc ff f7 ff 00 00 a2 ff 22 1f 67 05 b0 f5 46 1d"
+        },
+        {
+          "reportId": 49,
+          "bytes": "41 82 7e 80 79 00 00 01 08 00 00 00 7d 6a bd 25 fc ff f7 ff 00 00 a2 ff 22 1f 67 05 b0 f5 46 1d"
+        },
+        {
+          "reportId": 49,
+          "bytes": "41 82 7e 80 79 00 00 01 08 00 00 00 7d 6a bd 25 fc ff f7 ff 00 00 a2 ff 22 1f 67 05 b0 f5 46 1d"
+        },
+        {
+          "reportId": 49,
+          "bytes": "41 82 7e 80 79 00 00 01 08 00 00 00 7d 6a bd 25 fc ff f7 ff 00 00 a2 ff 22 1f 67 05 b0 f5 46 1d"
+        },
+        {
+          "reportId": 49,
+          "bytes": "41 82 7e 80 79 00 00 01 08 00 00 00 7d 6a bd 25 fc ff f7 ff 00 00 a2 ff 22 1f 67 05 b0 f5 46 1d"
+        },
+        {
+          "reportId": 49,
+          "bytes": "41 82 7e 80 79 00 00 01 08 00 00 00 7d 6a bd 25 fc ff f7 ff 00 00 a2 ff 22 1f 67 05 b0 f5 46 1d"
+        }
+      ]
+    }
+  ]
+}
