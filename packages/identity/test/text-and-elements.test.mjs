@@ -87,13 +87,13 @@ test('<uf-signin> names each provider; a prepared address makes a plain link, an
 
   el._links = { discord: 'https://discord.com/oauth2/authorize?client_id=1&state=a"b', steam: 'javascript:alert(1)' };
   html = el.render();
-  assert.match(html, /<a class="uf-id-provider" data-provider="discord" href="https:\/\/discord\.com\/oauth2\/authorize\?client_id=1&amp;state=a&quot;b"/);
+  assert.match(html, /<a class="uf-id-provider" data-part="signin-discord" data-provider="discord" href="https:\/\/discord\.com\/oauth2\/authorize\?client_id=1&amp;state=a&quot;b"/);
   assert.match(html, /<button[^>]*data-provider="steam"/, 'anything but https stays a button');
   assert.ok(!html.includes('javascript:'));
 
   el._busy = 'steam';
   html = el.render();
-  assert.match(html, /data-provider="steam" disabled aria-busy="true"/);
+  assert.match(html, /data-provider="steam" aria-disabled="true" aria-busy="true"/);
   el._error = 'Steam sign-in is unavailable right now';
   assert.match(el.render(), /role="alert">Steam sign-in is unavailable right now/);
   assert.equal(providerIcon('nope'), '');
@@ -104,9 +104,9 @@ test('<uf-profile-card> one line per login: linked ones by name, the missing one
   assert.equal(el.render(), '', 'nothing signed out');
   el._user = { id: 7, name: 'Pete', avatar: null, identities: { discord: { name: '<b>pete</b>', avatar: 'https://cdn.test/d.png' } } };
   let html = el.render();
-  assert.match(html, /data-provider="discord" data-linked="true"/);
+  assert.match(html, /data-part="login-discord" data-provider="discord" data-linked="true"/);
   assert.ok(html.includes('&lt;b&gt;pete&lt;/b&gt;') && !html.includes('<b>pete'), 'names are escaped');
-  assert.match(html, /<img class="uf-id-login-pic" src="https:\/\/cdn\.test\/d\.png"/);
+  assert.match(html, /<img class="uf-id-login-pic" data-part="pic-discord" src="https:\/\/cdn\.test\/d\.png"/);
   assert.match(html, /data-provider="steam" data-linked="false"[\s\S]*<button[^>]*data-act="link" data-provider="steam">Link Steam<\/button>/);
   assert.ok(!html.includes('data-act="signout"'), 'Sign out only when asked for');
 
@@ -114,5 +114,5 @@ test('<uf-profile-card> one line per login: linked ones by name, the missing one
   el._note = 'Both sign-ins open this account.';
   html = el.render();
   assert.ok(!html.includes('data-act="link"'), 'nothing left to link');
-  assert.match(html, /uf-id-note">Both sign-ins open this account\./);
+  assert.match(html, /uf-id-note"[^>]*>Both sign-ins open this account./);
 });

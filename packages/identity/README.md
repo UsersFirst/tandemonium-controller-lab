@@ -22,6 +22,19 @@ The elements are plain custom elements in the light DOM, styled with `@usersfirs
 tokens (`--uf-*`). They import nothing from the UI kit. `<uf-device-signin>` draws its QR
 with `<uf-qr>` when the host has registered it.
 
+## Fitting the elements into a host (0.3)
+
+- **Size.** Every size inside `<uf-signin>` and `<uf-profile-card>` is in em. `size="sm"` is 13px, `size="lg"` is 22px, and the default follows `--uf-size-md` (16px). For any other size set one `font-size` on the element.
+- **Width.** `block` makes the buttons and lines fill the element (a narrow popup, a phone).
+- **Sign out.** `<uf-profile-card signout="danger">` shows it in the danger colour.
+- **Updates keep focus.** Setting a property (`busy`, `error`, `note`, `links`, `user`, a notice) changes the nodes that are there. A button that is still wanted is never replaced or moved, so controller or keyboard focus stays on it, and so does a class the host added. A picture the host swapped for a cached copy stays until the address the element was given changes. A busy button is `aria-disabled`, not `disabled`, because a browser takes focus away from a disabled button.
+- **Reaching the buttons.** `el.buttons()` lists an element's buttons top to bottom, for a host that keeps its own focus list. `signin.button('steam')`, `card.button('link', 'steam')` and `card.button('signout')` give one. `el.named(part)` finds any named part; the names are `data-part` values and are a contract:
+  - `<uf-signin>`: `signin-<provider>`, `error`
+  - `<uf-profile-card>`: `login-<provider>`, `link-<provider>`, `pic-<provider>`, `signout`, `error`, `note`
+  - `<uf-account-notice>`: `undo`, `ok` · `<uf-combine-accounts>`: `no`, `yes` · `<uf-device-signin>`: `open`
+- **Hiding one button.** Set `hidden` on a button (`signin.button('discord').hidden = true`). It stays hidden across renders and is left out of `buttons()`.
+- `el.renderNow()` renders at once, for a host that needs the buttons right after setting a property.
+
 ## Use
 
 ```js
