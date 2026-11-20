@@ -41,6 +41,14 @@
   <div class="log" id="profile-log"></div>
 </section>
 
+<section id="s-narrow">
+  <h2>In a narrow popup · <code>size="sm" block</code></h2>
+  <div id="narrow" style="width: 260px; display: flex; flex-direction: column; gap: 12px;">
+    <uf-signin id="signin-sm" size="sm" block providers="steam discord"></uf-signin>
+    <uf-profile-card id="profile-sm" size="sm" block signout="danger"></uf-profile-card>
+  </div>
+</section>
+
 <section id="s-device">
   <h2>Sign in from a TV or desktop build · &lt;uf-device-signin&gt;</h2>
   <uf-device-signin id="device" open-here></uf-device-signin>
@@ -104,6 +112,10 @@
     profile.note = '';
   });
   profile.addEventListener('uf-profile-signout', () => { plog.textContent = 'signed out'; });
+
+  // ── the same two, small and filling a narrow box (a game's popup) ──
+  const profileSm = document.getElementById('profile-sm');
+  profileSm.user = { id: 7, name: 'petegordon', avatar: null, identities: { discord: { name: 'petegordon', avatar: 'https://cdn.discordapp.com/embed/avatars/0.png' } } };
 
   // ── device sign-in ──
   const device = document.getElementById('device');
