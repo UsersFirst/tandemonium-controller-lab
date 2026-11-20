@@ -185,6 +185,10 @@ const keep2 = await page.evaluate(async () => {
   r.links = document.activeElement === steam && s.button('steam') === steam && s.button('discord').tagName === 'A';
   s.links = {}; await tick();
   r.back = document.activeElement === steam && s.button('discord').tagName === 'BUTTON';
+  // a button the host hid stays hidden (and out of buttons()) across a render
+  s.button('discord').hidden = true; s.busy = 'steam'; await tick(); s.busy = ''; await tick();
+  r.hidden = s.button('discord').hidden && getComputedStyle(s.button('discord')).display === 'none' && s.buttons().length === 1;
+  s.button('discord').hidden = false;
   return r;
 });
 check(Object.values(keep2).every(Boolean), 'uf-signin: busy, error and links keep the focused button', JSON.stringify(keep2));

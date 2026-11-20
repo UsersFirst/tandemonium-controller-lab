@@ -32,6 +32,7 @@ with `<uf-qr>` when the host has registered it.
   - `<uf-signin>`: `signin-<provider>`, `error`
   - `<uf-profile-card>`: `login-<provider>`, `link-<provider>`, `pic-<provider>`, `signout`, `error`, `note`
   - `<uf-account-notice>`: `undo`, `ok` · `<uf-combine-accounts>`: `no`, `yes` · `<uf-device-signin>`: `open`
+- **Hiding one button.** Set `hidden` on a button (`signin.button('discord').hidden = true`). It stays hidden across renders and is left out of `buttons()`.
 - `el.renderNow()` renders at once, for a host that needs the buttons right after setting a property.
 
 ## Use

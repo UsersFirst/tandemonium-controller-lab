@@ -43,6 +43,7 @@ export class UfProfileCard extends IdentityElement {
     uf-profile-card[size="sm"] { font-size: 13px; }
     uf-profile-card[size="lg"] { font-size: 22px; }
     uf-profile-card[hidden] { display: none; }
+    uf-profile-card [hidden] { display: none !important; }
     uf-profile-card ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .625em; align-items: stretch; width: fit-content; max-width: 100%; }
     uf-profile-card li { display: flex; align-items: center; gap: .625em; min-width: 0; font-size: 1em; }
     uf-profile-card .uf-id-icon { flex: none; opacity: .75; width: 1.125em; height: 1.125em; }

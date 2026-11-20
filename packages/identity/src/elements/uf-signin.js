@@ -41,6 +41,8 @@ export class UfSignin extends IdentityElement {
     uf-signin[size="sm"] { font-size: 13px; }
     uf-signin[size="lg"] { font-size: 22px; }
     uf-signin[hidden] { display: none; }
+    /* a host may hide one button (set its hidden property); it stays hidden across renders */
+    uf-signin [hidden] { display: none !important; }
     uf-signin .uf-id-provider { display: inline-flex; align-items: center; justify-content: center; gap: .625em; box-sizing: border-box; min-width: 15.5em; max-width: 100%;
       padding: .8em 1.5em; border-radius: var(--uf-radius-md, 10px); border: 1px solid transparent; cursor: pointer; text-decoration: none;
       font: 700 1em/1.2 var(--uf-font-ui, system-ui, sans-serif); color: #fff; }
