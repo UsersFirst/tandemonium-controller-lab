@@ -107,6 +107,8 @@ check(f >= 16 && f < 18 && Math.abs(sizes.bigMin - 15.5 * f) < 0.5 && Math.abs(s
 check(sizes.smallFont === 13 && Math.abs(sizes.smallIcon - 13 * 1.375) < 0.5 && sizes.smCardFont === 13 && Math.abs(sizes.smCardPic - 13 * 2.75) < 0.5,
   'size="sm": text, marks and pictures all scale together', JSON.stringify(sizes));
 check(Math.abs(sizes.smallW - sizes.box) < 1 && Math.abs(sizes.smUl - sizes.box) < 1, 'block: buttons and lines fill the box', sizes.smallW + ' / ' + sizes.smUl + ' of ' + sizes.box);
+const oneLine = await page.evaluate(() => { const n = document.getElementById('narrow'); n.style.width = '190px'; const r = [...document.querySelectorAll('#signin-sm .uf-id-provider span')].map((sp) => sp.getClientRects().length); n.style.width = '260px'; return r; });
+check(oneLine.every((n) => n === 1), 'block: in a 190px box the words stay on one line', JSON.stringify(oneLine));
 check(sizes.outColor !== sizes.outColorPlain, 'signout="danger" colours Sign out', sizes.outColor);
 const anySize = await page.evaluate(() => {
   const el = document.getElementById('signin-sm');

@@ -48,7 +48,8 @@ export class UfSignin extends IdentityElement {
       font: 700 1em/1.2 var(--uf-font-ui, system-ui, sans-serif); color: #fff; }
     uf-signin .uf-id-provider .uf-id-icon { width: 1.375em; height: 1.375em; flex: none; }
     uf-signin[block] { align-items: stretch; }
-    uf-signin[block] .uf-id-provider { min-width: 0; width: 100%; }
+    /* (less side padding: in a narrow box the words must stay on one line) */
+    uf-signin[block] .uf-id-provider { min-width: 0; width: 100%; padding-left: .75em; padding-right: .75em; }
     uf-signin .uf-id-provider[data-provider="discord"] { background: #5865f2; }
     uf-signin .uf-id-provider[data-provider="discord"]:hover { background: #4752c4; }
     uf-signin .uf-id-provider[data-provider="steam"] { background: #171a21; border-color: #66c0f4; }
