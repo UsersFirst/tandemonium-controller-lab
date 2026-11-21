@@ -3,7 +3,13 @@
 // already moved on from still acted on its close, re-dialled, replaced the live socket, and so on.
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { RoomTransport } from '../src/room-transport.js';
+import { RoomTransport as RelayOnly } from '../src/room-transport.js';
+import { P2PRoomTransport } from '../src/index.js';
+
+// lab #137 · the relay behaviour must be the same with or without the P2P layer on top.
+// This file runs against the relay alone; room-transport-relay-p2p.test.js imports it again
+// with ?layer=p2p. The two tests about the P2P upgrade itself always use the P2P layer.
+const RoomTransport = new URL(import.meta.url).searchParams.get('layer') === 'p2p' ? P2PRoomTransport : RelayOnly;
 
 let sockets;
 class FakeWS {
@@ -30,8 +36,8 @@ afterEach(() => { globalThis.setTimeout = realSetTimeout; globalThis.clearTimeou
 const runTimers = () => { for (const t of timers.splice(0)) if (!t.done) { t.done = true; t.fn(); } };
 const live = () => sockets.filter((s) => !s.closed && s.readyState !== 3);
 
-function transport() {
-  const t = new RoomTransport();
+function transport(Layer = RoomTransport) {
+  const t = new Layer();
   t._fallbackUrl = 'wss://relay.test/room';
   t._attemptP2PUpgrade = () => {};
   return t;
@@ -179,7 +185,7 @@ test('an evicted transport is not re-dialled by a token retry, a pending refusal
 });
 
 test('two P2P upgrade attempts close together leave one Peer, not a leaked one', async () => {
-  const t = transport();
+  const t = transport(P2PRoomTransport);
   t.roomCode = 'TNDM-AAAA'; t.role = 'captain';
   t.p2pKey = 'k1';                                // the room's P2P key (from partner-ready)
   delete t._attemptP2PUpgrade;                    // the real one this time
@@ -262,7 +268,7 @@ test('partner-ready with a name sets partnerName; one without leaves it null', (
 
 // 2026-11-17 · rooms belong to their riders.
 test('peer ids carry the room’s P2P key; without one (an older relay) there is no P2P attempt', async () => {
-  const t = transport();
+  const t = transport(P2PRoomTransport);
   t.roomCode = 'TNDM-AAAA'; t.role = 'captain';
   delete t._attemptP2PUpgrade;
   const peers = [];
