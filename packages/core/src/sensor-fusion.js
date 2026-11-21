@@ -422,7 +422,7 @@ export class SensorFusion {
         const idealStddev = this._calibIdealStddev || FUSION_CALIB_IDEAL_STDDEV;
         if (this._trustedBias && maxStd > this._trustedBias.stddev * BIAS_REPLACE_STDDEV_RATIO) {
           // Noisier than the bias in use: keep that bias and hand control back.
-          console.log(`Fusion calib kept bias (window stddev ${maxStd.toFixed(0)} vs ${this._trustedBias.stddev.toFixed(0)})`);
+          console.warn(`Fusion calib kept bias (window stddev ${maxStd.toFixed(0)} vs ${this._trustedBias.stddev.toFixed(0)})`);
           this._calibSamples = [];
           this._calibrating = false;
           this._calibBest = null;
