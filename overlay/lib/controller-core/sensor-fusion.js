@@ -43,6 +43,7 @@ import * as THREE from 'three';
 
 import { twistAngleY, stepYawReturn, composeHeadingOffset, DEFAULT_YAW_RETURN_HALF_LIFE_S } from './yaw-return.js';
 import { rollFromGravity } from './gravity-roll.js';
+import { RollZero } from './roll-zero.js';
 
 // ── Initial one-shot bias calibration ──
 // Bluetooth captures are noisier (lower effective sample rate + packet
@@ -171,8 +172,20 @@ export class SensorFusion {
     // its own thresholds and is not affected.
     this._suppressCalibUntilMs = 0;
 
+    // The roll that counts as level for this controller as it is held (#112).
+    // Fed the gravity roll on every ingest(); see roll-zero.js.
+    this.rollZero = new RollZero();
+    // The accelerometer's own reading, lightly smoothed (50 ms half-life), for
+    // the roll zero's stillness check and its at-rest value. Separate from
+    // _smoothAccel, whose 250 ms half-life and reset value serve shakiness.
+    this._rzAccel = new THREE.Vector3();
+    this._rzAccelInit = false;
+    this._rzAccelLen = 0;
+
     // Timekeeping: set to performance.now() on first ingest().
     this._lastGyroTime = 0;
+    // The last device IMU timestamp, for drivers that report one (#822).
+    this._lastImuTicks = null;
 
     // Reusable scratch vectors — instance-scoped so two SensorFusion
     // instances can't clobber each other mid-frame.
@@ -196,6 +209,49 @@ export class SensorFusion {
   gravityRollRadians() {
     return rollFromGravity(this._gravityVec.x, this._gravityVec.y);
   }
+
+  /**
+   * Take the roll zero now: the way the controller is held at this moment is
+   * level. The result's `still` says whether it was at rest; a zero taken
+   * while it moved is committed, and reported as not still (#112).
+   * @returns {import('./roll-zero.js').RollZeroResult}
+   */
+  setRollZero() {
+    const r = this.rollZero.set();
+    if (r.still) this._alignGravityToRest();
+    return r;
+  }
+
+  /**
+   * At rest the accelerometer measures down directly, so when a zero is taken
+   * at rest the tracked gravity vector is put on it. Without this, a zero
+   * taken while gravity is still coming back after reset() would read as a
+   * lean that slowly fades (the gravity correction is slow by design when the
+   * gap is small). Changes nothing when the two already agree.
+   */
+  _alignGravityToRest() {
+    if (!this._rzAccelInit || this._rzAccelLen < 1e-6) return;
+    this._gravityVec.copy(this._rzAccel).multiplyScalar(-this._gravityVec.length() / this._rzAccelLen);
+  }
+
+  /**
+   * Take the roll zero at the next still moment instead of now (for a consumer
+   * that used to pick a fixed moment, such as a countdown). The old zero stays
+   * in force until then. `fallback` is what happens when no still moment comes
+   * before `timeoutMs`: 'best' uses the steadiest window seen, 'keep' leaves
+   * the zero as it was. Listen on `rollZero.onResult` for the outcome.
+   * @param {{timeoutMs?: number, fallback?: 'best'|'keep'}} [opts]
+   */
+  requestRollZero(opts) { this.rollZero.request(opts); }
+
+  /** Forget the roll zero: rollRelativeRadians() is the gravity roll again. */
+  clearRollZero() { return this.rollZero.clear(); }
+
+  /**
+   * Gravity roll measured from the roll zero, radians in (-π, π]. Equal to
+   * gravityRollRadians() until a zero is taken. Same sign convention.
+   */
+  rollRelativeRadians() { return this.rollZero.relative(this.gravityRollRadians()); }
 
   /**
    * Begin initial one-shot bias calibration. Clears any prior samples.
@@ -255,6 +311,12 @@ export class SensorFusion {
     this._sfTimeSteady = 0;
     this._sfSkippedTime = 0;
     this._lastGyroTime = 0;
+    this._lastImuTicks = null;
+    // Gravity starts again from straight down and converges on the real pose:
+    // that jump is not the player, so it must not count as movement or as a
+    // still window. The zero itself is kept (it is the grip, not fusion state).
+    this.rollZero.resetWindow();
+    this._rzAccelInit = false;
   }
 
   /**
@@ -279,6 +341,16 @@ export class SensorFusion {
   }
 
   /**
+   * The bias a calibration settled on, in degrees per second. A window taken while the controller was moving
+   * commits a wrong bias, which turns into heading drift, so a diagnostic log has to be able to show it (#822).
+   * A warning, because the desktop build's diagnostic log keeps warnings and errors only.
+   */
+  _logCalibCommit(kind, stddev, gyroScale) {
+    const dps = (v) => (v * gyroScale).toFixed(2);
+    console.warn(`Fusion calib committed ${kind} (stddev ${stddev.toFixed(0)}): bias ${dps(this.bias.x)}, ${dps(this.bias.y)}, ${dps(this.bias.z)} deg/s`);
+  }
+
+  /**
    * Ingest one HID report's worth of IMU data. Caller is responsible for
    * unit scales (gyroScale: deg/sec per raw unit; accelScale: g per raw
    * unit — typical values 2000/32768 * π/180 after conversion for gyro,
@@ -295,8 +367,12 @@ export class SensorFusion {
    *                            gravity correction is unit-scale-invariant
    *                            so this can be approximate)
    * @param {number} nowMs performance.now() from the caller
+   * @param {number} [imuTicks] the device's own uint32 sample timestamp, if the
+   *   driver has one. Reports queued behind a busy main thread all arrive at
+   *   about the same nowMs, so the time between samples must come from here.
+   * @param {number} [imuTicksPerMs] that timestamp's clock rate
    */
-  ingest(rawGx, rawGy, rawGz, rawAx, rawAy, rawAz, gyroScale, accelScale, nowMs) {
+  ingest(rawGx, rawGy, rawGz, rawAx, rawAy, rawAz, gyroScale, accelScale, nowMs, imuTicks, imuTicksPerMs) {
     // Initial one-shot bias capture with best-of-N retry selection.
     if (this._calibrating) {
       this._calibSamples.push({ x: rawGx, y: rawGy, z: rawGz });
@@ -328,6 +404,7 @@ export class SensorFusion {
           this.bias.x = meanX;
           this.bias.y = meanY;
           this.bias.z = meanZ;
+          this._logCalibCommit('clean', maxStd, gyroScale);
           this._calibSamples = [];
           this._calibrating = false;
           this._calibBest = null;
@@ -346,7 +423,7 @@ export class SensorFusion {
             this.bias.x = best.meanX;
             this.bias.y = best.meanY;
             this.bias.z = best.meanZ;
-            console.warn(`Fusion calib committed best-of-${FUSION_CALIB_MAX_RETRIES + 1} (stddev ${best.stddev.toFixed(0)})`);
+            this._logCalibCommit(`best-of-${FUSION_CALIB_MAX_RETRIES + 1}`, best.stddev, gyroScale);
           } else {
             console.warn(`Fusion calib aborted — all ${FUSION_CALIB_MAX_RETRIES + 1} captures too noisy (best stddev ${best.stddev.toFixed(0)}); keeping previous bias, letting continuous calibration refine`);
           }
@@ -358,13 +435,25 @@ export class SensorFusion {
     }
 
     // First-frame dt init: skip integration, just remember the time.
+    const hasImuClock = Number.isFinite(imuTicks) && imuTicksPerMs > 0;
     if (this._lastGyroTime === 0) {
       this._lastGyroTime = nowMs;
+      this._lastImuTicks = hasImuClock ? imuTicks : null;
       return;
     }
 
-    const dt = (nowMs - this._lastGyroTime) / 1000.0;
+    let dt = (nowMs - this._lastGyroTime) / 1000.0;
     this._lastGyroTime = nowMs;
+    if (hasImuClock) {
+      if (this._lastImuTicks !== null) {
+        // >>> 0 keeps the difference right across the uint32 wrap. Zero means
+        // the report repeats the last IMU sample, so there is nothing to add.
+        dt = ((imuTicks - this._lastImuTicks) >>> 0) / imuTicksPerMs / 1000.0;
+      }
+      this._lastImuTicks = imuTicks;
+    } else {
+      this._lastImuTicks = null;
+    }
     if (dt <= 0 || dt >= 0.1) return;
 
     const hasAccel = rawAx != null && rawAy != null && rawAz != null;
@@ -459,6 +548,20 @@ export class SensorFusion {
     }
 
     this.orientation.normalize();
+
+    // Roll zero (#112): only with an accelerometer, since the roll is gravity's.
+    if (hasAccel && this.gravityMode > 0) {
+      const as = accelScale || (1.0 / 8192.0);
+      const a = this._tmpVec.set(rawAx * as, rawAy * as, rawAz * as);
+      if (!this._rzAccelInit) { this._rzAccel.copy(a); this._rzAccelInit = true; }
+      else this._rzAccel.lerp(a, 1 - Math.pow(2, -dt / 0.05));
+      this._rzAccelLen = this._rzAccel.length();
+      // near 1g only: otherwise the hand's own acceleration is in the reading
+      const restRoll = (this._rzAccelLen > 0.85 && this._rzAccelLen < 1.15)
+        ? rollFromGravity(-this._rzAccel.x, -this._rzAccel.y) : NaN;
+      const decided = this.rollZero.sample(this.gravityRollRadians(), nowMs, restRoll);
+      if (decided && decided.still && decided.changed) this._alignGravityToRest();
+    }
 
     // 4. Continuous stillness calibration (runs when accel is stable)
     if (!this._calibrating) {
