@@ -2,7 +2,7 @@
 // own inside the transport is an option; these tests pin each one and its default.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { RoomTransport } from '../src/room-transport.js';
+import { MediaRoomTransport as RoomTransport } from '../src/index.js';
 
 let sockets;
 class FakeWS {

@@ -80,6 +80,9 @@ jobs:
       - name: Test @usersfirst/rooms
         run: node --test
         working-directory: packages/rooms
+      - name: Test @usersfirst/rooms-relay
+        run: node --test
+        working-directory: packages/rooms-relay
       # The ratchet: design/audit/thresholds.json are high-water marks that only
       # go down. Only the lab target exists on a CI runner; the game checks itself.
       - name: UI audit ratchet

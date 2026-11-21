@@ -1,0 +1,19 @@
+{
+  "name": "@usersfirst/rooms-relay",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "The room relay for @usersfirst/rooms: a Cloudflare Worker and Durable Object that seats two connections per room code and forwards their frames. Build-free.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "exports": {
+    ".": "./src/relay.js",
+    "./relay": "./src/relay.js",
+    "./room-proof": "./src/room-proof.js"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ]
+}

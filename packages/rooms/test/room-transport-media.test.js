@@ -3,7 +3,7 @@
 // answer) an incoming call. Data connections are not part of this gate.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { RoomTransport } from '../src/room-transport.js';
+import { MediaRoomTransport as RoomTransport } from '../src/index.js';
 
 function fakeCall() {
   const c = { closed: false, answered: false, handlers: {} };

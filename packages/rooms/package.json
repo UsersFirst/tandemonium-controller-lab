@@ -1,15 +1,17 @@
 {
   "name": "@usersfirst/rooms",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
-  "description": "A two-seat room over a relay, with an optional PeerJS P2P upgrade. Opaque bytes in and out. Build-free.",
+  "description": "A two-seat room over a relay, with an optional PeerJS P2P upgrade and optional camera/mic calls, each its own module. Opaque bytes in and out. Build-free.",
   "scripts": {
     "test": "node --test"
   },
   "exports": {
     ".": "./src/index.js",
-    "./room-transport": "./src/room-transport.js"
+    "./room-transport": "./src/room-transport.js",
+    "./p2p": "./src/p2p.js",
+    "./media": "./src/media.js"
   },
   "files": [
     "src",
