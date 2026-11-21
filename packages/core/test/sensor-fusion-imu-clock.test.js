@@ -4,11 +4,16 @@
 // says almost no time passed between them, and a stall of 100 ms or more threw
 // the sample away. The Steam Controller stamps each IMU sample, so the time
 // between samples is known however late they are delivered.
-import test from 'node:test';
+import nodeTest from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SensorFusion } from '../src/sensor-fusion.js';
 import { SteamControllerDriver } from '../src/drivers/steam-controller-driver.js';
+
+// SensorFusion needs three, which this package's CI deliberately does not install: those tests run where three is
+// present (a local install, and the same tests in Tandemonium).
+let SensorFusion = null;
+try { ({ SensorFusion } = await import('../src/sensor-fusion.js')); } catch { /* no three */ }
+const test = (name, fn) => nodeTest(name, { skip: !SensorFusion && !/manager hands|driver/i.test(name) && 'needs three' }, fn);
 
 const GS = 2000 / 32768, DEG = 180 / Math.PI;
 const TICKS_PER_MS = 934, HZ = 240, TICKS = Math.round(TICKS_PER_MS * 1000 / HZ);
