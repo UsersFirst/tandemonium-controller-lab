@@ -22,6 +22,13 @@ The elements are plain custom elements in the light DOM, styled with `@usersfirs
 tokens (`--uf-*`). They import nothing from the UI kit. `<uf-device-signin>` draws its QR
 with `<uf-qr>` when the host has registered it.
 
+## Coming from a site with its own sign-in code (0.4)
+
+- **A hand-off code.** `await identity.redeemHandoff()` takes `?ht_code=…` off the address and swaps it for a session (the other end of `handoff()`). It answers `null` when there was no code, else `{ signedIn }`. A code that is refused or has expired leaves the session already here alone.
+- **An old link.** `resume()` refuses an expired token in the address (`{ signedIn: false, expired: true }`) and keeps the stored session.
+- **A token the server no longer takes.** `new IdentityClient({ forgetOn401: true })` makes `refresh()` end the session on any 401. Without it only `account_gone` does, and `meStatus` says 401 for the host to decide.
+- **A stored token with no stored profile.** Point `keys.token` at the key the site already used. The client reads the token alone as a session, named by the token's own claims, and `refresh()` then stores the profile under `keys.user`.
+
 ## Fitting the elements into a host (0.3)
 
 - **Size.** Every size inside `<uf-signin>` and `<uf-profile-card>` is in em. `size="sm"` is 13px, `size="lg"` is 22px, and the default follows `--uf-size-md` (16px). For any other size set one `font-size` on the element.
