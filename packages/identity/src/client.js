@@ -47,6 +47,7 @@ const LINK_PENDING_TTL_MS = 15 * 60 * 1000;
  * @property {Location} [location]
  * @property {History} [history]
  * @property {() => number} [now]
+ * @property {boolean} [forgetOn401]                  refresh(): any 401 ends the session (default: only `account_gone` does; meStatus says 401)
  */
 
 /** The JWT's claims, unverified (the server verifies; this is for expiry and display). */
@@ -125,6 +126,7 @@ export class IdentityClient {
     this._loc = opts.location;
     this._hist = opts.history;
     this._now = opts.now || (() => Date.now());
+    this._forgetOn401 = !!opts.forgetOn401;
     /** @type {IdentityUser|null} */ this.user = null;
     /** @type {string|null} */ this.token = null;
     /** @type {string|null} */ this.lastError = null;
@@ -143,6 +145,15 @@ export class IdentityClient {
       this.user = raw ? JSON.parse(raw) : null;
       this.token = this._storage.getItem(this._keys.token) || null;
     } catch (e) { this.user = null; this.token = null; }
+    // A site that used to store the token alone (no profile): the token's own claims name the
+    // player until refresh() reads the account. Nothing is written until then.
+    if (this.token && !this.user) {
+      const c = decodeToken(this.token);
+      if (c && c.sub != null) {
+        const provider = typeof c.via === 'string' ? c.via.split(':')[0] : undefined;
+        this.user = this._shape({ id: c.sub, name: typeof c.name === 'string' ? c.name : undefined, avatar: typeof c.picture === 'string' ? c.picture : null }, provider ? { provider } : {}, null);
+      }
+    }
   }
 
   _save() {
@@ -225,6 +236,9 @@ export class IdentityClient {
     this.meStatus = r ? r.status : 0;
     if (!r) return null;
     if (r.status === 401 && r.data.code === 'account_gone') { this.clearToken(); this._emit('gone'); return null; }
+    // `forgetOn401`: a token the server no longer takes (signed out elsewhere, a login undone)
+    // ends the session here too. Without the option the session is kept and meStatus says 401.
+    if (r.status === 401 && this._forgetOn401) { this.signOut(); return null; }
     if (!r.ok || !r.data.user || !this.user) return null;
     this.me = r.data;
     const u = r.data.user;
@@ -330,6 +344,9 @@ export class IdentityClient {
     if (back.token) {
       const c = decodeToken(back.token);
       if (!c) return null;
+      // An old link opened again (a bookmark, the back button): the token in it has expired.
+      // The session already here, if any, stays as it is.
+      if (typeof c.exp === 'number' && c.exp <= Math.floor(this._now() / 1000)) return { signedIn: false, expired: true };
       this.token = back.token;
       const r = await this.api('/me').catch(() => null);
       const u = r && r.ok && r.data.user;
@@ -461,6 +478,32 @@ export class IdentityClient {
   }
 
   /** A one-time code that opens another House Tandem site signed in (it goes in that site's URL; the session never does). → code or null */
+  /**
+   * The other end of handoff(): this page was opened with `?ht_code=…` (a link from a signed-in
+   * page of another House Tandem site). The code comes off the address at once, and is swapped
+   * for a session. A code that is refused or has expired leaves the session already here alone.
+   * @returns {Promise<{ signedIn: boolean, error?: string }|null>} null when there was no code
+   */
+  async redeemHandoff() {
+    const loc = this._loc || globalThis.location;
+    const hist = this._hist || globalThis.history;
+    if (!loc || !loc.search || !/[?&]ht_code=/.test(loc.search)) return null;
+    const params = new URLSearchParams(loc.search);
+    const code = params.get('ht_code');
+    params.delete('ht_code');
+    const rest = params.toString();
+    try { hist.replaceState(null, '', loc.pathname + (rest ? '?' + rest : '') + (loc.hash || '')); } catch (e) { /* no history here */ }
+    if (!code) return null;
+    const r = await this.api('/auth/handoff/redeem', { method: 'POST', body: { code }, auth: false }).catch(() => null);
+    if (!r) return { signedIn: false, error: 'offline' };
+    if (!r.ok || !r.data.token) return { signedIn: false, error: r.data.error || 'This sign-in link has expired' };
+    const c = decodeToken(r.data.token);
+    if (!c || (typeof c.exp === 'number' && c.exp <= Math.floor(this._now() / 1000))) return { signedIn: false, error: 'This sign-in link has expired' };
+    const provider = typeof c.via === 'string' ? c.via.split(':')[0] : undefined;
+    this.apply(r.data.token, r.data.user || { id: c.sub, name: c.name, avatar: c.picture }, provider ? { provider } : {});
+    return { signedIn: true };
+  }
+
   async handoff() {
     if (!this.token) return null;
     try {
