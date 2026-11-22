@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Builds what lab.housetandem.com publishes into public/, for Cloudflare Workers static assets:
-// the same pages at the same paths as scripts/build-web.js (the GitHub Pages build), from a
+// the pages at the paths the site has always had (it was on GitHub Pages before), from a
 // list of what is published, plus the response headers (_headers).
 //
 //   node scripts/build-site.js                      production

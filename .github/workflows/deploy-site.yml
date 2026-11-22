@@ -1,8 +1,8 @@
 name: Deploy site (Cloudflare)
 # Third-party actions are pinned to a commit (the tag is in the comment).
 # main -> build test -> staging -> check staging -> production.
-# deploy-pages.yml still publishes the same site to GitHub Pages; production here stays off
-# until the address has moved (repository variable CF_PRODUCTION_LIVE).
+# Production deploys while the repository variable CF_PRODUCTION_LIVE is 'true' (it is: the
+# site has been served from here since the move off GitHub Pages).
 on:
   push:
     branches: [main]

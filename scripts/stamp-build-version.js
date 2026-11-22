@@ -9,7 +9,7 @@
 // Run by the "Stamp build version" steps in:
 //   • build-desktop.yml — bakes the stamp into the packaged Windows .exe and
 //     macOS .app (apps/overlay/src/index.html is the app UI).
-//   • deploy-pages.yml  — stamps the web overlay AND the landing page so you
+//   • the site build     — stamps the web overlay AND the landing page so you
 //     can confirm build freshness before downloading.
 //
 // With no BUILD_STAMP set (e.g. a local build) the file is left at its
