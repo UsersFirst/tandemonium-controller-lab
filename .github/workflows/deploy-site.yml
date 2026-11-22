@@ -1,0 +1,61 @@
+name: Deploy site (Cloudflare)
+# Third-party actions are pinned to a commit (the tag is in the comment).
+# main -> build test -> staging -> check staging -> production.
+# deploy-pages.yml still publishes the same site to GitHub Pages; production here stays off
+# until the address has moved (repository variable CF_PRODUCTION_LIVE).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      # No install: the build and its test only copy files.
+      - name: Site build test
+        run: node --test test/site-build.test.mjs
+      - name: Build the staging site
+        run: node scripts/build-site.js --env staging --sha "$GITHUB_SHA"
+      - name: Deploy to staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx --yes wrangler@4.166.0 deploy --env staging
+      - name: Check staging answers
+        run: node scripts/check-site.js https://controller-lab-site-staging.pete-872.workers.dev --wait 180
+
+  production:
+    needs: staging
+    # Off until the site moves from GitHub Pages (repository variable).
+    if: vars.CF_PRODUCTION_LIVE == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Build the production site
+        run: node scripts/build-site.js --sha "$GITHUB_SHA"
+      - name: Deploy to production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx --yes wrangler@4.166.0 deploy
+      - name: Check production answers
+        run: node scripts/check-site.js https://lab.housetandem.com --wait 420

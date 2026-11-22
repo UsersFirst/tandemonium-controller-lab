@@ -1,0 +1,27 @@
+{
+  // lab.housetandem.com on Cloudflare: static files only, no Worker code.
+  // Build first: node scripts/build-site.js (or --env staging).
+  "name": "controller-lab-site",
+  "account_id": "87260c174f34fc18e96f2f47344e8d26",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "lab.housetandem.com", "custom_domain": true }],
+  "assets": {
+    "directory": "./public",
+    "html_handling": "auto-trailing-slash"
+  },
+  "env": {
+    "staging": {
+      "name": "controller-lab-site-staging",
+      // Its own workers.dev address and one per PR preview; never the live address.
+      "routes": [],
+      "workers_dev": true,
+      "preview_urls": true,
+      "assets": {
+        "directory": "./public",
+        "html_handling": "auto-trailing-slash"
+      }
+    }
+  }
+}
