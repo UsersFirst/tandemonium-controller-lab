@@ -1,6 +1,6 @@
 {
   "name": "@usersfirst/rooms-relay",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "license": "MIT",
   "description": "The room relay for @usersfirst/rooms: a Cloudflare Worker and Durable Object that seats two connections per room code and forwards their frames. Build-free.",
