@@ -84,6 +84,7 @@ test('over the direct connection, game bytes still arrive', () => {
 test('TURN credentials are reused until they near their hour, then asked for again', async () => {
   const t = transport(P2PRoomTransport);
   t.options.turnCredentialsUrl = 'https://relay.test/turn';
+  t.p2pKey = 'room-key';
   t.roomCode = 'ABCD';
   t.role = 'captain';
   const realFetch = globalThis.fetch;
@@ -107,6 +108,7 @@ test('TURN credentials are reused until they near their hour, then asked for aga
 test('a refused TURN request is not remembered: the next connection asks again', async () => {
   const t = transport(P2PRoomTransport);
   t.options.turnCredentialsUrl = 'https://relay.test/turn';
+  t.p2pKey = 'room-key';
   t.roomCode = 'ABCD';
   t.role = 'captain';
   const realFetch = globalThis.fetch;

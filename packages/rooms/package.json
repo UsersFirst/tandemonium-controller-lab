@@ -1,6 +1,6 @@
 {
   "name": "@usersfirst/rooms",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "license": "MIT",
   "description": "A two-seat room over a relay, with an optional PeerJS P2P upgrade and optional camera/mic calls, each its own module. Opaque bytes in and out. Build-free.",
