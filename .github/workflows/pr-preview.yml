@@ -1,20 +1,16 @@
-name: PR preview (web + desktop)
+name: PR preview (desktop)
 
-# Per-PR preview so a change can be tested fully and in isolation (issue #77),
-# mirroring the PR-preview workflow in petegordon/tandemonium but extended with
-# the desktop installers:
+# Per-PR desktop preview so a change can be tested fully and in isolation (issue #77):
 #
-#   • Web preview  — the browser overlay deployed to the gh-pages `pr-preview/`
-#                    umbrella at  https://lab.housetandem.com/pr-preview/pr-<N>/
-#                    (overlay at  …/pr-preview/pr-<N>/overlay/). Torn down on close.
 #   • Desktop      — Windows .exe + macOS .dmg/zip published as a per-PR
 #                    *prerelease* tagged `pr-<N>`, deleted when the PR closes.
-#   • One sticky comment links the web URL and the desktop downloads, refreshed
-#                    on every push.
+#   • One sticky comment links the desktop downloads, refreshed on every push.
+#
+# The web preview is on Cloudflare (preview-site.yml), with its own comment.
 #
 # Scope: INTERNAL branches only. Fork PRs get a read-only GITHUB_TOKEN (and no
-# secrets), so they can't publish to gh-pages / Releases anyway — every job is
-# guarded on the head repo being this repo to avoid noisy guaranteed failures.
+# secrets), so they can't publish to Releases anyway — every job is guarded on
+# the head repo being this repo to avoid noisy guaranteed failures.
 on:
   pull_request:
     types: [opened, synchronize, reopened, closed]
@@ -26,47 +22,10 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write        # gh-pages preview branch + per-PR prerelease
+  contents: write        # per-PR prerelease
   pull-requests: write   # sticky preview comment
 
 jobs:
-  # ── Web preview → gh-pages /pr-preview/pr-<N>/ (and teardown on close) ──
-  web-preview:
-    if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    # Share the repo-wide gh-pages serialization group with deploy-pages.yml so
-    # a prod deploy and a preview deploy never push to gh-pages concurrently.
-    concurrency:
-      group: gh-pages-write
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      # Build steps are skipped on `closed` — the deploy action then only runs
-      # its teardown (removes this PR's preview dir from gh-pages).
-      - name: Assemble _site for the preview subpath
-        if: github.event.action != 'closed'
-        run: |
-          node apps/overlay/scripts/copy-workspace.js
-          HASH=$(git rev-parse --short HEAD)
-          export BUILD_STAMP="PR #${{ github.event.number }} &middot; <a href=\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}\" target=\"_blank\" rel=\"noopener\">v.${HASH}</a> &middot; $(date -u +'%Y-%m-%d %H:%M UTC')"
-          node scripts/stamp-build-version.js apps/overlay/src/index.html web/index.html
-          node scripts/build-web.js
-          # Scope the landing page's relative URLs to the preview subpath so its
-          # links (e.g. → /overlay) resolve under /pr-preview/pr-<N>/.
-          sed -i 's|<head>|<head><base href="/pr-preview/pr-${{ github.event.number }}/">|' _site/index.html
-      - name: Deploy / teardown PR web preview
-        uses: rossjrw/pr-preview-action@v1
-        with:
-          source-dir: ./_site/
-          preview-branch: gh-pages
-          umbrella-dir: pr-preview
-          action: auto
-          # We post a single combined sticky comment (web + desktop) ourselves.
-          comment: false
-
   # ── Desktop installers (skipped on close) ──
   build-macos:
     if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
@@ -166,9 +125,9 @@ jobs:
 
             This prerelease is deleted automatically when the PR closes.
 
-  # ── One combined sticky comment (web URL + desktop downloads) ──
+  # ── One sticky comment (desktop downloads) ──
   comment:
-    needs: [web-preview, prerelease]
+    needs: [prerelease]
     if: always() && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
@@ -179,14 +138,11 @@ jobs:
           message: |
             ### 🔎 PR #${{ github.event.number }} preview — test it in isolation
 
-            **🌐 Web overlay:** https://lab.housetandem.com/pr-preview/pr-${{ github.event.number }}/overlay/
-            _(landing page: https://lab.housetandem.com/pr-preview/pr-${{ github.event.number }}/)_
-
             **💻 Desktop installers (prerelease):** https://github.com/${{ github.repository }}/releases/tag/pr-${{ github.event.number }}
             - **Windows** — `…-Setup.exe` (installer) or `.zip` (portable)
             - **macOS** — `WebHID-Controller-Overlay.dmg` or `.zip` (unsigned: right-click → Open)
 
-            <sub>Updated for ${{ github.event.pull_request.head.sha }}. Web preview and prerelease are torn down when this PR closes.</sub>
+            <sub>Updated for ${{ github.event.pull_request.head.sha }}. The prerelease is removed when this PR closes. The web preview has its own comment.</sub>
 
   # ── Teardown on close: delete the per-PR prerelease + tag, note the comment ──
   cleanup:
@@ -218,4 +174,4 @@ jobs:
           message: |
             ### 🔎 PR #${{ github.event.number }} preview — torn down
 
-            This PR is closed; its web preview and desktop prerelease have been removed.
+            This PR is closed; its desktop prerelease has been removed.

@@ -28,14 +28,14 @@ npm --workspace @usersfirst/overlay run make:dmg       # macOS DMG (uses hdiutil
 
 ## PR previews (test a PR in isolation)
 
-Every internal PR gets a preview built by [`.github/workflows/pr-preview.yml`](../../.github/workflows/pr-preview.yml), with a single sticky comment linking:
+Every internal PR gets two previews, each with its own sticky comment:
 
-- **Web overlay** — deployed to `gh-pages` under `https://lab.housetandem.com/pr-preview/pr-<N>/overlay/`.
-- **Desktop installers** — Windows `.exe` + macOS `.dmg`/zip, published as a per-PR **prerelease** tagged `pr-<N>`.
+- **Web overlay** — on Cloudflare at `https://pr-<N>-controller-lab-site-staging.pete-872.workers.dev/overlay/` ([`preview-site.yml`](../../.github/workflows/preview-site.yml)).
+- **Desktop installers** — Windows `.exe` + macOS `.dmg`/zip, published as a per-PR **prerelease** tagged `pr-<N>` ([`pr-preview.yml`](../../.github/workflows/pr-preview.yml)), removed when the PR closes.
 
-Both are torn down automatically when the PR closes. Previews run for branches in this repo only (fork PRs get a read-only token and can't publish).
+Previews run for branches in this repo only (fork PRs get a read-only token and can't publish).
 
-> **One-time setup:** the site is served from the **`gh-pages` branch** (Settings → Pages → Source = "Deploy from a branch" → `gh-pages` / `(root)`) so prod and the `pr-preview/` umbrella can share one Pages site. The custom domain is preserved via the `CNAME` that `build-web.js` writes.
+The site itself (`lab.housetandem.com`) is built by `scripts/build-site.js` and served by Cloudflare (`wrangler.jsonc`, [`deploy-site.yml`](../../.github/workflows/deploy-site.yml)).
 
 ## How it talks to the packages
 
