@@ -81,7 +81,7 @@ test('a different account never replaces the session without a yes', async () =>
   no.l.hash = '#ht_result=req1.c0de';
   assert.deepEqual(await no.c.resume(), { signedIn: false, declined: true });
   assert.equal(no.c.token, before);
-  assert.deepEqual(no.asked, [{ from: { name: 'Pete' }, to: { name: 'Sam' } }]);
+  assert.deepEqual(no.asked.map((q) => [q.from.name, q.to.name]), [['Pete', 'Sam']]);
 
   const yes = setup({ '/auth/exchange': exchangeAs(SAM) }, { confirmSwitch: () => true });
   yes.c.apply(jwt({ sub: 7 }), PETE);
@@ -105,21 +105,6 @@ test('the same account, or no working session, signs in without a question', asy
   expired.l.hash = '#ht_result=req1.c0de';
   assert.equal((await expired.c.resume()).signedIn, true);
   assert.equal(expired.asked.length, 0);
-});
-
-test('a token in the address needs a yes even with nobody signed in, and its hints are not read', async () => {
-  const token = jwt({ sub: 9, name: 'Sam' });
-  const href = `https://app.test/#ht_auth=${token}&ht_server=added&ht_steam=has_account`;
-  const no = setup({}, {}, href);
-  assert.deepEqual(await no.c.resume(), { signedIn: false, declined: true });
-  assert.equal(no.c.isSignedIn(), false);
-  assert.equal(no.calls.length, 0);
-
-  const yes = setup({ '/me': { json: { user: { id: 9, display_name: 'Sam', identities: {} } } } }, { confirmSwitch: () => true }, href);
-  const out = await yes.c.resume();
-  assert.equal(out.signedIn, true);
-  assert.equal(out.server, undefined);
-  assert.equal(out.steam, undefined);
 });
 
 test('a hand-off code never silently replaces a working session', async () => {

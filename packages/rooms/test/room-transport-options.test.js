@@ -99,11 +99,11 @@ test('turnCredentialsUrl: without it the P2P upgrade uses the default STUN serve
     t.destroy();
 
     const t2 = new RoomTransport({ turnCredentialsUrl: 'https://relay.test/turn', deviceId: () => 'd1' });
-    t2.roomCode = 'ABCD'; t2.role = 'captain';
+    t2.roomCode = 'ABCD'; t2.role = 'captain'; t2.p2pKey = 'room-key';
     let asked = null;
     globalThis.fetch = async (u) => { asked = u; return { json: async () => ({ iceServers: { urls: ['turn:t.test'], username: 'u', credential: 'c' } }) }; };
     const s2 = await t2._fetchIceServers();
-    assert.equal(asked, 'https://relay.test/turn?room=ABCD&role=captain&device=d1');
+    assert.equal(asked, 'https://relay.test/turn?room=ABCD&role=captain&key=room-key', 'the proof is the room key, not the device id');
     assert.ok(s2.some((s) => JSON.stringify(s).includes('turn:t.test')));
     t2.destroy();
   } finally { globalThis.fetch = realFetch; }
