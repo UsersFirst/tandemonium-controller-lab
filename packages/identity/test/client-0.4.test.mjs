@@ -52,7 +52,7 @@ test('redeemHandoff: ?ht_code is taken off the address and swapped for a session
   const asked = [];
   const no = client('https://app.test/play?ht_code=id.secret', routes, {}, { confirmSwitch: (q) => { asked.push(q); return false; } });
   assert.deepEqual(await no.c.redeemHandoff(), { signedIn: false, declined: true });
-  assert.deepEqual(asked, [{ from: null, to: { name: 'Account Name' } }]);
+  assert.deepEqual(asked, [{ from: null, to: { name: 'Account Name', avatar: undefined } }]);
   assert.equal(no.c.isSignedIn(), false);
   assert.equal(no.storage.getItem('app.ht_token'), null);
 
@@ -88,20 +88,21 @@ test('redeemHandoff: a refused, expired or unreachable code leaves the session a
   }
 });
 
-test('resume(): an expired token in the address is refused and the stored session stays', async () => {
+test('resume(): a token in the address is taken off and never used; the stored session stays', async () => {
   const stored = jwt({ sub: 3, name: 'Stored' });
   const old = jwt({ sub: 7, exp: Math.floor(NOW / 1000) - 60 });
   const { c, a, storage, hist } = client('https://app.test/#ht_auth=' + old, { '/me': ME }, { 'app.ht_token': stored });
-  assert.deepEqual(await c.resume(), { signedIn: false, expired: true });
+  assert.equal(await c.resume(), null);
   assert.equal(hist.replaced, '/', 'the token comes off the address');
   assert.equal(c.token, stored);
   assert.equal(storage.getItem('app.ht_token'), stored);
-  assert.equal(a.calls.length, 0, 'the server is not asked about an expired token');
-  // one that is still good signs in as before
+  assert.equal(a.calls.length, 0);
+  // one that is still good is not a sign-in either, whatever the player would answer
   const good = jwt({ sub: 7, lid: 1 });
   const g = client('https://app.test/#ht_auth=' + good, { '/me': ME }, {}, { confirmSwitch: () => true });
-  assert.equal((await g.c.resume()).signedIn, true);
-  assert.equal(g.c.user.name, 'Account Name');
+  assert.equal(await g.c.resume(), null);
+  assert.equal(g.c.isSignedIn(), false);
+  assert.equal(g.a.calls.length, 0);
 });
 
 test('a stored token with no stored profile is a session: the token names the player until refresh() reads the account', async () => {

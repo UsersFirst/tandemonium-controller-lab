@@ -70,7 +70,7 @@ function fakeApi(state = {}) {
     }
     if (path === '/me/games') return authed ? json(200, { games: { dice: { earned: [{ id: 'first_roll', earnedAt: '2026-11-05 10:00:00' }], stats: { rolls: 4 } } } }) : json(401, {});
     if (path === '/me/discord') return json(200, { linked: true, member: true });
-    if (path === '/auth/handoff') return authed ? json(200, { code: 'one-time' }) : json(401, {});
+    if (path === '/auth/handoff') return s.handoffStale ? json(401, { code: 'fresh_signin' }) : authed ? json(200, { code: 'one-time' }) : json(401, {});
     if (path === '/me/delete') {
       if (body.confirm !== 'DELETE') return json(400, { error: 'Type DELETE to confirm.' });
       s.gone = true;
@@ -105,12 +105,11 @@ const timers = () => {
 
 test('takeRedirect reads the sign-in or the link, and cleans the URL; decodeToken reads claims', () => {
   const a = loc('https://game.test/play?x=1#ht_auth=' + encodeURIComponent(jwt({ sub: 7 })) + '&ht_server=joined&keep=me');
-  const back = takeRedirect(a.l, a.hist);
-  assert.equal(decodeToken(back.token).sub, 7);
-  assert.equal(back.server, 'joined');
-  assert.equal(a.hist.replaced, '/play?x=1#keep=me');
+  assert.equal(takeRedirect(a.l, a.hist), null, 'a token in the address is never a sign-in');
+  assert.equal(a.hist.replaced, '/play?x=1#keep=me', 'and it comes off the address');
+  assert.equal(decodeToken(jwt({ sub: 7 })).sub, 7);
   const b = loc('https://site.test/account.html#ht_link=req1.code.with.dots&ht_steam=has_account');
-  assert.deepEqual(takeRedirect(b.l, b.hist), { link: { id: 'req1', code: 'code.with.dots' }, steam: 'has_account' });
+  assert.deepEqual(takeRedirect(b.l, b.hist), { link: { id: 'req1', code: 'code.with.dots' } });
   assert.equal(takeRedirect(loc('https://site.test/#other=1').l, {}), null);
   assert.equal(decodeToken('junk'), null);
   assert.deepEqual(loginPictures({ identities: { steam: { avatar: 's' }, discord: { avatar: 'd' } } }).map((p) => p.provider), ['discord', 'steam']);
@@ -316,9 +315,6 @@ test('"Confirm it’s you": sign in again, and resume() says what to carry on wi
   assert.equal((await c.resume()).after, undefined);
   api.s.exchangeToken = null; api.s.exchangeUser = null;
 
-  // An ordinary sign-in has nothing to carry on with.
-  l.hash = '#ht_auth=' + encodeURIComponent(jwt({ sub: 7, lid: 1, via: 'discord:80' }));
-  assert.equal((await c.resume()).after, undefined);
 });
 
 test('the account’s games, server membership, hand-off code and delete', async () => {
@@ -332,6 +328,11 @@ test('the account’s games, server membership, hand-off code and delete', async
   assert.equal((await c.games()).dice.earned[0].id, 'first_roll');
   assert.equal((await c.membership()).member, true);
   assert.equal(await c.handoff(), 'one-time');
+  assert.equal(c.handoffStale, false);
+  api.s.handoffStale = true;
+  assert.equal(await c.handoff(), null);
+  assert.equal(c.handoffStale, true, 'the page can say: sign in again to carry the sign-in over');
+  api.s.handoffStale = false;
   await c.refresh();
   assert.deepEqual(c.me.achievements, [], 'refresh keeps the whole /me answer');
   assert.equal(c.meStatus, 200);
