@@ -91,7 +91,7 @@ test('resume(): an expired token in the address is refused and the stored sessio
   assert.equal(a.calls.length, 0, 'the server is not asked about an expired token');
   // one that is still good signs in as before
   const good = jwt({ sub: 7, lid: 1 });
-  const g = client('https://app.test/#ht_auth=' + good, { '/me': ME });
+  const g = client('https://app.test/#ht_auth=' + good, { '/me': ME }, {}, { confirmSwitch: () => true });
   assert.equal((await g.c.resume()).signedIn, true);
   assert.equal(g.c.user.name, 'Account Name');
 });
