@@ -34,6 +34,9 @@ function fakeApi(state = {}) {
       if (authed && !s.fresh) return json(401, { error: 'For your safety, sign in again before linking another account.', code: 'fresh_signin' });
       return json(200, { id: 'req1', secret: 'tab-secret', code: body.mode === 'device' ? 'K7QF' : null, url: 'https://api.test/auth/go?r=req1', expires_in: 600 });
     }
+    if (path === '/auth/exchange') {
+      return json(200, { token: s.exchangeToken || jwt({ sub: 7, lid: 1, via: 'discord:80' }), user: s.exchangeUser || user() });
+    }
     if (path === '/auth/poll') {
       s.polls++;
       if (s.pollAnswer) return json(200, s.pollAnswer(s.polls));
@@ -121,10 +124,12 @@ test('redirect sign-in: begins without a session, goes to the provider, and resu
   c.onChange((u, why) => seen.push([u && u.id, why]));
   await c.signInRedirect('discord', { joinServer: true, scopes: ['email'] });
   assert.equal(l.assigned, 'https://api.test/auth/go?r=req1');
-  assert.deepEqual(api.s.calls[0], { path: '/auth/discord/begin', authed: false,
+  const { nonce_hash: sentHash, ...sent } = api.s.calls[0].body;
+  assert.match(sentHash, /^[A-Za-z0-9_-]{43}$/);
+  assert.deepEqual({ ...api.s.calls[0], body: sent }, { path: '/auth/discord/begin', authed: false,
     body: { device_id: 'device-1', mode: 'redirect', join_server: true, scopes: ['email'], return_to: 'https://game.test/play' } });
 
-  l.hash = '#ht_auth=' + encodeURIComponent(jwt({ sub: 7, lid: 1, via: 'discord:80' }));
+  l.hash = '#ht_result=req1.c0de';
   assert.deepEqual(await c.resume(), { signedIn: true, server: undefined, steam: undefined, after: undefined });
   assert.equal(c.isSignedIn(), true);
   assert.equal(c.user.id, 7);
@@ -176,18 +181,14 @@ test('a link needs a fresh sign-in: reauth is tried once; without it the error s
   // The Steam build signs in again by ticket, quietly, and the link begins.
   const api2 = fakeApi({ fresh: false });
   const changes = [];
-  const game = client(api2, { reauth: () => game.signInWith('/auth/steam', { steamId: '76', ticket: 't' }, { provider: 'steam', quiet: true }) }).c;
+  const back = loc('https://game.test/play');
+  const game = client(api2, { location: back.l, history: back.hist, reauth: () => game.signInWith('/auth/steam', { steamId: '76', ticket: 't' }, { provider: 'steam', quiet: true }) }).c;
   game.apply(jwt({ sub: 9 }), { id: 9, name: 'pete_steam', identities: {} }, { provider: 'steam', tuning: 1 });
   game.onChange((_u, why) => changes.push(why));
-  const t = timers();
-  try {
-    const dev = await game.startDevice({ link: true });
-    assert.equal(dev.code, 'K7QF');
-    assert.deepEqual(api2.s.calls.map((x) => x.path), ['/auth/discord/begin', '/auth/steam', '/auth/discord/begin']);
-    assert.deepEqual(changes, ['fresh'], 'a quiet re-sign-in is not a new sign-in');
-    assert.equal(game.user.tuning, 1);
-    game.cancelDevice();
-  } finally { t.restore(); }
+  await game.linkRedirect('discord');
+  assert.deepEqual(api2.s.calls.map((x) => x.path), ['/auth/discord/begin', '/auth/steam', '/auth/discord/begin']);
+  assert.deepEqual(changes, ['fresh'], 'a quiet re-sign-in is not a new sign-in');
+  assert.equal(game.user.tuning, 1);
 });
 
 test('the combine question: both accounts come back; nothing combines until yes', async () => {
@@ -297,20 +298,23 @@ test('an account that is gone: the token is dropped; signOut clears everything',
 test('"Confirm it’s you": sign in again, and resume() says what to carry on with, for the same account only', async () => {
   const api = fakeApi();
   const { l, hist } = loc('https://site.test/account');
-  const { c, storage } = client(api, { location: l, history: hist });
+  const { c, storage } = client(api, { location: l, history: hist, confirmSwitch: () => true });
   c.apply(jwt({ sub: 7, lid: 1 }), { id: 7, name: 'Pete', identities: { discord: { name: 'Pete' } } }, { provider: 'discord' });
 
   await c.confirmRedirect('discord', 'link:steam');
   assert.equal(l.assigned, 'https://api.test/auth/go?r=req1');
   assert.equal(api.s.calls.at(-1).authed, false, 'a sign-in, not a link');
-  l.hash = '#ht_auth=' + encodeURIComponent(jwt({ sub: 7, lid: 1, via: 'discord:80' }));
+  l.hash = '#ht_result=req1.c0de';
   assert.equal((await c.resume()).after, 'link:steam');
   assert.equal(storage.m.has('ht_after_signin'), false, 'read once');
 
   // Came back as someone else: nothing carries on.
   await c.confirmRedirect('discord', 'link:steam');
-  l.hash = '#ht_auth=' + encodeURIComponent(jwt({ sub: 99, lid: 5, via: 'discord:81' }));
+  api.s.exchangeToken = jwt({ sub: 99, lid: 5, via: 'discord:81' });
+  api.s.exchangeUser = { id: 99, name: 'Other', avatar: null, identities: {} };
+  l.hash = '#ht_result=req1.c0de';
   assert.equal((await c.resume()).after, undefined);
+  api.s.exchangeToken = null; api.s.exchangeUser = null;
 
   // An ordinary sign-in has nothing to carry on with.
   l.hash = '#ht_auth=' + encodeURIComponent(jwt({ sub: 7, lid: 1, via: 'discord:80' }));

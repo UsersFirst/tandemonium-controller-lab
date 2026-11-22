@@ -123,9 +123,8 @@
   async function startDevice() {
     device.status = 'getting';
     const dev = await client.startDevice({
-      link: true,
       onStatus: (s) => { device.status = s === 'confirming' ? 'confirming' : 'waiting'; },
-      onDone: (u, info) => { dlog.textContent = u ? `linked: ${Object.keys(u.identities).join(' + ')}` : `ended: ${info.error}`; },
+      onDone: (u, info) => { dlog.textContent = u ? `signed in: ${Object.keys(u.identities).join(' + ')}` : `ended: ${info.error}`; },
     });
     device.url = dev.url; device.code = dev.code; device.status = 'waiting';
   }

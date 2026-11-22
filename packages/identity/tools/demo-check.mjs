@@ -72,8 +72,8 @@ check(await page.evaluate(() => document.getElementById('profile-log').textConte
 // the device flow moves on: confirming, then linked
 await page.waitForFunction(() => /Type the code on your phone…/.test(document.querySelector('uf-device-signin .uf-id-status')?.textContent || ''), { timeout: 15000 }).catch(() => {});
 check(await page.evaluate(() => /Type the code on your phone…/.test(document.querySelector('uf-device-signin .uf-id-status').textContent)), 'status: "Type the code on your phone…" while they are on the phone');
-await page.waitForFunction(() => /^linked:/.test(document.getElementById('device-log').textContent), { timeout: 20000 }).catch(() => {});
-check(await page.evaluate(() => document.getElementById('device-log').textContent === 'linked: steam + discord'), 'the link completes: one account with Steam and Discord');
+await page.waitForFunction(() => /^signed in:/.test(document.getElementById('device-log').textContent), { timeout: 20000 }).catch(() => {});
+check(await page.evaluate(() => document.getElementById('device-log').textContent === 'signed in: steam + discord'), 'the device sign-in completes: one account with Steam and Discord');
 
 // buttons
 await page.click('uf-combine-accounts button[data-act="no"]');

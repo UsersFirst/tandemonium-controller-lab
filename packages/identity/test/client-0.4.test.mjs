@@ -47,8 +47,16 @@ function client(href, routes, stored = {}, extra = {}) {
 
 test('redeemHandoff: ?ht_code is taken off the address and swapped for a session, without sending the old one', async () => {
   const token = jwt({ sub: 7, lid: 1, via: 'discord:web' });
-  const { c, a, storage, hist } = client('https://app.test/play?room=ABCD&ht_code=id.secret#top',
-    { '/auth/handoff/redeem': { json: { token, user: { id: 7, name: 'Account Name', avatar: null, identities: {} } } } });
+  const routes = { '/auth/handoff/redeem': { json: { token, user: { id: 7, name: 'Account Name', avatar: null, identities: {} } } } };
+  // Nothing signed in here: the player is asked, and a no leaves the browser signed out.
+  const asked = [];
+  const no = client('https://app.test/play?ht_code=id.secret', routes, {}, { confirmSwitch: (q) => { asked.push(q); return false; } });
+  assert.deepEqual(await no.c.redeemHandoff(), { signedIn: false, declined: true });
+  assert.deepEqual(asked, [{ from: null, to: { name: 'Account Name' } }]);
+  assert.equal(no.c.isSignedIn(), false);
+  assert.equal(no.storage.getItem('app.ht_token'), null);
+
+  const { c, a, storage, hist } = client('https://app.test/play?room=ABCD&ht_code=id.secret#top', routes, {}, { confirmSwitch: () => true });
   assert.deepEqual(await c.redeemHandoff(), { signedIn: true });
   assert.equal(hist.replaced, '/play?room=ABCD#top', 'the code is gone, the rest of the address stays');
   assert.deepEqual(a.calls, [{ path: '/auth/handoff/redeem', body: { code: 'id.secret' }, authed: false }]);
@@ -91,7 +99,7 @@ test('resume(): an expired token in the address is refused and the stored sessio
   assert.equal(a.calls.length, 0, 'the server is not asked about an expired token');
   // one that is still good signs in as before
   const good = jwt({ sub: 7, lid: 1 });
-  const g = client('https://app.test/#ht_auth=' + good, { '/me': ME });
+  const g = client('https://app.test/#ht_auth=' + good, { '/me': ME }, {}, { confirmSwitch: () => true });
   assert.equal((await g.c.resume()).signedIn, true);
   assert.equal(g.c.user.name, 'Account Name');
 });

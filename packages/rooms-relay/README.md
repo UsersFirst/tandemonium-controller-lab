@@ -10,7 +10,8 @@ Lifted from Tandemonium's `worker/relay.js` (lab #137) with its behaviour unchan
 - **Frames.** Binary frames from one seat go to the other, unread.
 - **Control messages** (JSON) to the client: `waiting` (with what the room remembers), `partner-ready` (with the partner's name, a pair proof and the room's P2P key), `disconnect`.
 - **Pair proof** (`room-proof.js`): with both seats taken the room signs who rode, for a game's score posts.
-- **TURN credentials** (`/turn-credentials`): only for a connection that holds a seat.
+- **TURN credentials** (`/turn-credentials`): only for a seat holder while both seats are here; they last an hour.
+- **Limits per socket**: frames up to 64 KB and 240 messages a second (burst 480). Text frames are forwarded only as `{type:'relay', data:[bytes]}`, so a rider can't send the relay's own control frames. The room's expiry is refreshed at most once a minute.
 - **Room memory.** When it was last used and when each seat was last there, for a week.
 
 ## Deploy it from a game
