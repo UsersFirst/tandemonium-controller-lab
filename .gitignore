@@ -24,3 +24,7 @@ design/audit/*.json
 
 # …except the ratchet thresholds, which are the agreed high-water marks.
 !design/audit/thresholds.json
+
+# Cloudflare site build (scripts/build-site.js) and wrangler state.
+/public/
+/.wrangler/

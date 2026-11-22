@@ -45,6 +45,11 @@ jobs:
         run: node --test
         working-directory: packages/visualizer
 
+      # The Cloudflare site build (scripts/build-site.js): what is published and
+      # what is not. It only copies files, so it also runs without an install.
+      - name: Site build test
+        run: node --test test/site-build.test.mjs
+
   ui:
     name: ui kit (typecheck + test)
     runs-on: ubuntu-latest
